@@ -3,6 +3,22 @@
 # Check for obsolete setups and replace with generic version
 #
 #----------------------------------------------------------------
+ifeq ($(SETUP), planetary_raddisc2)
+    # custom raddisc (adiabatic disc with radiation)
+    SETUPFILE= setup_disc.f90
+    ANALYSIS= analysis_disc.f90
+    KNOWN_SETUP= yes
+    DISC_VISCOSITY= yes
+    PERIODIC= no
+    GRAVITY= yes
+    RADIATION= no
+    MULTIRUNFILE= multirun.f90
+    IND_TIMESTEPS= yes
+    #SRCINJECT= evolve_planet.f90 inject_randomwind.f90
+    ISOTHERMAL= no
+    DEBUG= true
+endif
+
 ifeq ($(SETUP), HLTau) # [buildbot skip]
     OBSOLETE_SETUP=yes
     OLDSETUP= HLTau
