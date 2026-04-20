@@ -194,7 +194,7 @@ epub_exclude_files = ['search.html']
 fortran_ext = [ 'f90','F90' ]
 
 import glob as _glob
-fortran_src = (
+fortran_src = sorted(
     _glob.glob('../src/main/*.f90') +
     _glob.glob('../src/main/*.F90') +
     _glob.glob('../src/setup/*.f90') +
