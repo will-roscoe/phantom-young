@@ -1,59 +1,192 @@
 main
-===========
-.. toctree:: 
-   :maxdepth: 2
+====
 
+.. toctree::
+   :maxdepth: 1
 
+   H2regions
+   apr
+   apr_region
+   bondiexact
+   bondiexact_gr
    boundary
+   boundary_dynamic
    centreofmass
-   commons
+   checkconserved
+   checkoptions
+   checksetup
+   config
    cons2prim
    cons2primsolver
+   cooling
+   cooling_functions
+   cooling_gammie
+   cooling_gammie_PL
+   cooling_ism
+   cooling_koyamainutsuka
+   cooling_molecular
+   cooling_radapprox
+   cooling_solver
    damping
    datafiles
+   dens
+   deriv
+   dtype_kdtree
+   dust
+   dust_formation
+   dynamic_dtmax
+   egg
+   energies
+   eos
+   eos_HIIR
+   eos_barotropic
+   eos_gasradrec
    eos_helmholtz
    eos_idealplusrad
    eos_mesa
+   eos_mesa_microphysics
+   eos_piecewise
    eos_shen
+   eos_stamatellos
+   eos_stratified
+   eos_tillotson
+   evolve
+   evolve_planet
+   evolve_utils
+   evwrite
    extern_Bfield
    extern_binary
    extern_binary_gw
    extern_corotate
    extern_densprofile
+   extern_geopot
+   extern_gnewton
+   extern_gr
    extern_gwinspiral
    extern_lensethirring
+   extern_prdrag
    extern_spiral
    extern_staticsine
-   fastmath
+   externalforces
+   externalforces_gr
+   force
+   forcing
    fs_data
    geometry
+   get_apr_level
    gitinfo
+   growth
+   growth_smol
    h2chem
-   h2cooling
+   initial
+   inject_BHL
+   inject_bondi
+   inject_firehose
+   inject_galcen_winds
+   inject_keplerian
+   inject_keplerianshear
+   inject_masstransfer
+   inject_randomwind
+   inject_sim
+   inject_sne
+   inject_steadydisc
+   inject_streamer
+   inject_streamer_pineda
+   inject_unifwind
+   inject_wind
+   inject_windtunnel
+   injection
+   interp_metric
    inverse4x4
+   io
+   io_control
+   ionization
+   kdtree
+   kernel_WendlandC2
+   kernel_WendlandC4
+   kernel_WendlandC6
+   kernel_cubic
+   kernel_quartic
+   kernel_quintic
    krome
+   libphantom-amuse
+   mcfost_utils
+   memory
+   metric_binarybh
+   metric_et
+   metric_et_utils
+   metric_flrw
+   metric_kerr
+   metric_kerr-schild
+   metric_minkowski
+   metric_schwarzschild
+   metric_tools
    mf_write
    mol_data
+   mpi_balance
+   mpi_dens
+   mpi_derivs
+   mpi_domain
+   mpi_force
+   mpi_memory
+   mpi_tree
+   mpi_utils
+   neigh_kdtree
+   nicil_supplement
    options
-   photoevap
+   part
+   partinject
+   phantom
    physcon
+   porosity
+   ptmass
+   ptmass_heating
+   ptmass_radiation
+   ptmass_tree
    quitdump
+   radiation_implicit
+   radiation_utils
    random
+   readwrite_dumps
+   readwrite_dumps_common
+   readwrite_infile
+   relaxem
+   shock_capturing
+   sort_particles
+   step_leapfrog
+   subgroup
+   substepping
+   timestep
+   tmunu2grid
    units
    utils_allocate
-   utils_binary
+   utils_apr
    utils_cpuinfo
    utils_datafiles
    utils_deriv
    utils_dumpfiles
    utils_filenames
+   utils_gr
+   utils_healpix
+   utils_implicit
+   utils_indtimesteps
    utils_infiles
    utils_inject
    utils_mathfunc
+   utils_omp
+   utils_orbits
+   utils_raytracer
+   utils_shuffleparticles
    utils_sort
    utils_sphNG
    utils_spline
+   utils_subgroup
+   utils_summary
+   utils_system
    utils_tables
    utils_timing
    utils_vectors
    viscosity
+   wind
+   wind_equations
+   writeheader

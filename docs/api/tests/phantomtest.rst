@@ -1,6 +1,6 @@
+.. phantom-doc: generated
 
 phantomtest
-=========================
+===========
 
-.. f:autosrcfile:: ../../src/tests/phantomtest.f90
-
+.. f:autosrcfile:: ../../../src/tests/phantomtest.f90

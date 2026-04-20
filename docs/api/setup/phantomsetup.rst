@@ -1,6 +1,26 @@
+.. phantom-doc: generated
 
 phantomsetup
-=========================
+============
 
-.. f:autosrcfile:: ../../src/setup/phantomsetup.f90
+Overview
+--------
 
+.. todo:: Add overview narrative.
+
+Physical & Mathematical Description
+-------------------------------------
+
+.. todo:: Add mathematical description with ``.. math::`` blocks.
+
+References
+----------
+
+.. bibliography:: ../../phantom.bib
+   :cited:
+   :style: plain
+
+API Reference
+-------------
+
+.. f:autosrcfile:: ../../../src/setup/phantomsetup.F90

@@ -1,6 +1,26 @@
+.. phantom-doc: generated
 
 velfield_fromcubes
-=========================
+==================
 
-.. f:autosrcfile:: ../../src/setup/velfield_fromcubes.f90
+Overview
+--------
 
+.. todo:: Add overview narrative.
+
+Physical & Mathematical Description
+-------------------------------------
+
+.. todo:: Add mathematical description with ``.. math::`` blocks.
+
+References
+----------
+
+.. bibliography:: ../../phantom.bib
+   :cited:
+   :style: plain
+
+API Reference
+-------------
+
+.. f:autosrcfile:: ../../../src/setup/velfield_fromcubes.f90

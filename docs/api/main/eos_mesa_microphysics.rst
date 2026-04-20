@@ -1,0 +1,26 @@
+.. phantom-doc: generated
+
+eos_mesa_microphysics
+=====================
+
+Overview
+--------
+
+.. todo:: Add overview narrative.
+
+Physical & Mathematical Description
+-------------------------------------
+
+.. todo:: Add mathematical description with ``.. math::`` blocks.
+
+References
+----------
+
+.. bibliography:: ../../phantom.bib
+   :cited:
+   :style: plain
+
+API Reference
+-------------
+
+.. f:autosrcfile:: ../../../src/main/eos_mesa_microphysics.f90
