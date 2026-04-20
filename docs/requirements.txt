@@ -2,4 +2,5 @@ sphinx-rtd-theme
 numpy
 six
 sphinx-fortran
+sphinxcontrib-bibtex>=2.0
 
