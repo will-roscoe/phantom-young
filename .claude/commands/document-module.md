@@ -24,15 +24,17 @@ Read the entire source file. Extract:
 
 ### 3. Determine the RST output path
 
-- `src/main/<module>.f90` → `docs/api/main/<module>.rst`
-- `src/setup/<module>.f90` → `docs/api/setup/<module>.rst`
-- `src/utils/<module>.f90` → `docs/api/utils/<module>.rst`
-- `src/tests/<module>.f90` → `docs/api/tests/<module>.rst`
+- `src/main/<module>.f90` or `.F90` → `docs/api/main/<module>.rst`
+- `src/setup/<module>.f90` or `.F90` → `docs/api/setup/<module>.rst`
+- `src/utils/<module>.f90` or `.F90` → `docs/api/utils/<module>.rst`
+- `src/tests/<module>.f90` or `.F90` → `docs/api/tests/<module>.rst`
+
+The RST output name always strips the extension. The extension (`.f90` or `.F90`) is preserved in the `f:autosrcfile::` directive path (see Step 5).
 
 ### 4. Check existing RST
 
 If the RST file exists:
-- First line is `.. phantom-doc: hand-written` → **upgrade mode**: read existing content, identify incomplete sections (containing `.. todo::` or clearly sparse), expand them. Do not remove existing narrative.
+- First line is `.. phantom-doc: hand-written` → **upgrade mode**: read existing content, identify incomplete sections (those containing `.. todo::` markers), expand them. Do not remove or replace any existing narrative — only fill in marked gaps.
 - First line is `.. phantom-doc: generated` → **replace**: generate fresh full content.
 - File does not exist → **create fresh**.
 
@@ -75,19 +77,26 @@ section only if the mathematics is fully described above.]
 References
 ----------
 [Search ``docs/phantom.bib`` for citation keys matching the references
-listed in the module's ``:References:`` header. Use ``.. cite::`` inline
-and include ``.. bibliography::`` at the end of this section.
-If a reference is not in phantom.bib, note it explicitly as needing addition.]
+listed in the module's ``:References:`` header. Use the ``:cite:`key```
+role inline within the prose where external works underpin the method.
+Include ``.. bibliography::`` at the end of this section.
+If a reference is not in phantom.bib, flag it explicitly as needing addition.]
 
 .. bibliography:: ../../phantom.bib
    :cited:
    :style: plain
+
+Note: the path ``../../phantom.bib`` is always correct because all module
+RST files live exactly two directory levels below ``docs/``
+(``docs/api/<subdir>/``). Do not alter this path.
 
 API Reference
 -------------
 
 .. f:autosrcfile:: ../../../src/<subdir>/<module>.<ext>
 ```
+
+Note: the title underline (`=====`) must be **at least as long as the module name**. Adjust the length to match.
 
 If `--stub` is passed, write Tier 3 content only:
 
@@ -123,4 +132,4 @@ If the module was not already listed in the relevant `docs/api/<subdir>/index.rs
 Print:
 - Path written
 - Tier used
-- Any ``:References:`` entries from the source that could not be matched to a key in `phantom.bib` (these need manual citation key addition)
+- Any ``:References:`` entries from the source that could not be matched to a key in `phantom.bib` (these need manual citation key addition). Report this even in `--stub` mode, even though the stub RST does not include a References section.
