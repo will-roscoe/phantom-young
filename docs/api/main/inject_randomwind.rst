@@ -3,4 +3,4 @@
 inject_randomwind
 =================
 
-.. f:autosrcfile:: ../../../src/main/inject_randomwind.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

@@ -3,4 +3,4 @@
 setup_flrwpspec
 ===============
 
-.. f:autosrcfile:: ../../../src/setup/setup_flrwpspec.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

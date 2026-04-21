@@ -3,4 +3,4 @@
 inject_keplerian
 ================
 
-.. f:autosrcfile:: ../../../src/main/inject_keplerian.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

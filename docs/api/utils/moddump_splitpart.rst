@@ -18,4 +18,4 @@ References
 API Reference
 -------------
 
-.. f:autosrcfile:: ../../../src/utils/moddump_splitpart.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

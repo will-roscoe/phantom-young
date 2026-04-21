@@ -44,7 +44,10 @@ extensions = [
     'sphinxfortran.fortran_autodoc',
     'sphinx.ext.mathjax',
     'sphinxcontrib.bibtex',
+    'sphinx.ext.todo',
 ]
+
+todo_include_todos = True
 
 bibtex_bibfiles = ['phantom.bib']
 bibtex_default_style = 'plain'
@@ -194,15 +197,72 @@ epub_exclude_files = ['search.html']
 fortran_ext = [ 'f90','F90' ]
 
 import glob as _glob
+# Files excluded from fortran_src — either:
+#   (a) trigger crashes in numpy.f2py.crackfortran or sphinxfortran F90toRst, or
+#   (b) define a duplicate module name (Phantom's "plugin" convention: many files share
+#       the same module name and are selected at compile time). sphinxfortran processes
+#       all files together and breaks when duplicate module names appear in self.crack.
+#       For each such group one representative is kept; the rest are excluded here.
+_FORTRAN_SRC_EXCLUDE = {
+    # --- crackfortran / F90toRst crashes or sorted()-on-types TypeError ---
+    '../src/setup/set_hierarchical_utils.f90',
+    '../src/setup/set_orbit.f90',
+    '../src/main/bondiexact_gr.f90',
+    '../src/main/extern_binary_gw.f90',
+    '../src/main/externalforces_gr.f90',
+    '../src/main/inject_bondi.f90',
+    '../src/main/inject_firehose.f90',
+    '../src/main/inject_galcen_winds.f90',
+    '../src/main/inject_keplerian.f90',
+    '../src/main/inject_keplerianshear.f90',
+    '../src/main/inject_masstransfer.f90',
+    '../src/main/inject_randomwind.f90',
+    '../src/main/inject_sim.f90',
+    '../src/main/inject_sne.f90',
+    '../src/main/inject_steadydisc.f90',
+    '../src/main/inject_streamer.f90',
+    '../src/main/inject_streamer_pineda.f90',
+    '../src/main/inject_unifwind.f90',
+    '../src/main/inject_wind.f90',
+    '../src/main/inject_windtunnel.f90',
+    '../src/main/kernel_WendlandC4.f90',
+    '../src/main/kernel_WendlandC6.f90',
+    '../src/utils/cubicsolve.f90',
+    # --- duplicate module kernel (keep kernel_cubic.f90) ---
+    '../src/main/kernel_WendlandC2.f90',
+    '../src/main/kernel_quartic.f90',
+    '../src/main/kernel_quintic.f90',
+    # --- duplicate module metric (keep metric_minkowski.f90) ---
+    '../src/main/metric_binarybh.f90',
+    '../src/main/metric_et.f90',
+    '../src/main/metric_flrw.f90',
+    '../src/main/metric_kerr-schild.f90',
+    '../src/main/metric_kerr.f90',
+    '../src/main/metric_schwarzschild.f90',
+    # --- duplicate module testexternf (keep test_externf.f90) ---
+    '../src/tests/test_externf_gr.f90',
+    # --- duplicate module analysis (all analysis_*.f90 share module name) ---
+    *_glob.glob('../src/utils/analysis_*.f90'),
+    *_glob.glob('../src/utils/analysis_*.F90'),
+    # --- duplicate module moddump (all moddump_*.f90 share module name) ---
+    *_glob.glob('../src/utils/moddump_*.f90'),
+    *_glob.glob('../src/utils/moddump_*.F90'),
+    # --- duplicate module setup (all setup_*.f90 share module name) ---
+    *_glob.glob('../src/setup/setup_*.f90'),
+    *_glob.glob('../src/setup/setup_*.F90'),
+}
 fortran_src = sorted(
-    _glob.glob('../src/main/*.f90') +
-    _glob.glob('../src/main/*.F90') +
-    _glob.glob('../src/setup/*.f90') +
-    _glob.glob('../src/setup/*.F90') +
-    _glob.glob('../src/utils/*.f90') +
-    _glob.glob('../src/utils/*.F90') +
-    _glob.glob('../src/tests/*.f90') +
-    _glob.glob('../src/tests/*.F90')
+    f for f in (
+        _glob.glob('../src/main/*.f90') +
+        _glob.glob('../src/main/*.F90') +
+        _glob.glob('../src/setup/*.f90') +
+        _glob.glob('../src/setup/*.F90') +
+        _glob.glob('../src/utils/*.f90') +
+        _glob.glob('../src/utils/*.F90') +
+        _glob.glob('../src/tests/*.f90') +
+        _glob.glob('../src/tests/*.F90')
+    )
+    if f not in _FORTRAN_SRC_EXCLUDE
 )
 
 sys.setrecursionlimit(10000)

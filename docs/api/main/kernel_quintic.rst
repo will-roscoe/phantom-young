@@ -3,4 +3,4 @@
 kernel_quintic
 ==============
 
-.. f:autosrcfile:: ../../../src/main/kernel_quintic.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

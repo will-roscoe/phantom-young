@@ -3,4 +3,4 @@
 metric_kerr
 ===========
 
-.. f:autosrcfile:: ../../../src/main/metric_kerr.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

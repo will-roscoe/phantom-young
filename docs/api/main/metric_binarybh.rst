@@ -3,4 +3,4 @@
 metric_binarybh
 ===============
 
-.. f:autosrcfile:: ../../../src/main/metric_binarybh.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

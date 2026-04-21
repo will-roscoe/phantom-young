@@ -3,4 +3,4 @@
 inject_steadydisc
 =================
 
-.. f:autosrcfile:: ../../../src/main/inject_steadydisc.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

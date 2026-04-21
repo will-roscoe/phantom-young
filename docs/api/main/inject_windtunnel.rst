@@ -3,4 +3,4 @@
 inject_windtunnel
 =================
 
-.. f:autosrcfile:: ../../../src/main/inject_windtunnel.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

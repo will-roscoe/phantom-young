@@ -3,4 +3,4 @@
 test_externf_gr
 ===============
 
-.. f:autosrcfile:: ../../../src/tests/test_externf_gr.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

@@ -18,4 +18,4 @@ References
 API Reference
 -------------
 
-.. f:autosrcfile:: ../../../src/utils/analysis_velocitydispersion_vs_scale.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).

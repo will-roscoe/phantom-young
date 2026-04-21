@@ -3,4 +3,4 @@
 metric_kerr-schild
 ==================
 
-.. f:autosrcfile:: ../../../src/main/metric_kerr-schild.f90
+.. note:: Autodoc not available for this file (excluded from Fortran index due to parser incompatibility).
