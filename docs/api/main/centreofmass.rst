@@ -96,6 +96,11 @@ volume integral replaced by the sum :math:`\sum_a m_a\,\mathbf{r}_a`. No
 approximation beyond the particle discretisation is involved. This is a
 trivial computation with no corresponding external literature reference.
 
+References
+----------
+
+No external literature reference is required for this computation; the method follows directly from standard discretisation principles.
+
 API Reference
 -------------
 

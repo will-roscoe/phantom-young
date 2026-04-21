@@ -41,7 +41,8 @@ timescale is shorter than the timestep.
 Physical & Mathematical Description
 -------------------------------------
 The leapfrog (velocity Verlet) algorithm advances the phase-space variables
-through one timestep :math:`\Delta t` in three conceptual stages.
+through one timestep :math:`\Delta t` in three conceptual stages,
+following :cite:`price12`.
 
 **Predictor (first half-kick):** velocities and thermal energy are advanced
 by half a timestep using forces from the beginning of the step:
@@ -128,14 +129,10 @@ is time-reversible by virtue of the palindromic ordering of the propagators.
 
 References
 ----------
-The velocity Verlet (leapfrog) algorithm is described in Verlet (1967),
-Physical Review 159, 98–103 (not yet in phantom.bib — citation key needed).
-The Morris & Monaghan (1997) source-decay viscosity switch is given in MNRAS
-290, 553–573 (not yet in phantom.bib — citation key needed). The Cullen &
-Dehnen (2010) limiter is described in MNRAS 408, 669–683 (not yet in
-phantom.bib — citation key needed). The RESPA operator-splitting scheme
-follows Tuckerman, Berne & Martyna (1992), J. Chem. Phys. 97, 1990–2001 (not
-yet in phantom.bib — citation key needed).
+
+.. bibliography:: ../../phantom.bib
+   :cited:
+   :style: plain
 
 API Reference
 -------------

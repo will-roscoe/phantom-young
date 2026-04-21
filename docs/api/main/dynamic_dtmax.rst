@@ -84,6 +84,11 @@ requires all timesteps to be powers of two times a base timestep. This module
 is an internal Phantom convention with no corresponding external literature
 reference.
 
+References
+----------
+
+No external literature reference is required for this computation; the method follows directly from standard discretisation principles.
+
 API Reference
 -------------
 

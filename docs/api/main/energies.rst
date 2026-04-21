@@ -135,6 +135,11 @@ expressions are the exact SPH discretisations of the continuum integrals
 by the mass-weighted sum :math:`\sum_a m_a(\cdot)`. This is standard SPH
 energy diagnostics with no external literature citation required.
 
+References
+----------
+
+No external literature reference is required for this computation; the method follows directly from standard discretisation principles.
+
 API Reference
 -------------
 

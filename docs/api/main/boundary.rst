@@ -83,6 +83,11 @@ requirement. Both procedures are self-evident from the formulae given in the
 Physical & Mathematical Description section above, and no external literature
 citation is required.
 
+References
+----------
+
+No external literature reference is required for this computation; the method follows directly from standard discretisation principles.
+
 API Reference
 -------------
 
