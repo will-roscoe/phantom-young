@@ -82,11 +82,27 @@ to translate the box walls:
 
 and similarly in :math:`y` and :math:`z`.
 
+Derivations
+-----------
+The buffer-width formula :eq:`bdy_extent` is derived by requiring that a
+particle moving at the local fast signal speed will not reach the domain
+boundary within :math:`n_{\rm dtmax}` output steps. Given a particle at
+position :math:`x_a` with velocity :math:`v_{x,a}` and sound speed
+:math:`c_{s,a}`, the furthest position it can reach in time
+:math:`n_{\rm dtmax}\,\Delta t_{\rm max}` is
+:math:`x_a + n_{\rm dtmax}\,\Delta t_{\rm max}\,(v_{x,a} + c_{s,a})`.
+Subtracting the box-velocity contribution :math:`v_{\rm bdy,x}` accounts for
+the moving reference frame of the domain. The minimum buffer width
+:math:`W_{\rm min}` is derived from the requirement that at least ten kernel
+radii of background medium surround the active region, which is the minimum
+needed for accurate SPH density estimates at the boundary.
+
 References
 ----------
-The dynamic boundary method is described in Wurster & Bonnell (2023), MNRAS 522,
-891–911. The phantom.bib file does not currently contain an entry for this paper;
-citations should be added when that entry is available.
+The dynamic boundary method is described in Wurster & Bonnell (2023), MNRAS
+522, 891–911. This paper is not yet in ``phantom.bib``; a citation key is
+needed before inline ``\:cite\:`` references can be used. (not yet in
+phantom.bib — citation key needed)
 
 API Reference
 -------------

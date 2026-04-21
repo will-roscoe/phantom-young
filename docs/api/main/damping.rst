@@ -92,6 +92,34 @@ with the Keplerian target velocity (using :math:`G = M = 1`)
 
    \mathbf{v}_0(x,y) = \frac{\sqrt{1/R^3}}{R}(-y,\,x,\,0).
 
+Derivations
+-----------
+The damping acceleration :eq:`damp_force` is derived by adding a linear drag
+term :math:`-\gamma(\mathbf{v} - \mathbf{v}_0)` to the equations of motion.
+For mode 1 this is a constant-rate drag that drives all velocities
+exponentially toward zero on the timescale :math:`f_{\rm damp}^{-1}`.
+
+The mode 2 time-dependent schedule is constructed so that the integral of the
+damping force over the first :math:`2\,\tau_{\rm dyn}` is large enough to
+remove spurious oscillations, while the exponential ramp-off from
+:math:`2\,\tau_{\rm dyn}` to :math:`5\,\tau_{\rm dyn}` avoids exciting new
+oscillations as damping is withdrawn. The exponential interpolation between
+:math:`\tau_1 = 0.1\,\tau_{\rm dyn}` and :math:`\tau_2 = \tau_{\rm dyn}`
+gives a smooth, monotonically increasing decay timescale.
+
+The mode 3 :math:`\sin^2` spatial profile :eq:`disc_damp_fac` is chosen
+because it has zero derivative at both ends of the damping zone, ensuring
+:math:`C^1` continuity of the applied force at the zone boundaries. This
+prevents impulsive forces that could generate unphysical waves at the
+boundary of the damping region.
+
+References
+----------
+The mode 2 stellar damping schedule follows Reichardt et al. (2019), MNRAS
+484, 631–642 (not yet in phantom.bib — citation key needed).
+The relax-o-matic alternative is described in González-Bolívar et al. (2022),
+MNRAS 517, 3181–3199 (not yet in phantom.bib — citation key needed).
+
 API Reference
 -------------
 

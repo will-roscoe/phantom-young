@@ -81,6 +81,34 @@ with the smoothing length :math:`h_a` determined self-consistently from
 where :math:`\eta` is a dimensionless parameter (``hfact``) and :math:`\bar{m}`
 is the characteristic particle mass.
 
+Derivations
+-----------
+The variational form of the SPH equations of motion arises from applying the
+Euler–Lagrange equations to the SPH Lagrangian
+
+.. math::
+
+   \mathcal{L} = \sum_a m_a \left[\tfrac{1}{2}|\mathbf{v}_a|^2
+                 - u_a(\rho_a, s_a)\right],
+
+where :math:`u_a` is the specific internal energy. Varying with respect to
+particle position while holding smoothing lengths fixed at their
+self-consistent values yields the momentum equation :eq:`eom_velocity`, with
+the :math:`\Omega` correction factors emerging automatically from the
+implicit dependence of the kernel on :math:`h_a(\rho_a)`. The density
+summation and the smoothing-length iteration
+
+.. math::
+
+   h_a = h_{\rm fact}\left(\frac{\bar{m}}{\rho_a}\right)^{1/3}
+
+are solved simultaneously by Newton–Raphson iteration inside
+``densityiterate``. Convergence is typically achieved in 2–3 iterations for
+well-resolved regions. The two-pass structure (density then forces) is
+mandatory in variable-:math:`h` SPH because the :math:`\Omega` terms
+couple the force to the smoothing-length gradient, which is only available
+after density convergence.
+
 References
 ----------
 See :cite:`price12` for a comprehensive review of the SPH and SPMHD algorithms

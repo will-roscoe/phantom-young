@@ -121,6 +121,20 @@ subscript :math:`xy` denotes the cylindrical radius.
 
 computed from the SPH divergence estimate stored in ``divcurlB``.
 
+Derivations
+-----------
+All quantities in this module are derived directly from the standard
+definitions of mechanical and field energies applied particle-by-particle.
+The kinetic energy :eq:`ekin`, thermal energy :eq:`etherm`, and magnetic
+energy :eq:`emag` follow immediately from their continuum definitions by
+identifying each SPH particle with a Lagrangian fluid element of mass
+:math:`m_a`. No non-trivial approximation or derivation is required; the
+expressions are the exact SPH discretisations of the continuum integrals
+:math:`\int \tfrac{1}{2}\rho v^2\,dV`, :math:`\int \rho u\,dV`, and
+:math:`\int B^2/(8\pi)\,dV` respectively, with the volume integral replaced
+by the mass-weighted sum :math:`\sum_a m_a(\cdot)`. This is standard SPH
+energy diagnostics with no external literature citation required.
+
 API Reference
 -------------
 

@@ -86,6 +86,16 @@ from all particle velocities and the mean acceleration from all particle
 accelerations, ensuring that turbulent driving routines do not impart a net
 translational drift to the simulation.
 
+Derivations
+-----------
+The centre-of-mass formulae :eq:`com_pos`–:eq:`ang_mom` are the standard
+Newtonian definitions applied to a discrete particle system. The mass-weighted
+average is the exact SPH analogue of the continuum centre of mass
+:math:`\mathbf{r}_{\rm com} = M^{-1}\!\int \rho\,\mathbf{r}\,dV`, with the
+volume integral replaced by the sum :math:`\sum_a m_a\,\mathbf{r}_a`. No
+approximation beyond the particle discretisation is involved. This is a
+trivial computation with no corresponding external literature reference.
+
 API Reference
 -------------
 

@@ -71,6 +71,18 @@ The total simulation volume is
 which is used in the computation of mean densities and normalisation of
 turbulent driving spectra.
 
+Derivations
+-----------
+Periodic and reflective boundary conditions are standard techniques in
+computational fluid dynamics and require no non-trivial derivation. The
+coordinate wrapping formula :eq:`periodic_wrap` is the direct implementation
+of the mathematical requirement that the simulation domain be topologically
+equivalent to a torus: :math:`x \equiv x \pmod{L_x}`. The minimum-image
+convention for inter-particle separations follows from the same periodicity
+requirement. Both procedures are self-evident from the formulae given in the
+Physical & Mathematical Description section above, and no external literature
+citation is required.
+
 API Reference
 -------------
 

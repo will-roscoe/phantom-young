@@ -103,10 +103,35 @@ growth timescale set by ``alphaloc``, and decays back to zero on the timescale
 :math:`\tau_a = h_a / (0.1\,c_{s,a})` as implemented in
 ``step_leapfrog`` during the predictor step.
 
+Derivations
+-----------
+The viscosity tensor :eq:`Pi_ab` is a discrete analogue of the
+Navier–Stokes viscous stress, designed to satisfy the Rankine–Hugoniot jump
+conditions at shocks. The linear term :math:`\propto \alpha\,v_{\rm sig}\,
+\mathbf{v}_{ab}\cdot\hat{\mathbf{r}}_{ab}` provides the bulk viscosity needed
+to capture the velocity jump at a shock, while the quadratic term
+:math:`\propto \beta\,(\mathbf{v}_{ab}\cdot\hat{\mathbf{r}}_{ab})^2` gives
+additional dissipation at strong shocks, mimicking the von Neumann–Richtmyer
+artificial pressure. The condition :math:`\mathbf{v}_{ab}\cdot\mathbf{r}_{ab}
+< 0` restricts dissipation to converging flows, preventing spurious damping
+in rarefactions and bulk expansions.
+
+The Cullen & Dehnen limiter function :eq:`xi_limiter` is derived from the
+Helmholtz decomposition of the velocity gradient into divergence (compressive)
+and curl (solenoidal) parts. In a pure compression :math:`|\nabla\!\times\!
+\mathbf{v}| = 0`, so :math:`\xi = 1`; in pure rotation
+:math:`\nabla\!\cdot\!\mathbf{v} = 0`, so :math:`\xi = 0`. The
+material-derivative trigger :math:`\dot{\xi}_a\nabla\!\cdot\!\mathbf{v}_a`
+ensures that viscosity is switched on only when a compression is actually
+strengthening, not during the post-shock relaxation phase.
+
 References
 ----------
-The artificial viscosity formulation, the Cullen & Dehnen switch, and the
-overall Phantom algorithm are described in :cite:`price12`.
+The artificial viscosity formulation and the overall Phantom algorithm are
+described in :cite:`price12`. The Morris & Monaghan (1997) source-decay
+viscosity switch (MNRAS 290, 553–573) and the Cullen & Dehnen (2010) limiter
+(MNRAS 408, 669–683) are referenced in the code but are not yet in
+``phantom.bib`` — citation keys are needed for inline citations.
 
 .. bibliography:: ../../phantom.bib
    :cited:

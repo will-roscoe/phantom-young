@@ -102,6 +102,18 @@ by a fixed fraction of the smoothing length:
 
 The factor of 2 is absorbed into ``C_force``.
 
+References
+----------
+The Courant–Friedrichs–Lewy (CFL) stability condition is the foundational
+reference for the Courant timestep constraint: Courant, Friedrichs & Lewy
+(1928), Mathematische Annalen 100, 32–74 (not yet in phantom.bib — citation
+key needed). The SPH-specific formulation of the Courant and force conditions
+is discussed in :cite:`price12`.
+
+.. bibliography:: ../../phantom.bib
+   :cited:
+   :style: plain
+
 API Reference
 -------------
 

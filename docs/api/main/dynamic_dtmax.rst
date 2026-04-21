@@ -70,6 +70,20 @@ The ``idtmax_n`` and ``idtmax_frac`` integers track the sub-dump structure:
 the current position within that cycle. The ``check_for_restart_dump`` routine
 updates these counters after each step.
 
+Derivations
+-----------
+Both criteria are straightforward from first principles and require no
+non-trivial derivation. The density-based criterion is a direct application
+of the logarithm of the density ratio to determine how many powers of two the
+timestep should change; the formula in :eq:`dtmax_density` is the
+closed-form expression of that integer floor operation. The wall-time criterion
+is an analogous floor operation on the base-2 logarithm of the ratio of
+actual to desired wall time per dump. The adaptive :math:`2^p` quantisation
+ensures compatibility with the individual-timestep bin hierarchy, which
+requires all timesteps to be powers of two times a base timestep. This module
+is an internal Phantom convention with no corresponding external literature
+reference.
+
 API Reference
 -------------
 
