@@ -81,10 +81,11 @@ The Cullen & Dehnen (2010) target viscosity for particle :math:`a` is
 
    \alpha_{\rm loc} = \max\!\left(\alpha_{\rm min},\;
    \min\!\left(\alpha_{\rm max},\;
-   \frac{10\,h_a^2\,\xi_a\,\max(0,\,-\dot{\xi}_a\nabla\!\cdot\!\mathbf{v}_a)}
+   \frac{10\,h_a^2\,\xi_a\,
+         \max\!\left(0,\;-\dfrac{D(\nabla\cdot\mathbf{v}_a)}{Dt}\right)}
         {c_{s,a}^2}\right)\right),
 
-where :math:`\dot{\xi}_a\nabla\!\cdot\!\mathbf{v}_a` is the material time
+where :math:`D(\nabla\cdot\mathbf{v}_a)/Dt` is the material time
 derivative of the velocity divergence, computed from the stored tensor
 ``dvdx``, and :math:`\xi_a` is the dimensionless limiter function
 
@@ -98,10 +99,13 @@ which is unity in a pure compression and zero in pure rotation. This limiter
 prevents the viscosity from being triggered in shear flows and vortices,
 a significant improvement over the constant-:math:`\alpha` approach.
 
-The actual per-particle :math:`\alpha_a` is evolved toward ``alphaloc`` on the
-growth timescale set by ``alphaloc``, and decays back to zero on the timescale
-:math:`\tau_a = h_a / (0.1\,c_{s,a})` as implemented in
-``step_leapfrog`` during the predictor step.
+The actual per-particle :math:`\alpha_a` is updated instantaneously when
+:math:`\alpha_{\rm loc} > \alpha_a` (i.e. :math:`\alpha_a \leftarrow
+\max(\alpha_a, \alpha_{\rm loc})`), and otherwise decays back toward zero on
+the per-particle timescale :math:`\tau_a = h_a / (\zeta_{\rm decay}\,c_{s,a})`,
+where :math:`\zeta_{\rm decay}` is the decay constant (``avdecayconst`` in the
+code, default 0.2). This evolution is implemented in ``step_leapfrog`` during
+the predictor step.
 
 Derivations
 -----------
@@ -121,7 +125,7 @@ Helmholtz decomposition of the velocity gradient into divergence (compressive)
 and curl (solenoidal) parts. In a pure compression :math:`|\nabla\!\times\!
 \mathbf{v}| = 0`, so :math:`\xi = 1`; in pure rotation
 :math:`\nabla\!\cdot\!\mathbf{v} = 0`, so :math:`\xi = 0`. The
-material-derivative trigger :math:`\dot{\xi}_a\nabla\!\cdot\!\mathbf{v}_a`
+material-derivative trigger :math:`D(\nabla\cdot\mathbf{v}_a)/Dt`
 ensures that viscosity is switched on only when a compression is actually
 strengthening, not during the post-shock relaxation phase.
 

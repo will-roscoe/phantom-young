@@ -107,7 +107,7 @@ e.g. for the :math:`z`-axis:
 
 .. math::
 
-   \epsilon_{{\rm rot},z,a} = m_a\,
+   \epsilon_{{\rm rot},z,a} = \tfrac{1}{2}\,m_a\,
    \frac{(\mathbf{r}_a' \times \mathbf{v}_a)_z^2}{|\mathbf{r}_a'|_{xy}^2},
 
 where :math:`\mathbf{r}_a' = \mathbf{r}_a - \mathbf{r}_{\rm com}` and the

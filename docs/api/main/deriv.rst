@@ -44,7 +44,7 @@ The derivative evaluation implements the SPH equations of motion in the form
    \frac{d\mathbf{v}_a}{dt} = -\sum_b m_b \left[
      \frac{P_a}{\Omega_a \rho_a^2} \nabla_a W_{ab}(h_a)
    + \frac{P_b}{\Omega_b \rho_b^2} \nabla_a W_{ab}(h_b)
-   + \Pi_{ab} \hat{\mathbf{r}}_{ab}
+   + \Pi_{ab} \nabla_a \bar{W}_{ab}
    \right] + \mathbf{f}_a^{\rm ext},
 
 where :math:`P_a`, :math:`\rho_a`, and :math:`h_a` are the pressure, density,
@@ -78,8 +78,12 @@ with the smoothing length :math:`h_a` determined self-consistently from
 
    \frac{4}{3}\pi h_a^3 \rho_a = \eta \bar{m},
 
-where :math:`\eta` is a dimensionless parameter (``hfact``) and :math:`\bar{m}`
-is the characteristic particle mass.
+where :math:`\eta` is a dimensionless packing parameter and :math:`\bar{m}`
+is the characteristic particle mass. In the code the equivalent quantity is
+``hfact``, related to :math:`\eta` by :math:`h_{\rm fact}^3 = (3/4\pi)\,\eta`;
+:math:`h_{\rm fact}` is the form used in the smoothing-length iteration
+:math:`h_a = h_{\rm fact}(\bar{m}/\rho_a)^{1/3}`, while :math:`\eta` is the
+textbook packing parameter appearing in the fixed-neighbour-count condition.
 
 Derivations
 -----------

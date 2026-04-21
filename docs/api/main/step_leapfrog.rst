@@ -134,6 +134,12 @@ References
    :cited:
    :style: plain
 
+The following works are referenced in the text but not yet present in ``phantom.bib``:
+
+- Tuckerman, M., Berne, B.J., & Martyna, G.J. 1992, J. Chem. Phys., 97, 1990 — RESPA multiple-timescale integrator
+- Morris, J.P., & Monaghan, J.J. 1997, MNRAS, 290, 553 — artificial viscosity switch
+- Cullen, L., & Dehnen, W. 2010, MNRAS, 408, 669 — artificial viscosity limiter
+
 API Reference
 -------------
 

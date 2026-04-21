@@ -47,8 +47,8 @@ The signal velocity for a pair :math:`(a,b)` is
 .. math::
 
    v_{{\rm sig},ab} = c_{s,a} + c_{s,b} - \beta\,
-                      \min\!\left(0,\,\frac{(\mathbf{v}_a-\mathbf{v}_b)
-                      \cdot\hat{\mathbf{r}}_{ab}}{|\mathbf{r}_{ab}|}\right),
+                      \min\!\left(0,\,
+                      (\mathbf{v}_a-\mathbf{v}_b)\cdot\hat{\mathbf{r}}_{ab}\right),
 
 with :math:`\beta` the non-linear viscosity coefficient (default 2). For MHD
 the signal velocity includes the fast magnetosonic speed.
