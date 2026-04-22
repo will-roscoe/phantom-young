@@ -44,14 +44,12 @@ The velocity-dependent correction is (Tejeda & Rosswog 2013)
 
 .. math::
 
-   \mathbf{f}_v
-   = \frac{2r_g}{r^3}\frac{1}{1-2r_g/r}
-     (\mathbf{v}\cdot\hat{r})\,\mathbf{v}
-     - \frac{3r_g}{r^5}|\mathbf{r}\times\mathbf{v}|^2\,\mathbf{r}.
+   \mathbf{f}_v = \frac{2r_g}{r(r - 2r_g)}(\mathbf{v}\cdot\hat{\mathbf{r}})\,\mathbf{v}
+                  - \frac{3r_g}{r^5}|\mathbf{r}\times\mathbf{v}|^2\,\mathbf{r}
 
-Here :math:`A = \mathbf{r}\cdot\mathbf{v}` is the radial velocity component and
-:math:`B = |\mathbf{r}\times\mathbf{v}|^2` is the squared angular momentum per unit
-mass, both evaluated per unit mass.
+Here :math:`\hat{\mathbf{r}} = \mathbf{r}/r` is the unit radial vector,
+:math:`\mathbf{v}\cdot\hat{\mathbf{r}}` is the radial velocity component, and
+:math:`|\mathbf{r}\times\mathbf{v}|^2` is the squared specific angular momentum.
 
 **Angular momentum and energy**
 

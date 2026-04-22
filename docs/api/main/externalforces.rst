@@ -37,6 +37,67 @@ gravitational-wave radiation-reaction force.
 Physical & Mathematical Description
 -------------------------------------
 
+**Named iexternalforce constants**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 25 70
+
+   * - Value
+     - Constant
+     - Description
+   * - 1
+     - ``iext_star``
+     - Softened central point-mass (Plummer) potential; also used as base for Lense–Thirring and geopotential.
+   * - 2
+     - ``iext_corotate``
+     - Coriolis and centrifugal forces in a rigidly rotating reference frame (:doc:`extern_corotate`).
+   * - 3
+     - ``iext_binary``
+     - Gravitational potential of a binary companion with orbital evolution (:doc:`extern_binary`).
+   * - 4
+     - ``iext_prdrag``
+     - Poynting–Robertson radiation drag (:doc:`extern_prdrag`).
+   * - 5
+     - ``iext_torus``
+     - Torus potential (handled inline in the dispatcher).
+   * - 6
+     - ``iext_toystar``
+     - Toystar self-gravity (handled inline in the dispatcher).
+   * - 7
+     - ``iext_externB``
+     - External magnetic-field body force (:doc:`extern_Bfield`).
+   * - 8
+     - ``iext_spiral``
+     - Composite galactic potential — disc, bulge, halo, spiral arms and bar (:doc:`extern_spiral`).
+   * - 9
+     - ``iext_lensethirring``
+     - Lense–Thirring (frame-dragging) precession around a spinning black hole (:doc:`extern_lensethirring`).
+   * - 10
+     - ``iext_densprofile``
+     - Externally specified density-profile potential (:doc:`extern_densprofile`).
+   * - 11
+     - ``iext_einsteinprec``
+     - Einstein precession correction (handled inline in the dispatcher).
+   * - 12
+     - ``iext_gnewton``
+     - Generalised Newtonian (Tejeda–Rosswog) pseudo-Schwarzschild potential (:doc:`extern_gnewton`).
+   * - 13
+     - ``iext_staticsine``
+     - Static sinusoidal potential for wave-damping tests (:doc:`extern_staticsine`).
+   * - 14
+     - ``iext_gwinspiral``
+     - Gravitational-wave inspiral radiation-reaction force (:doc:`extern_gwinspiral`).
+   * - 15
+     - ``iext_discgravity``
+     - Self-gravity of a razor-thin disc (handled inline in the dispatcher).
+   * - 16
+     - ``iext_corot_binary``
+     - Binary system in a corotating frame (handled inline in the dispatcher).
+   * - 17
+     - ``iext_geopot``
+     - Spherical-harmonic geopotential model (:doc:`extern_geopot`).
+
 For the central point-mass potential (``iext_star``, ``iext_lensethirring``,
 ``iext_geopot``) the acceleration and potential are
 

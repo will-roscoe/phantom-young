@@ -35,11 +35,9 @@ available choices are:
   sinusoidal bar (6).
 
 An additional option (``read_from_file = .true.``) allows the potential to be read
-from a pre-tabulated three-dimensional grid file.
-
-Runtime parameters are specified in physical units (km s :sup:`-1` kpc :sup:`-1` for
-pattern speeds, kpc for bar axes, degrees for pitch angle) and converted to code
-units at initialisation.
+from a pre-tabulated three-dimensional grid file.  Runtime parameters are specified
+in physical units (km s :sup:`-1` kpc :sup:`-1` for pattern speeds, kpc for bar
+axes, degrees for pitch angle) and converted to code units at initialisation.
 
 Physical & Mathematical Description
 -------------------------------------
@@ -84,11 +82,19 @@ The spiral potential is a Fourier sum of arm harmonics:
    \Phi_\mathrm{arms}(R,\phi,z)
    = -4\pi G H\,\rho_0
      \sum_{n=1}^{N_\mathrm{harm}} \frac{\cos(n\gamma)}{K_n D_n}
-     \mathrm{sech}^2\!\left(\frac{K_n z}{\beta_n}\right),
+     \mathrm{sech}^{B_n}\!\left(\frac{K_n z}{\beta_n}\right),
 
 where :math:`\gamma = N_\mathrm{arm}(\ln R/R_0 - \phi)/\tan\alpha_p` is the phase
-along a logarithmic spiral with pitch angle :math:`\alpha_p` and
-:math:`K_n = nN_\mathrm{arm}/(R\sin\alpha_p)`.
+along a logarithmic spiral with pitch angle :math:`\alpha_p`,
+:math:`K_n = nN_\mathrm{arm}/(R\sin\alpha_p)`, and the vertical exponent is
+
+.. math::
+
+   B_n = K_n H_z \left(1 + 0.4\,K_n H_z\right),
+
+with :math:`H_z` the vertical scale height.  This exponent reduces to approximately
+2 only when :math:`K_n H_z \approx 1.25`; in general it varies with radius and
+harmonic number.
 
 References
 ----------

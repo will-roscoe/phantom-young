@@ -32,7 +32,7 @@ provides ``viscinfo`` for run-time diagnostic output and
 Physical & Mathematical Description
 -------------------------------------
 
-For an incompressible Newtonian fluid the shear-viscosity contribution to the
+For a compressible Newtonian fluid the shear-viscosity contribution to the
 momentum equation is
 
 .. math::
