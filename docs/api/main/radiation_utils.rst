@@ -75,11 +75,10 @@ weight :math:`\mu` and adiabatic index :math:`\gamma`:
 
 .. math::
 
-   c_v = \frac{(\gamma - 1)\,\mu\,R_g}{\mathcal{R}},
-   \qquad
-   u = \frac{T_{\rm gas}}{c_v}
+   c_v = \frac{R_g}{(\gamma - 1)\,\mu},\qquad u = c_v\,T_{\rm gas}
 
-where :math:`\mathcal{R}` is the universal gas constant.  In code units the
+where :math:`R_g` is the gas constant, :math:`\gamma` is the adiabatic index,
+and :math:`\mu` is the mean molecular weight.  In code units the
 conversion includes the factor ``unit_ergg``.
 
 **Gas–radiation energy exchange.**  The energy exchange rate per unit volume

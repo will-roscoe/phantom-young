@@ -102,6 +102,14 @@ energy are coupled via emission and absorption:
 
 (equations 22 of Whitehouse, Bate & Monaghan 2005), where :math:`a_{\rm rad}` is
 the radiation constant and :math:`T_{\rm gas} = u / c_v` is the gas temperature.
+For an ideal gas the specific heat at constant volume is
+
+.. math::
+
+   c_v = \frac{R_g}{(\gamma - 1)\,\mu},\qquad u = c_v\,T_{\rm gas}
+
+where :math:`R_g` is the gas constant, :math:`\gamma` is the adiabatic index,
+and :math:`\mu` is the mean molecular weight.
 
 **Backward-Euler discretisation.**  Differencing these equations at the new time
 level yields a system in which the updated :math:`u` satisfies a reduced quartic:

@@ -83,6 +83,14 @@ chosen according to ``isink_radiation``:
      - Combined
      - :math:`\alpha = \Gamma + \alpha_{\rm rad}`
 
+.. note::
+
+   This expression is evaluated in Phantom's internal code units, in which
+   :math:`G = 1` by convention.  In CGS, the equivalent force per unit mass is
+   the radiation pressure force
+   :math:`\mathbf{a}_{\rm rad} = \kappa L_* e^{-\tau} / (4\pi c r^2)\,\hat{\mathbf{r}}`,
+   where :math:`L_*` is the stellar luminosity and :math:`\kappa` is the opacity.
+
 **Dust temperature methods.**  For a sink particle with effective temperature
 :math:`T_*` and radius :math:`R_*` located at distance :math:`r` from an SPH
 particle, the dust temperature models are:
