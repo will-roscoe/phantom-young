@@ -26,7 +26,7 @@ Ionisation fractions as functions of density and temperature are returned
 by ``get_xion`` via an analytic fitting formula that reproduces Saha-type
 equilibrium curves. The fitting approach approximates the ionisation
 transition temperature and width as power-law functions of the ionisation
-energy and a degeneracy parameter :math:`\log Q \equiv \log\rho - 2\log T
+energy and a degeneracy parameter :math:`\log_{10} Q \equiv \log_{10}\rho - 2\log_{10} T
 + 12`, then evaluates the fraction through a smoothed step function.
 
 Several hyperbolic tangent and sigmoidal helper functions (``rapid_tanh``,
@@ -35,7 +35,6 @@ approximations that avoid the expense of transcendental function calls in
 the inner loop. The public function ``cvmol`` returns the specific heat
 correction for molecular hydrogen due to rotational and vibrational degrees
 of freedom, modelled as a sum of two sigmoid transitions.
-
 The full routine ``ionisation_fraction`` provides an independent,
 iterative Newton–Raphson solution of the three coupled Saha equations for
 H and He simultaneously, intended for use in contexts where exact
@@ -54,9 +53,20 @@ transition temperature and width are parameterised as
    w_i &= T_{\mathrm{tra},i}\,c_{\mathrm{rec},i}
            \left(1 + d_{\mathrm{rec},i}\,\log Q\right),
 
-where :math:`\log Q = \max(-14, \log\rho) - 2\log T + 12` is a
+where :math:`\log_{10} Q = \max(-14, \log_{10}\rho) - 2\log_{10} T + 12` is a
 degeneracy parameter encoding the departure from the fully-ionised limit,
-and :math:`R_g` is the gas constant. The fitting coefficients
+and :math:`R_g` is the gas constant.
+
+.. note::
+
+   For species :math:`i \ge 2` (H\,{\sc i}, He\,{\sc i}, He\,{\sc ii}
+   ionisation), the coefficient :math:`a_{{\rm rec},i}` is multiplied by the
+   helium-fraction correction :math:`Y_{\rm fac} = 1 - f_{\rm rec}\,Y`, with
+   :math:`f_{\rm rec} = 0.005` and :math:`Y` the helium mass fraction.  For
+   typical :math:`Y \approx 0.28`, this correction is
+   :math:`Y_{\rm fac} \approx 0.9986`.
+
+The fitting coefficients
 :math:`a_{\mathrm{rec}}`, :math:`b_{\mathrm{rec}}`, :math:`c_{\mathrm{rec}}`,
 :math:`d_{\mathrm{rec}}` are tabulated in ``ionization_setup`` and tuned
 for hydrogen mass fractions :math:`X \in [0.6, 0.8]`. Ionisation fraction
@@ -74,8 +84,8 @@ efficiency. The derivative with respect to :math:`T` is
 
    \frac{dx_i}{dT} = \frac{1}{2 T\,w_i^2}\,\mathrm{sech}^2\!\left(
        \frac{\log_{10} T - T_{\mathrm{tra},i}}{w_i}\right)
-       \left[w_i(1 + 2\,b_i) + 2\,c_i\,(\log T - T_{\mathrm{tra},i})
-       \,(b_i(1 + d_i\log Q) + d_i T_{\mathrm{tra},i})\right],
+       \left[w_i(1 + 2\,b_i) + 2\,c_i\,(\log_{10} T - T_{\mathrm{tra},i})
+       \,(b_i(1 + d_i\log_{10} Q) + d_i T_{\mathrm{tra},i})\right],
 
 which is returned as the optional ``dxion`` output of ``get_xion``.
 

@@ -63,13 +63,13 @@ rate of change of the H\ :sub:`2` number density is
 
 .. math::
 
-   \frac{d n_{\mathrm{H_2}}}{d t} = R_\mathrm{grain}\,n_\mathrm{H} -
+   \frac{d n_{\mathrm{H_2}}}{d t} = R_\mathrm{grain}\,n_\mathrm{tot}\,n_\mathrm{H} -
    (\eta_\mathrm{diss} + \zeta_\mathrm{CR})\,n_{\mathrm{H_2}},
 
 where :math:`R_\mathrm{grain} = R_0\sqrt{T}` is the grain-surface formation
-rate (Bergin et al. 2004 give :math:`R_0 = 6\times10^{-18}` cm\ :sup:`3`
-s\ :sup:`-1` K\ :sup:`-1/2`; the module uses ``Rconst`` :math:`= 3\times
-10^{-1}\times 2.2\times10^{-18}`), :math:`\zeta_\mathrm{CR}` is the
+rate [cm\ :sup:`3` s\ :sup:`-1`] (Bergin et al. 2004 give :math:`R_0 =
+6\times10^{-18}` cm\ :sup:`3` s\ :sup:`-1` K\ :sup:`-1/2`; the module uses
+``Rconst`` :math:`= 3\times 10^{-1}\times 2.2\times10^{-18}`), :math:`\zeta_\mathrm{CR}` is the
 cosmic-ray ionisation rate, and :math:`\eta_\mathrm{diss}` is the UV
 photodissociation rate given by
 
