@@ -11,7 +11,7 @@ The ``readwrite_mesa`` module reads stellar profiles produced by the MESA
 2011, ApJS 192, 3) and translates them into the internal format required
 by Phantom's ``set_star`` module.  A MESA profile is a text file with a
 standardised header specifying the column names; this module locates the
-density, temperature, pressure, sound speed, and composition columns by
+density, temperature, pressure, radius, mass, and composition columns by
 name, making it robust to changes in column ordering between MESA versions.
 
 The module handles the conversion from MESA's Lagrangian coordinates (in

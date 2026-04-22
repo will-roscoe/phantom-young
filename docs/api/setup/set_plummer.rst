@@ -40,7 +40,7 @@ The **Hernquist sphere** profile is
 
 .. math::
 
-   \rho(r) = \frac{M}{2\pi a}\,\frac{1}{(r/a)(1 + r/a)^3},
+   \rho(r) = \frac{M}{2\pi a^3}\,\frac{1}{(r/a)(1 + r/a)^3},
 
 with cumulative mass
 
