@@ -70,8 +70,7 @@ gas is
 
    \lambda = \frac{\sigma_\mathrm{eff}}{\rho_g},
    \qquad
-   \sigma_\mathrm{eff} = \frac{\pi\,m_\mathrm{mol}}{5\sqrt{2}\,\cdot\,
-   \tfrac{64}{5}\,\sigma_{\mathrm{H}_2}},
+   \sigma_\mathrm{eff} = \frac{5\pi\,m_\mathrm{mol}}{64\sqrt{2}\,\sigma_{\mathrm{H}_2}},
 
 where :math:`m_\mathrm{mol}` is the mean molecular mass of the gas and
 :math:`\sigma_{\mathrm{H}_2}` is the H\ :sub:`2` collision cross-section.  The
@@ -101,7 +100,7 @@ selects one of three Stokes sub-regimes:
      - Drag coefficient
    * - 3 (Stokes I)
      - :math:`Re \leq 1`
-     - :math:`C = 4.5\,\nu_\mathrm{mol}/(\rho_\mathrm{grain}\,s^2)`
+     - :math:`C = 4.5\,\nu_\mathrm{mol}/(\rho_\mathrm{grain}\,s^2)`;  :math:`f = 1` (no velocity-dependent correction)
    * - 4 (Allen / transitional)
      - :math:`1 < Re \leq 800`
      - :math:`C = 9/(\rho_\mathrm{grain}\,s\,Re^{0.6})`;  :math:`f = |\Delta v|`

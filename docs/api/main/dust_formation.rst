@@ -117,6 +117,17 @@ constant gas opacity :math:`\kappa_\mathrm{gas}` (default
 :math:`2\times10^{-4}\,\mathrm{cm}^2\,\mathrm{g}^{-1}`), following Gail &
 Sedlmayr (1985).
 
+.. note::
+
+   The argument :math:`0.75\,K_3\,m_C / (m_\mathrm{H}\,\rho_C)` is subject to
+   a floor clamp in the code:
+   :math:`\max\!\left(0.75\,K_3\,m_C / (m_\mathrm{H}\,\rho_C),\;10^{-15}\right)`,
+   which prevents division by zero when :math:`K_3 \approx 0`.
+
+   Here :math:`m_\mathrm{H}` is the mass of a hydrogen nucleus
+   (:math:`\approx 1.67 \times 10^{-24}\,\mathrm{g}`), not the mean molecular
+   weight :math:`\mu m_p` of the gas mixture.
+
 **Bowen opacity.**  When ``idust_opacity = 1`` the total opacity is
 
 .. math::

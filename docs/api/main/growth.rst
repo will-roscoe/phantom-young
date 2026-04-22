@@ -22,7 +22,9 @@ velocity exceeds the fragmentation threshold ``vfrag`` the mass source term
 changes sign and grains are destroyed.  Two fragmentation prescriptions are
 available: a symmetric model (``ifrag = 1``) that mirrors the growth rate, and
 the Kobayashi & Tanaka (2010) model (``ifrag = 2``) in which the fragmentation
-efficiency depends on the velocity ratio squared.
+efficiency depends on the velocity ratio squared.  A diagnostic mode
+(``ifrag = -1``) freezes the grain size by forcing :math:`\mathrm{d}s/\mathrm{d}t = 0`,
+which is useful for testing without grain evolution.
 
 An aeolian erosion model due to Rozner, Grishin & Perets (2020) is optionally
 activated (``ieros = 1``), representing the chipping of small grains from large
@@ -67,7 +69,7 @@ turbulent velocity of the gas is
 
    V_t = \sqrt{\sqrt{2}\,\mathrm{Ro}\,\alpha_\mathrm{dg}}\,c_s,
 
-where :math:`\mathrm{Ro} = 1/2` is the Rossby number and :math:`\alpha_\mathrm{dg}`
+where :math:`\mathrm{Ro} = 3` is the Rossby number and :math:`\alpha_\mathrm{dg}`
 the turbulence parameter.  The dust–gas relative velocity is then
 
 .. math::
@@ -78,11 +80,15 @@ where the Schmidt number is
 
 .. math::
 
-   S_c = (1 + \Omega_k\,t_s)\,
+   \mathrm{St} = \Omega_k\,t_s,
+
+.. math::
+
+   S_c = (1 + \mathrm{St})\,
    \sqrt{1 + \left(\frac{|\Delta\mathbf{v}|}{V_t}\right)^2},
 
-with :math:`\Omega_k` the local Keplerian frequency and :math:`t_s` the drag
-stopping time.
+with :math:`\Omega_k` the local Keplerian frequency, :math:`t_s` the drag
+stopping time, and :math:`\mathrm{St} = \Omega_k t_s` the Stokes number.
 
 **Aeolian erosion.**  When ``ieros = 1`` and the differential velocity exceeds
 the erosion threshold

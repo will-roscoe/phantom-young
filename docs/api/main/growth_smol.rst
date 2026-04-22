@@ -68,7 +68,9 @@ maps into bin :math:`i` under the chosen mass-redistribution scheme.
 - grain radii :math:`s_i` and intrinsic densities :math:`\rho_{\mathrm{grain},i}`
   to grain masses
   :math:`m_i = (4\pi/3)\,s_i^3\,\rho_{\mathrm{grain},i} \cdot m_\mathrm{unit}`
-  in :math:`\mathrm{g}`;
+  in :math:`\mathrm{g}`, where :math:`s_i` and :math:`\rho_{\mathrm{grain},i}`
+  are in code units and :math:`m_\mathrm{unit} = u_\mathrm{mass}` is the
+  code-to-CGS mass conversion factor (not a separate grain-mass unit);
 - on return, updated dust densities are divided by the total density to recover
   dust fractions.
 
