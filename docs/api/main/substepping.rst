@@ -9,12 +9,21 @@ Overview
 The ``substepping`` module implements the Reference System Propagator Algorithm
 (RESPA) for multiple-time-scale integration in Phantom.  The fundamental idea,
 due to Tuckerman, Berne & Martyna (1992) following Verlet (1967), is to separate
-the total force into a *slow* component — long-range gravity, external potentials,
-and sink-particle interactions — and a *fast* component — SPH pressure and
-viscosity forces — which are sub-stepped at a shorter time-interval
-:math:`\Delta t_{\rm ext}` within each global SPH step :math:`\Delta t_{\rm SPH}`.
+the total force into a *fast* component — sink-particle interactions, gravitational
+forces, and external potentials — and a *slow* component — SPH pressure and
+viscosity forces.  The fast forces are sub-stepped at a shorter time-interval
+:math:`\Delta t_{\rm ext}` within each global SPH step :math:`\Delta t_{\rm SPH}`,
+while the slow forces are advanced once per global step.
 This avoids the inefficiency of advancing the entire system at the rate dictated by
 the most restrictive force.
+
+.. note::
+
+   Phantom's convention is the *opposite* of the molecular-dynamics RESPA convention
+   of Tuckerman et al. (1992), in which "fast" refers to covalent bond (short-range)
+   forces.  In Phantom the gravitational and external forces are the stiff,
+   short-timescale (fast) forces that require sub-stepping, whereas SPH pressure and
+   viscosity vary on the longer hydrodynamic timescale.
 
 Four entry points are provided.  ``substep_sph`` handles the trivial case of pure
 hydrodynamics without external forces, performing a simple drift of particle
@@ -24,8 +33,8 @@ iterating the conservative-to-primitive solver until the position update converg
 respectively, each executing a sequence of kick–drift–force–kick inner steps over
 sink and gas particles.  The Newtonian ``substep`` supports both a second-order
 leapfrog scheme (``use_fourthorder = .false.``) and a higher-order
-Forest–Suzuki–Integrated (FSI) scheme (``use_fourthorder = .true.``) using the
-Omelyan extrapolation method; the FSI coefficients ``ck`` and ``dk`` are provided
+fourth-order symplectic integrator (``use_fourthorder = .true.``) following
+Chin (2007); the integrator coefficients ``ck`` and ``dk`` are provided
 by the ``ptmass`` module.
 
 Accretion is tested at the end of each sub-step, and if particles are accreted a
@@ -37,11 +46,13 @@ Physical & Mathematical Description
 -------------------------------------
 
 **RESPA decomposition.**  The Hamiltonian is split as
-:math:`H = H_{\rm fast} + H_{\rm slow}`, where :math:`H_{\rm fast}` contains SPH
-pressure and viscosity and :math:`H_{\rm slow}` contains sink-particle and external
-forces.  Over one global step :math:`\Delta t_{\rm SPH}`, the slow forces are
-sub-stepped :math:`n_s` times at :math:`\Delta t_{\rm ext} = \Delta t_{\rm SPH} /
-n_s`, with :math:`n_s` determined adaptively each step.
+:math:`H = H_{\rm fast} + H_{\rm slow}`, where :math:`H_{\rm fast}` contains
+sink-particle and external gravitational forces (sub-stepped inside each global SPH
+step) and :math:`H_{\rm slow}` contains SPH pressure and viscosity forces (advanced
+at the global step interval).  Over one global step :math:`\Delta t_{\rm SPH}`, the
+fast forces are sub-stepped :math:`n_s` times at
+:math:`\Delta t_{\rm ext} = \Delta t_{\rm SPH} / n_s`, with :math:`n_s` determined
+adaptively each step.
 
 **Second-order leapfrog (Verlet) sub-step.**  One sub-step of duration
 :math:`\Delta t` advances the system as
@@ -57,15 +68,16 @@ implemented in Phantom as two calls to ``kick`` with coefficients
 :math:`d_k^{(1)} = d_k^{(2)} = 1/2` and one call to ``drift`` with
 :math:`c_k^{(1)} = 1`.
 
-**Fourth-order FSI sub-step.**  The Forest–Suzuki integration with Omelyan
-extrapolation uses a three-kick / two-drift factorisation with coefficients
+**Fourth-order symplectic sub-step.**  The fourth-order symplectic integrator
+(Chin 2007; Rantala et al. 2020, 2023) uses a three-kick / two-drift factorisation
+with coefficients
 
 .. math::
 
    d_k = \left(\tfrac{1}{6},\; \tfrac{2}{3},\; \tfrac{1}{6}\right), \qquad
    c_k = \left(\tfrac{1}{2},\; \tfrac{1}{2}\right)
 
-For the force at the second drift point, the Omelyan extrapolation uses the
+For the force at the second drift point, the integrator uses the
 previous-step sink force ``fsink_old`` to predict a corrected sink position,
 reducing the number of full force evaluations without sacrificing fourth-order
 accuracy.
@@ -104,9 +116,10 @@ The RESPA algorithm implemented here follows:
 - Verlet, L. 1967, Phys. Rev., 159, 98 — original Verlet integrator
 - Tuckerman, M., Berne, B. J., & Martyna, G. J. 1992, J. Chem. Phys., 97, 1990 —
   RESPA multiple-time-scale integration
-- Rantala, A. et al. 2020; 2023 — higher-order FSI scheme and Omelyan extrapolation
-  as used for sink subgroup integration
-- Chin, S. A. 2007, Phys. Rev. E, 75, 036701 — symplectic integrator coefficients
+- Chin, S. A. 2007, Phys. Rev. E, 75, 036701 — fourth-order symplectic integrator
+  coefficients used for the higher-order sub-step
+- Rantala, A. et al. 2020; 2023 — fourth-order symplectic scheme as used for sink
+  subgroup integration
 
 No entries from ``phantom.bib`` are directly cited by this module.
 

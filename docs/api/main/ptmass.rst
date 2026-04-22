@@ -102,6 +102,18 @@ modified to prevent artificial accretion:
 and the force amplitude is scaled by the factor
 :math:`1 - (2 - r/R_{\rm sink})^4`.
 
+**Density threshold.**  The sink-creation density threshold is converted from the
+user-specified CGS value to code units as
+
+.. math::
+
+   \rho_{\rm crit} = \frac{\rho_{\rm crit,cgs}}{u_{\rho}}
+
+where :math:`u_{\rho}` is the code density unit (``unit_density``).  The variable
+``rho_crit_cgs`` is the density threshold in g cm\ :sup:`-3` supplied at runtime;
+``rho_crit`` is the converted code-unit value used in all accretion and sink-creation
+checks.
+
 **Accretion criterion.**  A gas particle of specific kinetic energy
 :math:`\tfrac{1}{2}|\Delta\mathbf{v}|^2` relative to sink :math:`j` and at
 separation :math:`r` is accreted if it satisfies all of the following:
@@ -116,6 +128,13 @@ separation :math:`r` is accreted if it satisfies all of the following:
 where :math:`h_\ell` is the specific angular momentum of the gas particle relative
 to the sink.  Particles with :math:`r < f_{\rm acc}\,h_{\rm acc}` are accreted
 unconditionally.
+
+.. note::
+
+   This criterion follows Bate, Bonnell & Price (1995) eq. 3:
+   :math:`|\mathbf{h}_\ell|^2 < G M_j h_{\rm acc}`.  In Phantom's code units where
+   :math:`G = 1`, this reduces to :math:`|\mathbf{h}_\ell|^2 < M_j h_{\rm acc}` as
+   implemented.
 
 **Symbol table**
 

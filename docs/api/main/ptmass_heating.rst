@@ -15,6 +15,11 @@ exposes two routines: ``energ_sinkheat``, which accumulates the total heating ra
 per unit energy on a given gas particle from all contributing sinks, and
 ``heating_kernel``, which supplies the radial weighting function.
 
+The per-sink luminosity :math:`L_j` is stored in the sink property array as
+:math:`\texttt{iLum}`.  The module also provides the public variable
+:math:`\texttt{Lnuc}` (nuclear luminosity contribution), which may be summed into
+:math:`L_j` by other modules (e.g.\ :mod:`ptmass`).
+
 The heating is spatially confined to within the SPH kernel support radius of each
 sink (i.e., :math:`q^2 = r^2 / h_{\rm soft}^2 < r_{\rm kern}^2`).  Only sinks
 for which the ``sink_has_heating`` predicate is true contribute; this guards against
