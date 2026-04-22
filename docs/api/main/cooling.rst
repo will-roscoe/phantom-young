@@ -22,17 +22,18 @@ options are:
 - **1** — cooling library (implicit/exact integration via ``cooling_solver``).
 - **2** — cooling library (explicit integration via ``cooling_solver``).
 - **3** — Gammie (2001) beta-cooling (explicit; ``cooling_gammie``).
+- **4** — ISM chemistry-coupled multi-phase cooling, applied within the SPH
+  step (``cooling_ism``).
 - **5** — Koyama & Inutsuka (2002) two-phase ISM cooling (explicit;
   ``cooling_koyamainutsuka``).
 - **6** — Koyama & Inutsuka (2002) two-phase ISM cooling (implicit;
   ``cooling_koyamainutsuka``).
 - **7** — Gammie beta-cooling with a power-law radial profile (explicit;
   ``cooling_gammie_PL``).
+- **8** — ISM chemistry-coupled multi-phase cooling, applied outside the SPH
+  step (``cooling_ism``).
 - **9** — Radiative-transfer approximation following Young et al. (2024)
   (implicit; ``cooling_radapprox``).
-
-Options 4 and 8 additionally route through ``cooling_ism`` for full ISM
-chemistry-coupled cooling; option 8 performs its update outside the SPH step.
 
 Cooling is applied only when an adiabatic equation of state is active
 (``eos_allows_shock_and_work`` must return true), and both shock-heating and
@@ -74,8 +75,10 @@ mean molecular weight :math:`\bar{\mu}` and adiabatic index :math:`\gamma` is
    u = \frac{k_\mathrm{B}\,T}{(\gamma - 1)\,\bar{\mu}\,m_\mathrm{p}},
 
 which defines the temperature used when evaluating cooling functions that are
-expressed as functions of :math:`T`. For the isothermal limit
-(:math:`\gamma = 1`), the factor :math:`3/2` replaces :math:`1/(\gamma-1)`.
+expressed as functions of :math:`T`. When :math:`\gamma \leq 1`, the code uses
+:math:`3/2` in place of :math:`1/(\gamma-1)` as a pragmatic fallback for the
+floor calculation; this is a code convention, not a physically derived
+isothermal limit.
 
 The temperature floor condition is enforced as
 

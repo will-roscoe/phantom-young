@@ -44,7 +44,7 @@ with the Vazquez-Semadeni et al. (2007) typographical correction:
    \Lambda_\mathrm{KI}(T) = \Gamma_\mathrm{KI}
    \left[10^7\exp\!\left(\frac{-1.184\times10^5}{T+1000}\right)
    + 0.014\,\sqrt{T}\,\exp\!\left(\frac{-92}{T}\right)\right]
-   \quad \mathrm{[erg\ cm^3\ s^{-1}]}.
+   \quad \mathrm{[erg\ s^{-1}]}.
 
 The first term describes cooling in the warm phase (atomic line emission)
 and the second describes cooling in the cold phase (fine-structure and

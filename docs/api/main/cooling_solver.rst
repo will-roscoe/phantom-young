@@ -86,8 +86,8 @@ defined by
 
 .. math::
 
-   \mathcal{Y}(T) = -\frac{Q_\mathrm{ref}\,T_\mathrm{ref}}{T_\mathrm{ref}}
-   \int_{T}^{T_\mathrm{ref}} \frac{\mathrm{d}T'}{Q(T')\,T'},
+   \mathcal{Y}(T) = -\frac{Q_\mathrm{ref}}{T_\mathrm{ref}}
+   \int_{T}^{T_\mathrm{ref}} \frac{\mathrm{d}T'}{Q(T')},
 
 which is computed piecewise on the temperature grid. For each interval
 :math:`[T_k, T_{k+1}]` where

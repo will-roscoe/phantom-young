@@ -58,6 +58,11 @@ where :math:`\Sigma` is the estimated surface density (column density),
 :math:`\bar{\kappa}_\mathrm{P}` is the Planck mean opacity, both obtained
 from the tabulated EOS.
 
+Note that :math:`\tau_{\rm eff}` as defined here has units of g cm\ :sup:`-2`
+and is not the standard dimensionless optical depth :math:`\tau = \kappa \Sigma`;
+it is a composite opacity weighting specific to the Stamatellos radiative
+approximation.
+
 The radiative cooling rate per unit mass is
 
 .. math::
@@ -99,8 +104,13 @@ the tabulated EOS. The thermalization timescale is
 
 **Modified Lombardi scale height** (Young et al. 2024, ``od_method = 4``):
 
-The pressure scale height :math:`H_\mathrm{Lom} = P / (|\nabla P|/\rho)` from
-Lombardi et al. (2015) is combined with a modified disc scale height
+The pressure scale height from Lombardi et al. (2015) is
+
+.. math::
+
+   H_{\rm Lom} = \frac{P}{|\nabla P|}
+
+and is combined with a modified disc scale height
 
 .. math::
 

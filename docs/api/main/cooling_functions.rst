@@ -44,7 +44,7 @@ shock cooling law (Creasey et al. 2011) for benchmark tests are also included.
 Auxiliary routines compute the LTE electron number density from the Saha
 equations (D'Angelo & Bodenheimer 2013 parameterisation) for a hydrogen–helium
 mixture with assumed mass fractions :math:`X_H = 0.7`, :math:`X_{He} = 0.28`,
-the mean thermal speed, the cumulative Maxwell–Boltzmann distribution function
+the RMS thermal speed, the cumulative Maxwell–Boltzmann distribution function
 (used to truncate molecular cooling rates at velocities sufficient to destroy
 bonds), and the dust grain number density from a dust-to-gas ratio and mean
 grain size.
@@ -74,7 +74,7 @@ Burke & Hollenbach 1983):
    (T_\mathrm{gas} - T_\mathrm{dust}),
 
 with accommodation coefficient :math:`\alpha = 0.33`, geometric grain cross
-section :math:`\sigma_\mathrm{grain} = 2\pi a^2`, and mean thermal speed
+section :math:`\sigma_\mathrm{grain} = 2\pi a^2`, and RMS thermal speed
 :math:`\bar{v} = \sqrt{3k_\mathrm{B}T/(\mu m_\mathrm{p})}`.
 
 **Radiative relaxation toward dust temperature** (Woitke 2006 style):
