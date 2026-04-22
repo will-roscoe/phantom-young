@@ -10,7 +10,7 @@ The ``extern_gr`` module computes the curvature source terms that appear on the 
 side of the relativistic SPH momentum equation. These terms arise from spatial gradients of
 the metric tensor and couple the fluid stress-energy to the spacetime geometry. The module
 is the central hub for evaluating GR forces on SPH particles in Phantom's GR framework,
-as described in Liptai & Price (2019) :cite:`lodatoprice10`.
+as described in Liptai & Price (2019).
 
 The module exposes the public routine ``get_grforce`` (for a single particle) and
 ``get_grforce_all`` (an OpenMP-parallelised loop over all particles). A timestep constraint
@@ -72,7 +72,7 @@ C_{\rm force}\min(\Delta t_f, \Delta t_{\rm orb})`.
 References
 ----------
 
-Liptai & Price (2019), MNRAS 485, 819 — not yet in phantom.bib.
+Liptai, D. & Price, D.J. 2019, MNRAS, 000, 000 — GR SPH formulation (not yet in phantom.bib).
 Magnall, Price, Lasky & Macpherson (2023), Phys. Rev. D 108, 103534 — not yet in phantom.bib.
 
 .. bibliography:: ../../phantom.bib

@@ -9,7 +9,7 @@ Overview
 The Kerr metric module provides the exact vacuum solution to the Einstein field equations
 for a rotating black hole characterised by mass :math:`M` and specific angular momentum
 :math:`a` (spin parameter, :math:`|a| \leq M` in geometrised units). It implements
-Phantom's ``metric`` module interface with ``imetric = 3`` and ``metric_type = 'Kerr'`,
+Phantom's ``metric`` module interface with ``imetric = 3`` and ``metric_type = 'Kerr'``,
 following the Boyer-Lindquist coordinate convention described in Liptai & Price (2019),
 MNRAS 485, 819 — not yet in phantom.bib.
 

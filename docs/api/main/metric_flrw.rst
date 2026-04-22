@@ -22,9 +22,13 @@ investigations of non-linear cosmological perturbations in the Newtonian or
 post-Newtonian regime. Phantom's GR cosmological applications are described in
 Macpherson, Lasky & Price (2019) — not yet in phantom.bib.
 
-The metric derivatives in the Cartesian form are noted as returning unity for all
-components — this is a placeholder and requires correction for production cosmological
-runs involving source terms from :math:`\partial_i g_{\mu\nu}`.
+.. warning::
+   The metric Cartesian derivatives are currently set to constant values
+   (``dgcov/dx = 1.0`` for all components) as a placeholder. This is physically
+   incorrect — the FLRW metric derivatives should reflect :math:`\partial(a^2)/\partial t`
+   for the temporal diagonal entries. Using this metric in dynamical
+   expanding-universe simulations will produce incorrect curvature source terms and
+   geodesic accelerations. The placeholder is suitable only for static/test cases.
 
 Physical & Mathematical Description
 -------------------------------------
@@ -67,7 +71,11 @@ In spherical coordinates, the metric is:
 
    g_{\mu\nu}^{\rm sph} = \mathrm{diag}\!\left(-1,\; a,\; a r^2,\; a r^2\sin^2\!\theta\right)
 
-with :math:`\sqrt{-g^{\rm sph}} = a^3`.
+.. note::
+   Note that this approximation sets :math:`\sqrt{-g} = a^3` for both Cartesian and
+   spherical coordinate forms, deviating from the exact spherical expression
+   :math:`a^{3/2} r^2 |\sin\theta|`. The code uses :math:`\sqrt{-g} = a^3` in both
+   cases (matching the Cartesian form) as an approximation.
 
 References
 ----------

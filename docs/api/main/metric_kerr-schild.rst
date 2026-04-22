@@ -50,11 +50,11 @@ where the Boyer-Lindquist radial coordinate :math:`r` is defined implicitly by:
          \sqrt{(x^2+y^2+z^2-a^2)^2 + 4a^2 z^2}\right]
 
 and :math:`\Sigma = r^2 + a^2 z^2/r^2`. The auxiliary quantity is
-:math:`\mathrm{term} = 2Mr/\Sigma`. The metric components implemented in the code are:
+:math:`\mathrm{term} = 2M/\Sigma`. The metric components implemented in the code are:
 
 .. math::
 
-   g_{tt} = -1 + \mathrm{term}\cdot r, \qquad
+   g_{tt} = -1 + \frac{2Mr}{\Sigma}, \qquad
    g_{ti} = \mathrm{term}\cdot r\, (l_i), \qquad
    g_{ij} = \delta_{ij} + \mathrm{term}\cdot r\, l_i l_j
 

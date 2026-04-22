@@ -38,6 +38,11 @@ energy give:
 
 where :math:`D_0` is set by the normalisation constant ``den0``.
 
+.. note::
+   The derivation assumes :math:`\sqrt{-g} = 1` for the Schwarzschild metric in the
+   coordinate system used; this holds in Cartesian-like isotropic coordinates. In other
+   coordinate systems, the appropriate volume element must be included.
+
 **Sonic-point solution.** For a polytropic fluid with adiabatic index :math:`\gamma` and
 index :math:`n = 1/(\gamma - 1)`, the flow satisfies the relativistic Bernoulli equation:
 

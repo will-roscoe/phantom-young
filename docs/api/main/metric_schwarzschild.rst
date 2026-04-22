@@ -52,8 +52,7 @@ components in Cartesian coordinates are non-zero:
 
 .. math::
 
-   g_{ij}^{\rm Cart} = \delta_{ij} + \frac{r_s / r^3}{1 - r_s/r}
-                       \left(\delta_{ij} r^2 - x^i x^j\right)^{\!-1}\!x^i x^j
+   g_{ij}^{\rm Cart} = \delta_{ij} + \frac{r_s/r}{r^2(1 - r_s/r)}\, x_i x_j
 
 where :math:`r_s = 2M`. The time-time component remains diagonal:
 :math:`g_{tt}^{\rm Cart} = -(1-r_s/r)`. The contravariant metric is

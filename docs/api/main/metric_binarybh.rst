@@ -50,12 +50,26 @@ is:
 
 .. math::
 
-   \tilde{g}^{(A)}_{\mu\nu} = H_A\, l^{(A)}_\mu l^{(A)}_\nu, \qquad
-   H_A = \frac{\sqrt{2}\, r_A^3}{\Sigma_A^2} M_A
+   \tilde{g}^{(A)}_{\mu\nu} = H_A\, l^{(A)}_\mu l^{(A)}_\nu
 
-where :math:`r_A` and :math:`\Sigma_A` are the Boyer-Lindquist radial coordinate and
-Kerr auxiliary function evaluated in the rest frame of black hole :math:`A`, and
-:math:`l^{(A)}_\mu` is the ingoing null vector of that Kerr spacetime. The field coordinates
+where :math:`l^{(A)}_\mu` is the ingoing null vector of that Kerr spacetime. The
+perturbation amplitude as computed by the code (translated from Combi & Ressler 2024)
+is:
+
+.. math::
+
+   H_A = \frac{M_A}{\sqrt{2}} \cdot \frac{r_A^{3/2}}{(\boldsymbol{a}_A \cdot \boldsymbol{x}_A)^2 + r_A^4/4}
+
+where :math:`r_A` is the Boyer-Lindquist radial coordinate in the rest frame of black
+hole :math:`A`, and :math:`\boldsymbol{a}_A \cdot \boldsymbol{x}_A` is the dot product
+of the spin vector with the field-point displacement in that frame.
+
+.. note::
+   This normalisation differs from the standard single-BH Kerr-Schild amplitude
+   :math:`H = Mr/\Sigma` (where :math:`\Sigma = r^2 + a^2\cos^2\theta`). The code
+   follows the specific CAS-generated expressions from the original ``SuperposedBBH.c``
+   (Combi & Ressler 2024, Zenodo 10841021); the two forms agree in the limit
+   :math:`a \to 0`. The field coordinates
 in each BH rest frame :math:`(x^0_A, x^i_A)` are obtained by the Lorentz transformation
 applied to the coordinate displacement :math:`(x - x_A)`.
 
