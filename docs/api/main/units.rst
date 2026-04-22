@@ -60,7 +60,7 @@ The magnetic field unit is derived from the charge unit :math:`u_q` such that
 
    u_q      &= \sqrt{\frac{u_m\,u_r}{\mu_0^{\mathrm{cgs}}}}, \\
    u_B      &= \frac{u_m}{u_t\,u_q}
-              = \sqrt{\frac{u_m}{\mu_0^{\mathrm{cgs}}\,u_r^3}}\,\frac{u_r}{u_t}.
+              = \sqrt{\frac{u_m\,\mu_0^{\mathrm{cgs}}}{u_r\,u_t^2}}.
 
 When :math:`G = 1` is requested and two of the three fundamental units are supplied,
 the third is determined from:

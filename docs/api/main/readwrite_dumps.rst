@@ -53,14 +53,18 @@ Velocities and thermal energy are packed similarly:
 
    \mathtt{vxyzu}(1:4,\,i) = \bigl(v_{x,i},\;v_{y,i},\;v_{z,i},\;u_i\bigr),
 
-with :math:`u_i` the specific internal energy. For MHD runs the magnetic field
-evolution variable satisfies:
+with :math:`u_i` the specific internal energy. For MHD runs, Phantom evolves a
+density-weighted induction variable to maintain :math:`\nabla\cdot\mathbf{B}=0`
+conservation properties. The ``Bevol`` array stores:
 
 .. math::
 
-   \mathtt{Bevol}(1:4,\,i) = \bigl(B_{x,i},\;B_{y,i},\;B_{z,i},\;\psi_i\bigr),
+   \mathtt{Bevol}(1:3,\,i) &= \left(\frac{B_{x,i}}{\rho_i},\;\frac{B_{y,i}}{\rho_i},\;\frac{B_{z,i}}{\rho_i}\right), \\
+   \mathtt{Bevol}(4,\,i)   &= \psi_i,
 
-where :math:`\psi_i` is the hyperbolic divergence-cleaning scalar. The file-identifier
+where :math:`\psi_i` is the hyperbolic divergence-cleaning scalar. The physical
+magnetic field components :math:`(B_{x,i}, B_{y,i}, B_{z,i})` are stored separately
+in the ``Bxyz(1:3,i)`` array and are written to full dumps alongside ``Bevol``. The file-identifier
 string has the format:
 
 .. math::
