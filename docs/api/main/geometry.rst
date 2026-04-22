@@ -45,7 +45,7 @@ The cylindrical coordinate relations are
 .. math::
 
    R = \sqrt{x^2 + y^2}, \quad
-   \phi = \arctan\!\left(\frac{y}{x}\right), \quad
+   \phi = \operatorname{atan2}(y,\,x), \quad
    z' = z.
 
 The spherical coordinate relations are
@@ -53,7 +53,7 @@ The spherical coordinate relations are
 .. math::
 
    r = \sqrt{x^2 + y^2 + z^2}, \quad
-   \phi = \arctan\!\left(\frac{y}{x}\right), \quad
+   \phi = \operatorname{atan2}(y,\,x), \quad
    \theta = \arccos\!\left(\frac{z}{r}\right).
 
 Volume elements in curvilinear coordinates are expressed using metric scale

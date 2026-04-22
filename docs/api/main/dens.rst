@@ -49,7 +49,7 @@ in three dimensions, which can be rewritten as the implicit equation
 
 .. math::
 
-   f(h_i) = \frac{4\pi}{3} h_i^3 \rho_i - h_\mathrm{fact}^3\,m_i = 0.
+   f(h_i) = h_i^3 \rho_i - h_\mathrm{fact}^3\,m_i = 0.
 
 This is solved by Newton-Raphson iteration :cite:`price12`:
 

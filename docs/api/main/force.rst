@@ -43,17 +43,28 @@ The SPH momentum equation for particle :math:`i` is :cite:`price12`
 where :math:`P_i` is the pressure, :math:`\Omega_i` is the grad-h correction,
 :math:`\Pi_{ij}` is the Monaghan (1997) artificial viscosity tensor
 :cite:`price12`, and :math:`\bar{W}_{ij} = \tfrac{1}{2}[W_{ij}(h_i) +
-W_{ij}(h_j)]` is the symmetrised kernel. For MHD the Lorentz force adds
+W_{ij}(h_j)]` is the symmetrised kernel. For MHD, the Lorentz force
+:math:`\mathbf{f}_L = (\nabla\times\mathbf{B})\times\mathbf{B}/\mu_0` is split
+into an isotropic magnetic pressure gradient and an anisotropic magnetic tension,
+so the :math:`P/\rho^2` pressure term in the above equation is replaced by the
+total isotropic stress :math:`(P + B^2/2)/\rho^2`, and a magnetic tension term
+is added :cite:`pricemonaghan04a`:
 
 .. math::
 
-   \left(\frac{\mathrm{d}\mathbf{v}_i}{\mathrm{d}t}\right)_\mathrm{MHD}
-   = -\sum_j m_j \left[
+   \frac{\mathrm{d}\mathbf{v}_i}{\mathrm{d}t}\bigg|_\mathrm{Lorentz}
+   = \sum_j m_j \left[
      \frac{\mathbf{B}_i \mathbf{B}_i}{\Omega_i \rho_i^2}
      + \frac{\mathbf{B}_j \mathbf{B}_j}{\Omega_j \rho_j^2}
    \right] \cdot \nabla_i \bar{W}_{ij}
+   - \sum_j m_j \left[
+     \frac{B_i^2/2}{\Omega_i \rho_i^2}
+     + \frac{B_j^2/2}{\Omega_j \rho_j^2}
+   \right] \nabla_i \bar{W}_{ij},
 
-with resistivity and divergence-cleaning contributions per :cite:`triccoprice12`.
+where the first sum is the (anisotropic) tension and the second is the
+(isotropic) magnetic pressure. Resistivity and divergence-cleaning contributions
+are included per :cite:`triccoprice12`.
 
 The thermal energy equation includes artificial conductivity of the form
 :cite:`pricefederrath10`
