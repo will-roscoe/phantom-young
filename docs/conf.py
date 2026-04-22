@@ -51,6 +51,7 @@ todo_include_todos = True
 
 bibtex_bibfiles = ['phantom.bib']
 bibtex_default_style = 'plain'
+suppress_warnings = ['bibtex.duplicate_citation']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
