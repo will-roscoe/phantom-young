@@ -140,6 +140,11 @@ References
 
 No external literature reference is required for this computation; the method follows directly from standard discretisation principles.
 
+.. seealso::
+
+   :doc:`evolve` — calls energies after each timestep.
+   :doc:`checkconserved` — uses totals from energies to check conservation.
+
 API Reference
 -------------
 

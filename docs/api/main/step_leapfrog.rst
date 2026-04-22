@@ -140,6 +140,11 @@ The following works are referenced in the text but not yet present in ``phantom.
 - Morris, J.P., & Monaghan, J.J. 1997, MNRAS, 290, 553 — artificial viscosity switch
 - Cullen, L., & Dehnen, W. 2010, MNRAS, 408, 669 — artificial viscosity limiter
 
+.. seealso::
+
+   :doc:`deriv` — derivative evaluations called at each half-step.
+   :doc:`evolve` — outer loop that controls timestep and calls step_leapfrog.
+
 API Reference
 -------------
 

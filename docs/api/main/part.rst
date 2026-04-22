@@ -85,6 +85,11 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`readwrite_dumps` — reads/writes the particle arrays defined here.
+   :doc:`dens` — computes density stored in particle arrays.
+
 API Reference
 -------------
 

@@ -85,6 +85,11 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`part` — particle array definitions read and written by this module.
+   :doc:`io` — low-level I/O utilities used by dump reader/writer.
+
 API Reference
 -------------
 

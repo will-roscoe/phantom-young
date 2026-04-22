@@ -69,6 +69,12 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`step_leapfrog` — low-level leapfrog integrator called by evolve.
+   :doc:`energies` — computes diagnostics after each step.
+   :doc:`checkconserved` — monitors conservation law errors.
+
 API Reference
 -------------
 

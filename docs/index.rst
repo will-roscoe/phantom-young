@@ -31,6 +31,10 @@ Contents
 
    api/index
 
+   parameters/index
+   scripts/index
+   data/index
+
 Licence
 -------
 

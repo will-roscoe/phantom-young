@@ -77,6 +77,12 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`force` — uses densities computed here.
+   :doc:`kernel_cubic` — SPH kernel W(r,h) and gradient used in summation.
+   :doc:`kdtree` — neighbour list built before calling dens.
+
 API Reference
 -------------
 

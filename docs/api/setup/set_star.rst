@@ -60,6 +60,11 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`stretchmap` — remaps uniform sphere to stellar density profile.
+   :doc:`readwrite_mesa` — reads MESA stellar profiles for realistic stellar interiors.
+
 API Reference
 -------------
 

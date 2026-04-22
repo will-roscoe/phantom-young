@@ -122,6 +122,12 @@ implemented in Phantom.
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`dens` — density loop called at start of each force evaluation.
+   :doc:`force` — force accumulation called in the second loop.
+   :doc:`step_leapfrog` — calls deriv at each half-step.
+
 API Reference
 -------------
 

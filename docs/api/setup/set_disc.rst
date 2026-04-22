@@ -71,6 +71,11 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`stretchmap` — remaps uniform particle distribution to disc density profile.
+   :doc:`../main/eos` — EOS parameters set during disc initialisation.
+
 API Reference
 -------------
 

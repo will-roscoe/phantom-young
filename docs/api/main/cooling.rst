@@ -102,6 +102,11 @@ Young, M. D. et al. 2024 (not yet in phantom.bib)
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`eos` — converts specific energy to temperature for cooling rates.
+   :doc:`force` — cooling energy loss accumulated here.
+
 API Reference
 -------------
 

@@ -260,6 +260,11 @@ The following works are referenced in this module but not yet present in ``phant
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`force` — calls EOS to get pressure for force calculation.
+   :doc:`cooling` — uses EOS to convert between temperature and energy.
+
 API Reference
 -------------
 

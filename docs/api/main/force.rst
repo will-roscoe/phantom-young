@@ -90,6 +90,13 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`dens` — provides density and h for all particles before force loop.
+   :doc:`eos` — equation of state pressure called inside force loop.
+   :doc:`cooling` — energy loss terms accumulated in force loop.
+   :doc:`dust` — dust drag forces accumulated alongside gas forces.
+
 API Reference
 -------------
 

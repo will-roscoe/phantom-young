@@ -51,6 +51,10 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`set_star` — consumes MESA profiles to initialise SPH stellar particles.
+
 API Reference
 -------------
 

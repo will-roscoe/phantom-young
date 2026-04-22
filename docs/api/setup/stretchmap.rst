@@ -59,6 +59,11 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`set_disc` — uses stretchmap to place particles on disc profiles.
+   :doc:`set_star` — uses stretchmap to remap uniform sphere to stellar profile.
+
 API Reference
 -------------
 
