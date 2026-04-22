@@ -16,10 +16,10 @@ and the temperature.  All other EOS-related diagnostics (mean molecular weight,
 effective adiabatic index :math:`\gamma`, entropy, specific heat) are also routed
 through wrapper functions defined here.
 
-The module supports twenty distinct EOS choices, selectable at run time via the
+The module supports twenty-two distinct EOS choices, selectable at run time via the
 integer parameter ``ieos``.  These range from simple analytic prescriptions
 (isothermal, polytropic) to fully tabulated microphysical equations of state for
-stellar interiors and nuclear matter.  Three choices (``ieos = 18, 19``) are reserved
+stellar interiors and nuclear matter.  Two choices (``ieos = 18, 19``) are reserved
 but not implemented.  Options ``ieos = 21`` and ``ieos = 22`` implement the HII-region
 two-temperature prescription from :doc:`eos_HIIR`.  The module manages initialisation
 and finalisation of all EOS sub-modules, reads and writes runtime parameters to input
@@ -51,7 +51,7 @@ The fundamental output of ``equationofstate`` is the dimensionless ratio
    c_s = \sqrt{\left.\frac{\partial P}{\partial\rho}\right|_s}.
 
 A temperature :math:`T` is also returned as a diagnostic.  The governing relations
-depend on ``ieos``; all twenty options are documented in the table below.
+depend on ``ieos``; all twenty-two options are documented in the table below.
 
 **EOS index summary**
 
@@ -252,7 +252,7 @@ The following works are referenced in this module but not yet present in ``phant
 - Farris, B. D., Duffell, P., MacFadyen, A. I. & Haiman, Z. 2014, ApJ, 783, 134 — binary/hierarchical locally isothermal
 - Hirai, R., Müller, B., Laplace, E. & Heger, A. 2020, MNRAS, 499, 1154 — HORMONE gas+rad+rec EoS
 - Timmes, F. X. & Swesty, F. D. 2000, ApJS, 126, 501 — Helmholtz free energy EoS
-- Shen, G., Horowitz, C. J. & Schwenk, A. 1998/2011 — nuclear matter EoS table
+- Shen, G., Horowitz, C. J. & Teige, S. 2011, Phys. Rev. C, 83, 035802 — nuclear matter EoS table
 - Tillotson, J. H. 1962, GA-3216, General Atomic — hypervelocity impact EoS for solids
 - Lombardi, J. C. et al. 2015, MNRAS, 447, 25 — tabulated opacity/EoS table for icooling=9
 

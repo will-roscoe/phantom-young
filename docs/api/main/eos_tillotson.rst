@@ -64,12 +64,15 @@ material-dependent constants.
    P = \frac{(u - u_{\rm iv})\,P_e + (u_{\rm cv} - u)\,P_c}{u_{\rm cv} - u_{\rm iv}}
 
 The sound speed in each regime is derived from the corresponding derivative of
-pressure with respect to density at constant internal energy, and the effective
-adiabatic index is
+pressure with respect to density at constant internal energy.  The effective
+adiabatic index follows from the definition of the first adiabatic exponent
+applied to the Tillotson pressure relation, where :math:`c_s` is computed
+analytically from :math:`\partial P/\partial\rho|_u` via the compressed or
+expanded state functions:
 
 .. math::
 
-   \gamma = 1 + \frac{P}{\rho\,u}.
+   \gamma_{\rm eff} = \frac{c_s^2\,\rho}{P}.
 
 **Default material parameters (basalt, Benz & Asphaug 1999):**
 

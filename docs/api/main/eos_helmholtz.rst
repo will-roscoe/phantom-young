@@ -44,7 +44,7 @@ where the four contributions are:
 * **Ion** — classical ideal gas of nuclei.
 * **Electron/positron** — relativistic, partially degenerate; evaluated from
   tabulated splines of :math:`f(\rho, T)`.
-* **Radiation** — blackbody photons, :math:`F_{\rm rad} = -\frac{4}{3}\frac{a
+* **Radiation** — blackbody photons, :math:`F_{\rm rad} = -\frac{1}{3}\frac{a
   T^4}{\rho}` per unit mass.
 * **Coulomb** — ion–electron correction.
 

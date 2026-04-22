@@ -31,7 +31,7 @@ radiation-hydrodynamics module handles that term.
 Physical & Mathematical Description
 -------------------------------------
 
-The total specific internal energy per unit volume is
+The total internal energy per unit volume is
 
 .. math::
 

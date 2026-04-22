@@ -59,12 +59,16 @@ where :math:`z_0` and :math:`\beta_z` are user-supplied parameters.
 
 .. math::
 
-   c_s^2(R,z) = \left[c_{s,\rm mid}^4
+   c_s^2(R,z) = \left[\left(c_{s,\rm mid}^2\right)^4
      + \tfrac{1}{2}\!\left(1 + \tanh\!\left(\frac{|z| - \alpha_z\,z_q}{z_q}\right)\right)
-     c_{s,\rm atm}^4\right]^{1/4}
+     \left(c_{s,\rm atm}^2\right)^4\right]^{1/4}
 
-This functional form provides a smooth transition from the mid-plane to the
-atmosphere with the steepness controlled by the parameter :math:`\alpha_z`.
+Here :math:`c_{s,\rm mid}^2` and :math:`c_{s,\rm atm}^2` are the squared sound
+speeds (as stored in the code variables ``cs2mid`` and ``cs2atm``); the exponent 4
+inside the brackets acts on these squared quantities, giving an overall power of 8
+in the physical sound speed.  This functional form provides a smooth transition from
+the mid-plane to the atmosphere with the steepness controlled by the parameter
+:math:`\alpha_z`.
 
 The pressure and sound speed are then
 
