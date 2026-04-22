@@ -31,14 +31,14 @@ equation
 
 .. math::
 
-   \frac{dv}{dr} = \frac{v^2 - c_s^2 + r \,Q(r)}{v(c_s^2/v - v) r} \cdot
-   \frac{\text{numerator}}{\text{denominator}},
+   \frac{dv}{dr} = \frac{\dfrac{2c_s^2}{r} - \dfrac{GM_*(1-\Gamma)}{r^2}}{v - \dfrac{c_s^2}{v}},
 
-where :math:`c_s = \sqrt{\gamma R_g T / \mu}` is the local sound speed and
-:math:`Q(r)` represents radiative and other body forces (gravity, radiation
-pressure, etc.). At the sonic point the denominator vanishes and the
-numerator must also vanish (the regularity condition), which fixes the sonic
-radius. Mass conservation gives :math:`\rho \propto 1 / (v r^2)`.
+where :math:`c_s = \sqrt{\gamma R_g T / \mu}` is the local sound speed,
+:math:`\Gamma = L\kappa/(4\pi c G M_*)` is the Eddington factor for radiative
+acceleration, and the denominator :math:`v - c_s^2/v` vanishes at the sonic
+point :math:`v = c_s`. The regularity condition requires the numerator to
+vanish simultaneously, fixing the sonic radius :math:`r_c = GM_*(1-\Gamma)/(2c_{s,c}^2)`.
+Mass conservation gives :math:`\rho \propto 1/(v r^2)`.
 
 References
 ----------

@@ -18,7 +18,8 @@ dust scheme is used).
 At each full dump the main subroutine ``check_conservation_errors`` compares
 the current values of total energy, linear momentum, angular momentum, and
 dust mass against their initial values stored in ``etot_in``, ``totmom_in``,
-``angtot_in``, and ``mdust_in``. If the relative change exceeds a tolerance
+``angtot_in``, and ``mdust_in``. When adaptive particle refinement (APR) is
+active, total gas mass ``mtot`` is additionally monitored against ``mtot_in``. If the relative change exceeds a tolerance
 of 10%, a warning or fatal error is issued via the ``error`` and ``fatal``
 IO routines.
 

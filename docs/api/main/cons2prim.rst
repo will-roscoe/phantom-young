@@ -32,7 +32,7 @@ Physical & Mathematical Description
 
 In the GR case the conserved variables are the baryon number density
 :math:`D = \rho_* W`, the covariant momentum density
-:math:`S_i = \rho_* h W v_i`, and the total energy density
+:math:`S_i = \rho_* h W^2 v_i`, and the total energy density
 :math:`\tau = \rho_* h W^2 - P - D`, where :math:`W = (1 - v^2)^{-1/2}`
 is the Lorentz factor and :math:`h` the specific enthalpy. Recovering the
 primitive variables :math:`(\rho, v^i, \varepsilon)` from :math:`(D, S_i,
