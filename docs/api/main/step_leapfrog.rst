@@ -21,10 +21,16 @@ splitting preserves time-reversibility and maintains the symplectic structure
 of the integration.
 
 The module supports both global timestepping, in which all particles share a
-single :math:`\Delta t`, and individual (hierarchical) timestepping, in which
-each particle is assigned to a power-of-two timestep bin. In individual
-timestep mode the corrector step synchronises all particles to a common time
-before the next global diagnostic output.
+single :math:`\Delta t_{\rm SPH}`, and individual (hierarchical) timestepping,
+activated at compile time by setting ``IND_TIMESTEPS=yes``. In individual
+timestep mode each particle is assigned to a power-of-two *bin* :math:`k \in
+\{0,\ldots,k_{\rm max}\}` with corresponding timestep :math:`\Delta t_k =
+\Delta t_{\rm max}/2^k`. Particles on coarser bins are integrated with larger
+steps and are only *active* — meaning their forces are re-evaluated — on a
+fraction of global steps. The global SPH step size :math:`\Delta t_{\rm SPH}`
+equals the finest bin timestep :math:`\Delta t_{k_{\rm max}}`. At the end of
+every global step all particles, active or not, are synchronised to the common
+time :math:`t^{n+1}` before the next derivative call.
 
 For velocity-dependent forces — principally the SPH artificial viscosity —
 the corrector step is iterated until the velocity difference between the
@@ -107,6 +113,124 @@ where :math:`c_{s,a}` is the sound speed and :math:`0.1` is ``avdecayconst``.
 The Cullen & Dehnen (2010) switch sets :math:`\alpha_a` to the larger of
 the current value and a target :math:`\alpha_{\rm loc}` computed from the
 velocity-gradient tensor, decaying back to the minimum when no shock is present.
+
+Individual Timesteps (``IND_TIMESTEPS=yes``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When individual timesteps are compiled in, each particle carries an additional
+state variable :math:`t^{\rm was}_a`, the time at which it was last located at
+its own half-step point.  A precomputed lookup table ``ibin_dts`` stores, for
+each bin :math:`k`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Entry
+     - Value
+   * - ``itdt``
+     - :math:`\Delta t_k = \Delta t_{\rm max}/2^k`
+   * - ``ithdt``
+     - :math:`\tfrac{1}{2}\Delta t_k`
+   * - ``itdt1``
+     - :math:`1/\Delta t_k`
+   * - ``ittwas``
+     - :math:`t^{\rm was}_k = ({\rm floor}(t^{n+1}/\Delta t_k) + \tfrac{1}{2})\,\Delta t_k`
+
+The last entry aligns ``twas`` to the nearest half-integer multiple of
+:math:`\Delta t_k`, ensuring particles that are woken mid-step land on a
+consistent half-step grid.
+
+**Initialisation** (``init_step``).
+At :math:`t = 0` every particle is placed on the finest bin
+(:math:`k = k_{\rm max}`) so that the first derivative call is performed with
+all particles active.  Boundary particles are fixed to bin 0 (coarsest) because
+their forces are never evaluated and they must not constrain the global
+timestep.  The initial ``twas`` for particle :math:`a` is
+
+.. math::
+
+   t^{\rm was}_a = t + \tfrac{1}{2}\,\Delta t_{k_a},
+
+placing each particle's half-step at the midpoint of its first interval.
+
+**Predictor (half-kick to** :math:`t^{\rm was}_a`\ **)**
+In the predictor loop, active and inactive particles alike are advanced from the
+current time :math:`t^n` to their individual half-step time:
+
+.. math::
+   :label: lf_ind_predict
+
+   \delta t^{\rm pred}_a = t^{\rm was}_a - t^n, \qquad
+   \mathbf{v}^*_a = \mathbf{v}^n_a + \delta t^{\rm pred}_a\,\mathbf{f}^n_a.
+
+For a particle that has not changed bin, :math:`\delta t^{\rm pred}_a =
+\tfrac{1}{2}\Delta t_{k_a}` exactly.
+
+**SPH force prediction (kick to** :math:`t^{n+1}`\ **)**
+After the substep advances :math:`t^n \to t^{n+1} = t^n + \Delta t_{\rm SPH}`,
+the predicted velocity used in the force evaluation is formed by advancing each
+particle from its half-step to the full-step end:
+
+.. math::
+   :label: lf_ind_vpred
+
+   \delta t^{\rm sph}_a = t^{n+1} - t^{\rm was}_a, \qquad
+   \mathbf{v}^{\rm pred}_a = \mathbf{v}^*_a + \delta t^{\rm sph}_a\,\mathbf{f}^n_a.
+
+For a particle on the finest bin, :math:`\delta t^{\rm sph}_a =
+\tfrac{1}{2}\Delta t_{k_{\rm max}}`; for coarser bins it is correspondingly
+larger, since :math:`t^{\rm was}_a` is further behind :math:`t^{n+1}`.
+
+**Corrector — active particles**
+Particle :math:`a` is *active* on a given step if its bin counter indicates that
+a full interval :math:`\Delta t_{k_a}` has elapsed.  The corrector applies two
+half-kicks in sequence.
+
+First, a corrector kick completing the full step from :math:`t^{\rm was,old}_a`:
+
+.. math::
+   :label: lf_ind_correct_active
+
+   \delta t^{\rm corr}_a
+     = (t^{n+1} - t^{\rm was}_a) + \tfrac{1}{2}\Delta t_{k_a^{\rm new}},
+   \qquad
+   \mathbf{v}^{n+1}_a = \mathbf{v}^*_a + \delta t^{\rm corr}_a\,\mathbf{f}^{n+1}_a,
+   \qquad
+   t^{\rm was}_a \leftarrow t^{\rm was}_a + \delta t^{\rm corr}_a.
+
+The term :math:`t^{n+1} - t^{\rm was}_a` accounts for any mismatch between the
+old half-step time and the end of the new step (e.g., when the particle has just
+been woken to a different bin or when ``dtmax`` has been reduced).
+
+Second, a *synchronisation* kick applied to **all** particles (active or not)
+that brings them to the common time :math:`t^{n+1}`:
+
+.. math::
+   :label: lf_ind_sync
+
+   \delta t^{\rm sync}_a = t^{n+1} - t^{\rm was}_a, \qquad
+   \mathbf{v}^{n+1}_a \leftarrow \mathbf{v}^{n+1}_a
+     + \delta t^{\rm sync}_a\,\mathbf{f}^{n+1}_a.
+
+For active particles this synchronisation step is zero by construction (since
+:math:`t^{\rm was}_a = t^{n+1}` after :eq:`lf_ind_correct_active`).  For
+inactive particles it provides a small correction from the previous half-step
+without a full force evaluation.
+
+**Waking**
+If the force evaluation determines that an inactive particle should move to a
+shorter-timestep bin — signalled by ``ibin_wake(a) > ibin(a)`` — the particle
+is *woken*: it is assigned to the requested bin and its ``twas`` is set to the
+nearest half-grid point for that bin.  Waking only occurs during the corrector
+and takes effect on the next global step.
+
+**Convergence check**
+The ``check_velocity_error`` routine computes the normalised velocity error
+:eq:`lf_errmax`.  When ``IND_TIMESTEPS=yes``, the adaptive timestep-error
+estimate ``dterr`` is not computed (only the global timestepping branch uses it)
+and the damping-corrected tolerance path is likewise inactive.  Iteration
+convergence is still checked against ``tolv`` for active particles.
 
 Derivations
 -----------

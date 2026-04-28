@@ -45,7 +45,20 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinxcontrib.bibtex',
     'sphinx.ext.todo',
+    # newly added, need to implement:
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.coverage',
+    'sphinx_needs',
+    'sphinx_tags',
+    'sphinxcontrib.proof',
+
 ]
+# params for newly added:
+# tags_create_tags = True
+
+#####
+
+
 
 todo_include_todos = True
 

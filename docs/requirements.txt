@@ -1,6 +1,11 @@
-sphinx-rtd-theme
 numpy
 six
+sphinx-rtd-theme
 sphinx-fortran
 sphinxcontrib-bibtex>=2.0
+
+
+sphinx-needs[plotting]
+sphinx-tags
+sphinxcontrib-proof
 
