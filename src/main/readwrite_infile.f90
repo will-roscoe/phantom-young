@@ -51,6 +51,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
  use growth,           only:write_options_growth
  use porosity,         only:write_options_porosity
  use injection,        only:write_options_injection
+ use mass_loading,     only:write_options_massloading
  use utils_apr,        only:write_options_apr
  use dust_formation,   only:write_options_dust_formation
  use nicil_sup,        only:write_options_nicil
@@ -132,6 +133,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
 
  ! injection and related options
  call write_options_injection(iwritein)
+ call write_options_massloading(iwritein)
  if (nucleation) call write_options_dust_formation(iwritein)
  if (sink_radiation) call write_options_ptmass_radiation(iwritein)
 
@@ -288,6 +290,7 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  use porosity,         only:read_options_porosity
  use metric,           only:read_options_metric
  use injection,        only:read_options_injection
+ use mass_loading,     only:read_options_massloading
  use utils_apr,        only:read_options_apr
  use dust_formation,   only:read_options_dust_formation
  use nicil_sup,        only:read_options_nicil
@@ -345,6 +348,7 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
 
  ! injection and related options
  call read_options_injection(db,nerr)
+ call read_options_massloading(db,nerr)
  if (nucleation) call read_options_dust_formation(db,nerr)
  if (sink_radiation) call read_options_ptmass_radiation(db,nerr)
 

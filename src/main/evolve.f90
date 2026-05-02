@@ -167,6 +167,7 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
  use inject,       only:inject_particles
  use HIIRegion,    only:HII_feedback,iH2R,HIIuprate,nHIIsources
  use io_control,   only:nfulldump
+ use mass_loading, only:mdot_load,apply_mass_loading
  use mpiutils,     only:reduceall_mpi
  use part,         only:npart,npartoftype,nptmass,xyzh,vxyzu,fxyzu,apr_level,&
                         xyzmh_ptmass,vxyz_ptmass,gravity,iboundary,ntot,ibin,iphase,&
@@ -232,6 +233,14 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
     !--for global timestep, set nskip to total number of particles across all nodes
     nskip = int(ntot)
     nactive = npart
+ endif
+
+ ! mass loading: fired at full sync points only (every dtmax under ind_timesteps; every step globally)
+ if (mdot_load > 0.) then
+    if (.not. ind_timesteps .or. istepfrac == 2**nbinmax) then
+       call apply_mass_loading(npart, xyzh, vxyzu, iphase, &
+                               merge(dtmax, dt, ind_timesteps), time)
+    endif
  endif
 
  if (gravity .and. icreate_sinks > 0) call ptmass_create_and_update_forces(time,dtextforce)
