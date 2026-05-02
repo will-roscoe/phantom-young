@@ -38,5 +38,6 @@ build/test000
 *.stb
 eos_lom.dat
 **/.claude
-.claude
+.claude/
+.agents/
 .remember/
