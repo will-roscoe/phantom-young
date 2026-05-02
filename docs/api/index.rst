@@ -9,9 +9,7 @@ documentation with contextual notes where applicable.
 
 .. toctree::
    :maxdepth: 2
-
-   main/index
-   setup/index
-   utils/index
-   tests/index
+   :glob:
+   
+   **/index
    libraries

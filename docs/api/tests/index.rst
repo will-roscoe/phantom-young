@@ -1,49 +1,10 @@
-tests
-=====
+tests:
+======
 
 .. toctree::
    :maxdepth: 1
-
-   directsum
-   phantomtest
-   test_apr
-   test_cooling
-   test_corotate
-   test_damping
-   test_derivs
-   test_dust
-   test_eos
-   test_eos_stam
-   test_eos_stratified
-   test_externf
-   test_externf_gr
-   test_geometry
-   test_gnewton
-   test_gr
-   test_gravity
-   test_growth
-   test_hierarchical
-   test_indtstep
-   test_iorig
-   test_kdtree
-   test_kernel
-   test_linalg
-   test_luminosity
-   test_mpi
-   test_neigh
-   test_nonidealmhd
-   test_orbits
-   test_part
-   test_poly
-   test_ptmass
-   test_radiation
-   test_rwdump
-   test_sedov
-   test_setdisc
-   test_setstar
-   test_smol
-   test_step
-   test_units
-   test_wind
-   testsuite
-   utils_testsuite
+   :glob:
+   
+   *
+   
+   

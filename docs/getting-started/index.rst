@@ -23,15 +23,6 @@ Contents
 
 .. toctree::
    :maxdepth: 1
+   :glob:
 
-   gitinfo
-   running-first-calculation
-   clusters
-   nci
-   DiAL
-   ozstar
-   monarch
-   flatiron
-   pawsey
-   kennedy
-   running-mac
+   *

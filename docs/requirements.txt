@@ -8,4 +8,4 @@ sphinxcontrib-bibtex>=2.0
 sphinx-needs[plotting]
 sphinx-tags
 sphinxcontrib-proof
-
+furo

@@ -6,17 +6,6 @@ This section contains some examples of physical problems that you can solve with
 .. toctree::
    :maxdepth: 1
    :caption: Contents:
+   :glob:
 
-   disc
-   relaxation
-   binary
-   star
-   softstar
-   dustsettle
-   dustgrowth
-   hierarchicalsystems
-   selfgravity_gravitationalinstability
-   phantomNR
-   wind
-   mdot
-   density
+   *

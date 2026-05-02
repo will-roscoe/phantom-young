@@ -42,6 +42,10 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`../../developer-guide/ind-timesteps` — sync points, the ``istepfrac`` counter, and how to add a custom routine that runs when all particles are at the same time.
+
 API Reference
 -------------
 

@@ -82,6 +82,136 @@ of parabolic to hyperbolic cleaning coefficients, and ``overcleanfac``
 multiplies the hyperbolic cleaning speed, decreasing :math:`\Delta t_{\rm
 Courant}` by the same factor.
 
+Synchronisation Points
+----------------------
+
+A *sync point* is a moment at which every live particle's state is
+self-consistent at the same physical time :math:`t`. The frequency and
+nature of sync points differs between the two timestepping modes.
+
+**Global timestepping (** ``IND_TIMESTEPS=no`` **)**
+
+Every leapfrog step is a sync point. All :math:`N_{\rm part}` particles
+share the same :math:`\Delta t`, so after every call to ``step`` in
+``evol`` the entire system sits at :math:`t^n + \Delta t`. The
+``at_dump_time`` flag in ``evol_poststep`` becomes true whenever the
+simulation time reaches the next scheduled output time ``tprint``, which
+advances by ``dtmax`` after every dump. The number of steps between
+dumps therefore depends on ``dtmax / dt``; under normal operation this
+ratio fluctuates with the Courant condition.
+
+.. list-table:: Global-timestep event schedule
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Event
+     - Fires when
+     - Location
+   * - All-particle sync
+     - Every step
+     - ``step`` corrector, ``step_leapfrog.f90``
+   * - Energy / ``.ev`` file
+     - Every :math:`\Delta t_{\rm max}` (``at_dump_time``)
+     - ``write_ev_files``, ``evolve_utils.F90``
+   * - Full dump
+     - Every :math:`\Delta t_{\rm max}` (``at_dump_time``)
+     - ``check_and_write_dump``, ``evolve_utils.F90``
+   * - ``check_dtmax_for_decrease``
+     - Every dump (``at_dump_time``)
+     - ``evol_poststep``, ``evolve.f90``
+   * - Dynamic boundaries
+     - Every dump (``at_dump_time``)
+     - ``evol_poststep``, ``evolve.f90``
+
+**Individual timestepping (** ``IND_TIMESTEPS=yes`` **)**
+
+Particles are partitioned into bins :math:`k \in \{0, \ldots, k_{\rm
+max}\}` with per-bin timestep :math:`\Delta t_k = \Delta t_{\rm
+max}/2^k`. The global loop always advances by the finest-bin step
+:math:`\Delta t_{\rm SPH} = \Delta t_{k_{\rm max}}`. The step counter
+``istepfrac`` (in ``timestep_ind``) increments by one each iteration and
+resets to zero after every dump; it ranges over
+:math:`[1,\; 2^{k_{\rm max}}]`. One complete cycle of ``istepfrac``
+spans exactly one :math:`\Delta t_{\rm max}` interval.
+
+A particle in bin :math:`k` is **active** — has its forces recomputed —
+when
+
+.. math::
+
+   \texttt{istepfrac} \bmod 2^{k_{\rm max} - k} = 0,
+
+so the finest-bin particles are active on every step, coarser-bin
+particles on every :math:`2^{k_{\rm max}-k}` steps. All particles are
+active simultaneously exactly when ``istepfrac == 2**nbinmax``; this is
+the **full sync point** and occurs once per :math:`\Delta t_{\rm max}`
+interval, coinciding with every dump.
+
+Even between full sync points the leapfrog corrector in ``step``
+applies a *synchronisation kick* to every particle (active or not),
+bringing all velocities to the common end time :math:`t^{n+1}`. This
+uses the most recently evaluated forces and does not require a new
+density or derivative evaluation. Positions and smoothing lengths are
+always advanced for all particles during the substep.
+
+.. list-table:: Individual-timestep event schedule
+   :header-rows: 1
+   :widths: 30 30 40
+
+   * - Event
+     - Fires when
+     - Location
+   * - Finest-bin particle sync
+     - Every step (every :math:`\Delta t_{\rm SPH}`)
+     - ``step`` corrector, ``step_leapfrog.f90``
+   * - Bin-:math:`k` particle active
+     - Every :math:`2^{k_{\rm max}-k}` steps
+     - ``set_active_particles``, ``utils_indtimesteps.f90``
+   * - Full all-particle sync
+     - ``istepfrac == 2**nbinmax`` (every :math:`\Delta t_{\rm max}`)
+     - ``evol_prestep``, ``evolve.f90``
+   * - ``check_dtmax_for_decrease``
+     - ``istepfrac == 2**nbinmax``
+     - ``evol_prestep``, ``evolve.f90``
+   * - Dynamic boundaries
+     - ``istepfrac == 2**nbinmax`` and ``nactive == nalive``
+     - ``evol_prestep``, ``evolve.f90``
+   * - Energy / ``.ev`` file
+     - Every :math:`\Delta t_{\rm max}` (``at_dump_time``)
+     - ``write_ev_files``, ``evolve_utils.F90``
+   * - Full dump
+     - Every :math:`\Delta t_{\rm max}` (``at_dump_time``)
+     - ``check_and_write_dump``, ``evolve_utils.F90``
+
+**Relationship between sync period and dump frequency**
+
+Under both modes each dump corresponds to exactly one
+:math:`\Delta t_{\rm max}` interval. Under global timestepping many
+physical steps may separate dumps; under individual timestepping exactly
+:math:`2^{k_{\rm max}}` fine steps separate them. Because ``tprint``
+advances by ``dtmax`` after every dump (``evolve.f90:init_counters``,
+``update_dump_counters``), increasing ``dtmax`` both coarsens the finest
+allowable timestep and spaces out dumps.
+
+**Adding a custom sync-point routine**
+
+Any operation that requires all particles to share a consistent time
+:math:`t` should be inserted in ``evol_prestep`` (``evolve.f90``) after
+the ``set_active_particles`` call, guarded as follows:
+
+.. code-block:: fortran
+
+   use dim,          only: ind_timesteps
+   use timestep_ind, only: istepfrac, nbinmax
+
+   if (.not. ind_timesteps .or. istepfrac == 2**nbinmax) then
+      call my_sync_routine(npart, xyzh, vxyzu, time)
+   endif
+
+This guard fires on every step under global timestepping (where every
+step is a sync point) and exactly once per :math:`\Delta t_{\rm max}`
+under individual timestepping.
+
 Derivations
 -----------
 The Courant condition in SPH differs from the classical grid-based form because
