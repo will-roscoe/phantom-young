@@ -265,7 +265,7 @@ contains
       !------------------------------------------------------------------
       if (iload_vel /= 0) then
          !$omp parallel do default(none) &
-         !$omp shared(npart, xyzh, vxyzu, iphase, multi_type) &
+         !$omp shared(npart, xyzh, vxyzu, iphase, multi_type, ibin) &
          !$omp shared(dm_frac, iload_vel, vload) &
          !$omp shared(ind_timesteps, istepfrac, nbinmax) &
          !$omp private(i, itype, vinj, istride)
