@@ -1,0 +1,177 @@
+digraph phantom_ind_timestep {
+    graph [
+        rankdir=TB
+        fontname="Helvetica"
+        fontsize=12
+        splines=polyline
+        nodesep=0.4
+        ranksep=0.6
+        bgcolor="#f8f8f8"
+    ]
+    node [fontname="Helvetica" fontsize=11 style=filled]
+    edge [fontname="Helvetica" fontsize=10]
+
+    // // ── legend ──────────────────────────────────────────────────────────
+    // subgraph cluster_legend {
+    //     label="Legend"
+    //     style=filled fillcolor="#eeeeee"
+    //     fontsize=10
+    //     rank=same
+
+    //     leg_serial [label="serial" shape=box fillcolor="#ffffff" style="filled,rounded"]
+    //     leg_omp    [label="OMP parallel" shape=box fillcolor="#cce5ff" style="filled,rounded"]
+    //     leg_mpi    [label="MPI collective" shape=box fillcolor="#ffe0b2" style="filled,rounded"]
+    //     leg_sync   [label="sync point only\n(istepfrac == 2^nbinmax)" shape=box fillcolor="#d4edda" style="filled,rounded"]
+    //     leg_cond   [label="conditional" shape=diamond fillcolor="#fff9c4"]
+    // }
+
+    // ── init (once) ──────────────────────────────────────────────────────
+    init [
+        label="INIT (evol_init)\ndt = dtmax / 2^nbinmax\nibin(i) = nbinmax  [OMP]\ntwas(i) = time + ½·get_dt(dtmax,ibin(i))  [OMP]"
+        shape=box style="filled,rounded" fillcolor="#cce5ff"
+    ]
+
+    // ── loop guard ───────────────────────────────────────────────────────
+    loop_guard [
+        label="at_simulation_end?"
+        shape=diamond fillcolor="#fff9c4"
+    ]
+
+    done [label="END" shape=doublecircle fillcolor="#ffffff"]
+
+    // ════════════════════════════════════════════════════════════════════
+    subgraph cluster_prestep {
+        label="evol_prestep"
+        style=filled fillcolor="#f0f0f0"
+        fontsize=12
+
+        istepfrac [
+            label="istepfrac += 1"
+            shape=box style="filled,rounded" fillcolor="#ffffff"
+        ]
+
+        sync_check [
+            label="istepfrac == 2^nbinmax?\n(sync point)"
+            shape=diamond fillcolor="#fff9c4"
+        ]
+
+        sync_ops [
+            label="reduceall_mpi → check_dtmax\ndynamic boundaries update\n[nbinmax may change here]"
+            shape=box style="filled,rounded" fillcolor="#d4edda"
+        ]
+
+        set_active [
+            label="set_active_particles  [OMP + MPI reduce]\niactive(i) = mod(istepfrac, 2^(nbinmax−ibin(i))) == 0\n→ packed into iphase(i) flag\nnactivetot, nalivetot reduced across ranks"
+            shape=box style="filled,rounded" fillcolor="#cce5ff"
+        ]
+
+        inject_check [
+            label="inject / HII feedback\ndue this step?"
+            shape=diamond fillcolor="#fff9c4"
+        ]
+
+        inject_ops [
+            label="inject_particles\nHII_feedback\nupdate_apr"
+            shape=box style="filled,rounded" fillcolor="#ffffff"
+        ]
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    subgraph cluster_step {
+        label="step()  —  step_lf_global"
+        style=filled fillcolor="#e8e8f0"
+        fontsize=12
+
+        predictor [
+            label="① PREDICTOR  [OMP — ALL live particles]\nhdti = twas(i) − time   ← per-particle!\nvxyzu(:,i) += hdti · fxyzu(:,i)   (½-kick)\n[active]: ibin_old(i) = ibin(i)"
+            shape=box style="filled,rounded" fillcolor="#cce5ff"
+        ]
+
+        sink_kick1 [
+            label="sink ½-kick\n(master only → bcast_mpi)"
+            shape=box style="filled,rounded" fillcolor="#ffe0b2"
+        ]
+
+        substep [
+            label="② SUBSTEPPING  [serial / OMP inner]\nsubstep() — external forces at dtextforce ≤ dt_fine\nptmass N-body (master, sub-stepped)"
+            shape=box style="filled,rounded" fillcolor="#ffffff"
+        ]
+
+        derivs [
+            label="③ DERIVS  [OMP — ACTIVE particles only]\ntree walk → neighbour lists\ndensity + smoothing length h  (Newton–Raphson)\npressure · viscosity · MHD · du/dt\n→ fxyzu(i),  divcurlv(i)"
+            shape=box style="filled,rounded" fillcolor="#cce5ff"
+        ]
+
+        mpi_halo [
+            label="MPI halo / ghost exchange\n(if distributed)"
+            shape=box style="filled,rounded" fillcolor="#ffe0b2"
+        ]
+
+        corrector [
+            label="④ CORRECTOR  [OMP — ALL live particles]\n─────────────────────────────────────────\nACTIVE  iactive(iphase(i)) == .true.\n  dti = (time − twas(i)) + ½·get_dt(dtmax,ibin(i))\n  xyzh(1:3,i) += dti · vxyzu(1:3,i)   (drift)\n  vxyzu(:,i)  += hdti_new · fxyzu(:,i) (2nd ½-kick)\n  ibin(i)  ← Courant criterion  (new bin)\n  twas(i)  = time + hdti_new\n─────────────────────────────────────────\nINACTIVE\n  check ibin_wake  (neighbour wakeup)\n  update twas(i) if woken"
+            shape=box style="filled,rounded" fillcolor="#cce5ff"
+        ]
+
+        sink_kick2 [
+            label="sink corrector\n(master only → bcast_mpi)"
+            shape=box style="filled,rounded" fillcolor="#ffe0b2"
+        ]
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    subgraph cluster_poststep {
+        label="evol_poststep"
+        style=filled fillcolor="#f0f0f0"
+        fontsize=12
+
+        update_time [
+            label="update_time_and_dt\ntime += dt_fine\nistepfrac bookkeeping"
+            shape=box style="filled,rounded" fillcolor="#ffffff"
+        ]
+
+        write_ev [
+            label="write_ev_files\n(energies, log)"
+            shape=box style="filled,rounded" fillcolor="#ffffff"
+        ]
+
+        dump_check [
+            label="at_dump_time?"
+            shape=diamond fillcolor="#fff9c4"
+        ]
+
+        write_dump [
+            label="write dump file\n(only at sync point)"
+            shape=box style="filled,rounded" fillcolor="#d4edda"
+        ]
+    }
+
+    // ── edges ────────────────────────────────────────────────────────────
+    init -> loop_guard
+
+    loop_guard -> istepfrac [label="no"]
+    loop_guard -> done      [label="yes"]
+
+    istepfrac  -> sync_check
+    sync_check -> sync_ops  [label="yes"]
+    sync_check -> set_active [label="no"]
+    sync_ops   -> set_active
+
+    set_active   -> inject_check
+    inject_check -> inject_ops [label="yes"]
+    inject_check -> predictor  [label="no"]
+    inject_ops   -> predictor
+
+    predictor  -> sink_kick1
+    sink_kick1 -> substep
+    substep    -> derivs
+    derivs     -> mpi_halo
+    mpi_halo   -> corrector
+    corrector  -> sink_kick2
+
+    sink_kick2  -> update_time
+    update_time -> write_ev
+    write_ev    -> dump_check
+    dump_check  -> write_dump [label="yes"]
+    dump_check  -> loop_guard [label="no"]
+    write_dump  -> loop_guard
+}
