@@ -4,7 +4,7 @@
 # -- Path setup --------------------------------------------------------------
 # If extensions (or modules to document with autodoc) are in another directory, add these directories to sys.path here. If the directory is relative to the documentation root, use os.path.abspath to make it absolute, like shown here.
 import os,sys
-# sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('_ext'))
 # -- Project information -----------------------------------------------------
 project = 'Phantom'
 copyright = '2026 The Authors'
@@ -16,6 +16,7 @@ release = '2026.0.0'                                                            
 extensions = [                                                                  # Add any Sphinx extension module names here, as strings. They can be extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
     'sphinx.ext.autodoc',
     'sphinxfortran.fortran_domain','sphinxfortran.fortran_autodoc',
+    'phantom_fortran_predoc',
     'sphinx.ext.mathjax','sphinxcontrib.bibtex','sphinx.ext.todo',
     # newly added, need to implement:
     'sphinx.ext.autosectionlabel',
@@ -174,5 +175,6 @@ fortran_src = sorted(
     )
     if f not in _FORTRAN_SRC_EXCLUDE
 )
+
 
 sys.setrecursionlimit(10000)

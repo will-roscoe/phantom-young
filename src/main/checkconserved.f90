@@ -43,6 +43,7 @@ subroutine init_conservation_checks()
  use dim,         only:mhd,maxvxyzu,periodic,inject_parts,use_apr
  use part,        only:iboundary,npartoftype
  use boundary_dyn,only:dynamic_bdy
+ use mass_loading,only:iload_type,iload_vel
  !
  ! should conserve energy if using adiabatic equation of state with no cooling
  ! as long as all heating terms are included
@@ -75,6 +76,16 @@ subroutine init_conservation_checks()
     should_conserve_energy   = .false.
     should_conserve_momentum = .false.
     should_conserve_angmom   = .false.
+ endif
+ !
+ ! mass loading changes total energy; momentum/angmom change for non-comoving injection
+ !
+ if (iload_type >= 0) then
+    should_conserve_energy = .false.
+    if (iload_vel /= 0) then
+       should_conserve_momentum = .false.
+       should_conserve_angmom   = .false.
+    endif
  endif
 
  ! This is to check that total mass is conserved when we use apr
@@ -129,14 +140,22 @@ end subroutine check_conservation_error
 !+
 !----------------------------------------------------------------
 subroutine check_conservation_errors(totmom,angtot,etot,mdust,mtot,hdivBonB_ave,hdivBonB_max,np_e_eq_0,np_cs_eq_0)
- use io,   only:id,master,iverbose,warning
- use part, only:ndustsmall,massoftype,igas,mhd
+ use io,          only:id,master,iverbose,warning
+ use part,        only:ndustsmall,massoftype,igas,mhd
+ use mass_loading,only:iload_type,load_mass_factor
  real, intent(in) :: totmom,angtot,etot,mdust(:),mtot,hdivBonB_ave,hdivBonB_max
  integer(kind=8), intent(in) :: np_e_eq_0,np_cs_eq_0
+ real    :: fcorr
  integer :: j
 
- if (should_conserve_momentum) call check_conservation_error(totmom,totmom_in,1.e-1,'linear momentum')
- if (should_conserve_angmom)   call check_conservation_error(angtot,angtot_in,1.e-1,'angular momentum')
+ ! For co-moving mass loading the total momentum and angular momentum scale
+ ! exactly as (1 + dm_frac) each step, so dividing by load_mass_factor removes
+ ! the expected loading contribution and leaves only genuine conservation errors.
+ fcorr = 1.0
+ if (iload_type >= 0 .and. load_mass_factor > 0.) fcorr = 1.0 / load_mass_factor
+
+ if (should_conserve_momentum) call check_conservation_error(totmom*fcorr,totmom_in,1.e-1,'linear momentum')
+ if (should_conserve_angmom)   call check_conservation_error(angtot*fcorr,angtot_in,1.e-1,'angular momentum')
  if (should_conserve_energy)   call check_conservation_error(etot,etot_in,1.e-1,'energy')
  if (should_conserve_dustmass) then
     do j = 1,ndustsmall
@@ -144,7 +163,7 @@ subroutine check_conservation_errors(totmom,angtot,etot,mdust,mtot,hdivBonB_ave,
     enddo
  endif
  if (mhd) call check_magnetic_stability(hdivBonB_ave,hdivBonB_max)
- if (should_conserve_aprmass) call check_conservation_error(mtot,mtot_in,massoftype(igas),'total mass')
+ if (should_conserve_aprmass) call check_conservation_error(mtot*fcorr,mtot_in,massoftype(igas),'total mass')
 
  if (id==master .and. iverbose >= 2) then
     if (np_e_eq_0  > 0) call warning('evolve','N gas particles with energy = 0',var='N',ival=int(np_e_eq_0,kind=4))
