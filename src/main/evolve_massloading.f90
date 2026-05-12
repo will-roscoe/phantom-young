@@ -54,7 +54,7 @@ module mass_loading
    !   iload_scope -- particle scope: 0=gas only, 8=gas+secondary sinks, -1=gas+all sinks
    !   iload       -- amount per interval (M or fraction)
    !   iload_dt    -- interval [code units]; <0 = orbital period
-   !   iload_step  -- 0=every fine step, 1=sync poinstt only
+   !   iload_step  -- 0=every fine step, 1=sync poinst  t only
    !   iload_vel   -- 0=comoving, 1=stationary, 2=wind
    !   vload       -- wind velocity [code units] (iload_vel=2 only)
    !
@@ -161,14 +161,14 @@ contains
 
       end select
 
-      if (id == master .and. iverbose >= 2) then
+      if (id == master .and. iverbose >= 1) then
          select case (iload_type)
             case (0)
-               write(iprint,"(1x,a,es12.4,a,es12.4)") &
-                  '[mass_loading] t=', t, '  mdot=', mdot
+               write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+                  '[mass_loading] t=', t, '  t_eff=', t_eff, '  mdot=', mdot
             case (1)
-               write(iprint,"(1x,a,es12.4,a,es12.4)") &
-                  '[mass_loading] t=', t, '  mfrac=', mfrac
+               write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+                  '[mass_loading] t=', t, '  t_eff=', t_eff, '  mfrac=', mfrac
          end select
       endif
    end subroutine calc_massloading_rate
@@ -207,7 +207,8 @@ contains
       real,            intent(inout) :: vxyzu(:,:)
       integer(kind=1), intent(in)    :: iphase(:)
       real,            intent(in)    :: dtsph, time
-      integer,         intent(in)    :: istepfrac, nbinmax
+      integer,         intent(in)    :: istepfrac
+      integer(kind=1), intent(in)    :: nbinmax
       logical,         intent(in)    :: ind_timesteps
       real    :: dm_frac, m_old, vinj(3)
       integer :: i, j, jstart, itype, istride
@@ -241,6 +242,16 @@ contains
       if (dm_frac <= 0.) return
 
       load_mass_factor = load_mass_factor * massoftype(igas) / m_old
+
+      ! log once per dtmax (at sync for binstep, every call for sync mode)
+      if (id == master .and. iverbose >= 1) then
+         if (iload_step == 1 .or. mod(istepfrac, 2**int(nbinmax)) == 0) then
+            write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+               '[mass_loading] applied: dm/m=', dm_frac, &
+               '  m_gas=', massoftype(igas), &
+               '  cumulative factor=', load_mass_factor
+         endif
+      endif
 
       !------------------------------------------------------------------
       ! Update sink masses (same fractional increment as gas)
