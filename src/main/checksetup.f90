@@ -449,6 +449,10 @@ subroutine check_setup(nerror,nwarn,restart)
 !
  call check_setup_ptmass(nerror,nwarn,hmin)
 !
+!--check mass loading configuration
+!
+ call check_setup_massloading(nerror,nwarn)
+!
 !--check centre of mass
 !
  call get_centreofmass(xcom,vcom,npart,xyzh,vxyzu,nptmass,xyzmh_ptmass,vxyz_ptmass)
@@ -1102,5 +1106,35 @@ subroutine check_HIIRegion(nerror)
     nerror = nerror + 1
  endif
 end subroutine check_HIIRegion
+
+!--------------------------------------------------------------------
+!+
+!  Validate mass loading configuration.
+!  Checks that loading parameters are consistent and that the
+!  reference radius is set when orbital-period mode is requested.
+!+
+!--------------------------------------------------------------------
+subroutine check_setup_massloading(nerror,nwarn)
+ use mass_loading, only:iload,iload_dm,iload_dt,r_ref_load
+ use part,         only:npartoftype,igas
+ use io,           only:id,master
+ integer, intent(inout) :: nerror,nwarn
+
+ ! loading is active when either parameter specifies a positive amount
+ if (iload <= 0. .and. iload_dm <= 0.) return
+
+ if (id == master) print "(/,a)",' checking mass loading setup...'
+
+ if (npartoftype(igas) == 0) then
+    print*,'ERROR: mass loading requested but no gas particles present'
+    nerror = nerror + 1
+ endif
+
+ if (iload_dt < 0. .and. r_ref_load <= 0.) then
+    print*,'ERROR: orbital-period mass loading (iload_dt<0) requires r_ref_load > 0'
+    nerror = nerror + 1
+ endif
+
+end subroutine check_setup_massloading
 
 end module checksetup

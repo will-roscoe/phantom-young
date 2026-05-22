@@ -264,7 +264,7 @@ subroutine fill_header(sphNGdump,t,nparttot,npartoftypetot,nblocks,nptmass,hdr,i
  use part,           only:massoftype,hfact,Bextx,Bexty,Bextz,ndustsmall,ndustlarge,&
                           idust,grainsize,graindens,ndusttypes
  use checkconserved, only:get_conserv,etot_in,angtot_in,totmom_in,mdust_in,mtot_in
- use mass_loading,   only:load_mass_factor
+ use mass_loading,   only:write_headeropts_massloading
  use setup_params,   only:rhozero
  use timestep,       only:C_cour,C_force
  use dynamic_dtmax,  only:dtmax_user,idtmax_n_next,idtmax_frac_next
@@ -369,7 +369,7 @@ subroutine fill_header(sphNGdump,t,nparttot,npartoftypetot,nblocks,nptmass,hdr,i
     call add_to_rheader(angtot_in,'angtot_in',hdr,ierr)
     call add_to_rheader(totmom_in,'totmom_in',hdr,ierr)
     call add_to_rheader(mdust_in(1:ndusttypes),'mdust_in',hdr,ierr)
-    call add_to_rheader(load_mass_factor,'load_mass_factor',hdr,ierr)
+    call write_headeropts_massloading(hdr, ierr)
     if (use_dust) then
        call add_to_rheader(grainsize(1:ndusttypes),'grainsize',hdr,ierr)
        call add_to_rheader(graindens(1:ndusttypes),'graindens',hdr,ierr)
@@ -405,7 +405,7 @@ subroutine unfill_rheader(hdr,phantomdump,ntypesinfile,nptmass,&
  use part,           only:massoftype,Bextx,Bexty,Bextz,mhd,periodic,&
                           maxtypes,grainsize,graindens,ndusttypes
  use checkconserved, only:get_conserv,etot_in,angtot_in,totmom_in,mdust_in,mtot_in
- use mass_loading,   only:load_mass_factor
+ use mass_loading,   only:read_headeropts_massloading
  use setup_params,   only:rhozero
  use externalforces, only:read_headeropts_extern,extract_iextern_from_hdr
  use boundary,       only:xmin,xmax,ymin,ymax,zmin,zmax,set_boundary
@@ -546,9 +546,8 @@ subroutine unfill_rheader(hdr,phantomdump,ntypesinfile,nptmass,&
     write(*,*) 'ERROR reading values to verify conservation laws.  Resetting initial values.'
     get_conserv = 1.0
  endif
- ! cumulative mass loading factor; silently defaults to 1.0 if not present in old dumps
- call extract('load_mass_factor', load_mass_factor, hdr, ierrs(1))
- if (ierrs(1) /= 0) load_mass_factor = 1.0
+ ! mass loading state; silently falls back to module defaults if not in old dumps
+ call read_headeropts_massloading(hdr)
 
  !--pull grain size and density arrays if they are in the header
  !-- i.e. if dustgrowth is not ON

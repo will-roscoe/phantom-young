@@ -167,7 +167,7 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
  use inject,       only:inject_particles
  use HIIRegion,    only:HII_feedback,iH2R,HIIuprate,nHIIsources
  use io_control,   only:nfulldump
- use mass_loading, only:iload_type,iload_step,calc_massloading_rate,apply_mass_loading
+ use mass_loading, only:iload,iload_dm,step_mass_loading
  use mpiutils,     only:reduceall_mpi
  use part,         only:npart,npartoftype,nptmass,xyzh,vxyzu,fxyzu,apr_level,&
                         xyzmh_ptmass,vxyz_ptmass,gravity,iboundary,ntot,ibin,iphase,&
@@ -235,18 +235,8 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
     nactive = npart
  endif
 
- ! mass loading: rate recalculated once per dtmax; application frequency set by iload_step
- if (iload_type >= 0) then
-    if (.not. ind_timesteps .or. istepfrac == 2**nbinmax) then
-       call calc_massloading_rate(npart, iphase, time, dtmax)
-       if (iload_step == 1) &   ! sync mode: apply once per dtmax with full interval
-          call apply_mass_loading(npart, xyzh, vxyzu, iphase, dtmax, time, &
-                                  istepfrac, nbinmax, ind_timesteps)
-    endif
-    if (iload_step == 0) &      ! binstep mode: apply every fine step
-       call apply_mass_loading(npart, xyzh, vxyzu, iphase, dt, time, &
-                               istepfrac, nbinmax, ind_timesteps)
- endif
+ if (iload > 0. .or. iload_dm > 0.) &
+    call step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
 
  if (gravity .and. icreate_sinks > 0) call ptmass_create_and_update_forces(time,dtextforce)
 
