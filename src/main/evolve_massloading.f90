@@ -120,10 +120,77 @@ subroutine init_massloading()
        '  n_p0=',        n_p0
 end subroutine init_massloading
 
+subroutine calc_massloading_rate(t, dtmax)
+ use part,     only: nptmass, xyzmh_ptmass
+ use mpiutils, only: bcast_mpi
+ use io,       only: iprint, id, master, iverbose
+ real, intent(in) :: t, dtmax
+ real :: M_primary
+
+ if (calc_torb) then
+    M_primary = 0.
+    if (id == master .and. nptmass > 0) M_primary = xyzmh_ptmass(4, id_mstar)
+    call bcast_mpi(M_primary)
+    if (M_primary > 0.) then
+       t_orb = 2. * acos(-1.) * r_orb**1.5 / sqrt(M_primary)
+    else
+       t_orb = dtmax
+    endif
+ else
+    t_orb = iload_dt
+ endif
+
+ if (t_orb <= 0.) t_orb = dtmax
+
+ if (id == master .and. iverbose >= 1) &
+    write(iprint,"(1x,a,es12.4,a,es12.4)") &
+       '[mass_loading] t=', t, '  t_orb=', t_orb
+end subroutine calc_massloading_rate
+
+subroutine apply_mass_loading(dt, time)
+ use part, only: massoftype
+ use io,   only: iprint, id, master, iverbose
+ real, intent(in) :: dt, time
+ real :: m_old, dm_p
+
+ if (t_orb <= 0. .or. dt <= 0.) return
+
+ m_old = massoftype(igas)
+
+ select case(iload_factor)
+ case(0, 1)   ! constant: increment massoftype by dm_load * dt / (T * n_p0)
+    if (dm_load <= 0. .or. n_p0 <= 0) return
+    dm_p             = dm_load * dt / (t_orb * real(n_p0))
+    massoftype(igas) = m_old + dm_p
+ case(2)      ! exponential: scale massoftype by exp(ln(1+beta) * dt/T)
+    if (mloadfactor <= 0.) return
+    massoftype(igas) = m_old * exp(log(1. + mloadfactor) * dt / t_orb)
+ case default
+    return
+ end select
+
+ if (id == master .and. iverbose >= 2) &
+    write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+       '[mass_loading] t=', time, &
+       '  dm/m=', (massoftype(igas) - m_old) / m_old, &
+       '  m_gas=', massoftype(igas)
+end subroutine apply_mass_loading
+
 subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
+ use dim, only: ind_timesteps
  real,            intent(in) :: time, dt, dtmax
  integer,         intent(in) :: istepfrac
  integer(kind=1), intent(in) :: nbinmax
+
+ if (.not. initialised) call init_massloading()
+ if (iload_factor < 0) return
+ if (iload_factor /= 2 .and. dm_load <= 0.) return
+ if (iload_factor == 2 .and. mloadfactor <= 0.) return
+
+ if (.not. ind_timesteps .or. istepfrac == 2**nbinmax) &
+    call calc_massloading_rate(time, dtmax)
+
+ call apply_mass_loading(dt, time)
 end subroutine step_mass_loading
 
 subroutine write_options_massloading(iunit)
