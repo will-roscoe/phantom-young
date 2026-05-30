@@ -74,6 +74,7 @@ References
    :doc:`step_leapfrog` — low-level leapfrog integrator called by evolve.
    :doc:`energies` — computes diagnostics after each step.
    :doc:`checkconserved` — monitors conservation law errors.
+   :doc:`evolve_massloading` — optional comoving mass loading called from ``evol_prestep`` (requires ``-DMASS_LOADING``).
 
 API Reference
 -------------

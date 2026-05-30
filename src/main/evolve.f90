@@ -238,7 +238,7 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
  endif
 
 #ifdef MASS_LOADING
- if (iload_factor >= 0 .and. mloadfactor > 0.) &
+ if (iload_factor >= 0) &
     call step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
 #endif
 

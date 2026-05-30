@@ -54,6 +54,10 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`evolve_massloading` — sets ``iload_factor``; conservation checks are suppressed when this is ``>= 0`` (``-DMASS_LOADING`` builds only).
+
 API Reference
 -------------
 

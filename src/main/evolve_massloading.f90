@@ -6,13 +6,55 @@
 !--------------------------------------------------------------------------!
 module mass_loading
 !
-! Comoving mass loading of gas particles.
+! Provides mass loading (comoving) of gas particles.
 !
-! Three loading modes selected by iload_factor:
-!   -1 : off
-!    0 : constant chi — disc mass increases by chi * M_disc0 per interval T
-!    1 : constant xi  — disc mass increases by xi per interval T (absolute)
-!    2 : exponential beta — disc mass scales by (1+beta) per interval T
+! Configuration allows for:
+!   - constant or exponential mass loading behaviour.
+!   - loading interval to be defined by r_orb or a chosen fixed value.
+!   - compatible with IND_TIMESTEPS = yes & no.
+!
+! Configuration:
+!
+!   - iload_factor:
+!       * -1 : off (no loading)
+!       *  0 : constant (A) behaviour, iload used as chi.
+!              chi  --> constant rate given as fraction of initial disc mass per T.
+!       *  1 : constant (A) behaviour, iload used as xi.
+!              xi   --> constant rate given as absolute mass per interval T.
+!       *  2 : fractional (B) behaviour, iload used as beta.
+!              beta --> mass scales by a factor of 1+beta every interval T.
+!   - iload: see above
+!   - iload_dt:
+!       *  <=0 : interval T found by computing orbital period at r_orb.
+!       *  >0  : iload_dt is the fixed interval length.
+!
+!
+! Mathematical Description:
+!   In the constant (A) formulation given by Mercer & Stamatellos 2020:
+!
+!       Mdot = xi / T
+!           xi    = chi * M_disc0
+!           T     = t_orb(R) = 2*pi * R^(3/2) / (G*M_star)^(1/2)   [G=1]
+!
+!   Considering the disc to comprise of n_p particles (initially n_p0):
+!
+!       M_disc(t) = M_disc0 + Mdot * t
+!       m_p(t)    = m_p0 + xi * t / (T * n_p0)
+!
+!   Each timestep dt the per-particle mass is incremented by:
+!
+!       dm_p = dm_load * dt / (t_orb * n_p0)
+!
+!   In the exponential (B) formulation:
+!
+!       M(t)   = M_disc0 * exp( ln(1+beta) * t/T )
+!       m_p(t) = m_p0   * exp( ln(1+beta) * t/T )
+!       M(t+T)/M(t) = 1+beta
+!
+!   Each timestep dt the per-particle mass is scaled by:
+!
+!       m_p -> m_p * exp( ln(1+beta) * dt / t_orb )
+!
 !
 ! For modes 0 and 1, both dm_load (xi) and mloadfactor (chi) are always set:
 !   mode 0: mloadfactor = iload (user chi),  dm_load = iload * M_disc0
@@ -52,22 +94,39 @@ module mass_loading
  real,    public :: iload_dt     =  -1.  ! interval; <=0 -> compute T_orb
 
  ! derived quantities (always set for modes 0 and 1)
- real, public :: mloadfactor  = 0.   ! chi (modes 0/1) or beta (mode 2)
- real, public :: dm_load      = 0.   ! xi  (modes 0/1); 0 for mode 2
- real, public :: r_orb        = 1.   ! reference radius for T_orb
- real, public :: t_orb        = 0.   ! current effective interval
+ real, public :: mloadfactor  = 0.
+    ! chi (modes 0/1) or beta (mode 2)
+ real, public :: dm_load      = 0.
+    ! xi (modes 0/1); 0 for mode 2
+ real, public :: r_orb        = 1.
+    ! reference radius used to compute T_orb
+ real, public :: t_orb        = 0.
+    ! current effective loading interval (updated at each sync point)
 
- ! private state - set once at init
- integer(kind=8), private :: n_p0       = 0
- real,            private :: m_p0       = 0.
- integer,         private :: id_mstar   = 1
- logical,         private :: calc_torb  = .false.
+ ! private state — set once at init, never in .in
+ integer(kind=8), private :: n_p0        = 0
+    ! initial gas particle count
+ real,            private :: m_p0        = 0.
+    ! initial per-particle mass (M_disc0 / n_p0)
+ integer,         private :: id_mstar    = 1
+    ! sink index for host star (defaults to first sink)
+ logical,         private :: dofrac_load = .false.
+    ! .true. for beta/exponential mode (iload_factor=2)
+ logical,         private :: calc_torb   = .false.
+    ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
  logical,         private :: initialised = .false.
 
  private
 
 contains
 
+!-----------------------------------------------------------------------
+! init_massloading
+!   Reads initial particle state from the part module, then delegates
+!   to parse_massloading to set dm_load / mloadfactor / flags.
+!   Called lazily on first step_mass_loading call, or explicitly from
+!   phantomsetup.
+!-----------------------------------------------------------------------
 subroutine init_massloading()
  use part, only: massoftype, npartoftypetot
  use io,   only: iprint, id, master
@@ -79,11 +138,12 @@ subroutine init_massloading()
  m_disc0 = m_p0 * real(n_p0)
 
  ! restart path: dm_load already set from dump header — back-derive mloadfactor
- if (dm_load > 0.) then
+ if (dm_load /= 0.) then
     if (iload_factor == 0 .or. iload_factor == 1) then
        ! back-derive chi for display only; m_disc0 here is evolved not initial
        if (m_disc0 > 0.) mloadfactor = dm_load / m_disc0
     endif
+    dofrac_load = (iload_factor == 2)
     calc_torb   = (iload_dt <= 0.)
     initialised = .true.
     if (id == master) &
@@ -93,18 +153,33 @@ subroutine init_massloading()
     return
  endif
 
+ call parse_massloading(m_disc0)
+end subroutine init_massloading
+
+!-----------------------------------------------------------------------
+! parse_massloading
+!   Derives dm_load, mloadfactor, dofrac_load, and calc_torb from the
+!   module-level .in parameters.  Called only on a fresh (non-restart) run.
+!-----------------------------------------------------------------------
+subroutine parse_massloading(m_disc0)
+ use io, only: iprint, id, master
+ real, intent(in) :: m_disc0
+
  select case(iload_factor)
  case(0)   ! chi mode: user gives chi, derive xi
     mloadfactor = iload
     dm_load     = iload * m_disc0
+    dofrac_load = .false.
  case(1)   ! xi mode: user gives xi, back-derive chi
     dm_load     = iload
     if (m_disc0 > 0.) mloadfactor = iload / m_disc0
+    dofrac_load = .false.
  case(2)   ! beta mode: no xi equivalent
     mloadfactor = iload
     dm_load     = 0.
+    dofrac_load = .true.
  case default  ! -1 or any invalid value: loading off
-    initialised = .true.
+    initialised = .true.   ! prevents lazy-init on every step when loading is off
     return
  end select
 
@@ -118,9 +193,25 @@ subroutine init_massloading()
        '  mloadfactor=', mloadfactor, &
        '  dm_load=',     dm_load,     &
        '  n_p0=',        n_p0
-end subroutine init_massloading
+end subroutine parse_massloading
 
-subroutine calc_massloading_rate(t, dtmax)
+!-----------------------------------------------------------------------
+! update_r_orb
+!   Currently a no-op: r_orb is set from setup via set_massloading_r_ref
+!   or restored from the dump header on restart.
+!   Extension point: could evolve to recompute r_orb from particle
+!   distributions (e.g. disc centre-of-mass radius) in future.
+!-----------------------------------------------------------------------
+subroutine update_r_orb()
+end subroutine update_r_orb
+
+!-----------------------------------------------------------------------
+! update_t_orb
+!   Recomputes the loading interval at each sync point.
+!   If calc_torb: derives T_orb = 2*pi * r_orb^1.5 / sqrt(M_star) [G=1].
+!   Otherwise: uses the fixed iload_dt.
+!-----------------------------------------------------------------------
+subroutine update_t_orb(t, dtmax)
  use part,     only: nptmass, xyzmh_ptmass
  use mpiutils, only: bcast_mpi
  use io,       only: iprint, id, master, iverbose
@@ -145,37 +236,59 @@ subroutine calc_massloading_rate(t, dtmax)
  if (id == master .and. iverbose >= 1) &
     write(iprint,"(1x,a,es12.4,a,es12.4)") &
        '[mass_loading] t=', t, '  t_orb=', t_orb
-end subroutine calc_massloading_rate
+end subroutine update_t_orb
 
-subroutine apply_mass_loading(dt, time)
+!-----------------------------------------------------------------------
+! apply_partmass_const
+!   Constant loading (modes 0 and 1): increments massoftype(igas) by
+!   dm_load * dt / (t_orb * n_p0)  each timestep.
+!-----------------------------------------------------------------------
+subroutine apply_partmass_const(dt, time)
  use part, only: massoftype
  use io,   only: iprint, id, master, iverbose
  real, intent(in) :: dt, time
  real :: m_old, dm_p
 
- if (t_orb <= 0. .or. dt <= 0.) return
+ if (dm_load == 0. .or. n_p0 <= 0 .or. t_orb <= 0. .or. dt <= 0.) return
+ m_old            = massoftype(igas)
+ dm_p             = dm_load * dt / (t_orb * real(n_p0))
+ massoftype(igas) = m_old + dm_p
 
- m_old = massoftype(igas)
+ if (id == master .and. iverbose >= 2) &
+    write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+       '[mass_loading] t=', time, &
+       '  dm/m=', dm_p / m_old, &
+       '  m_gas=', massoftype(igas)
+end subroutine apply_partmass_const
 
- select case(iload_factor)
- case(0, 1)   ! constant: increment massoftype by dm_load * dt / (T * n_p0)
-    if (dm_load <= 0. .or. n_p0 <= 0) return
-    dm_p             = dm_load * dt / (t_orb * real(n_p0))
-    massoftype(igas) = m_old + dm_p
- case(2)      ! exponential: scale massoftype by exp(ln(1+beta) * dt/T)
-    if (mloadfactor <= 0.) return
-    massoftype(igas) = m_old * exp(log(1. + mloadfactor) * dt / t_orb)
- case default
-    return
- end select
+!-----------------------------------------------------------------------
+! apply_partmass_exp
+!   Exponential/beta loading (mode 2): scales massoftype(igas) by
+!   exp( ln(1+beta) * dt / t_orb )  each timestep.
+!-----------------------------------------------------------------------
+subroutine apply_partmass_exp(dt, time)
+ use part, only: massoftype
+ use io,   only: iprint, id, master, iverbose
+ real, intent(in) :: dt, time
+ real :: m_old
+
+ if (mloadfactor == 0. .or. t_orb <= 0. .or. dt <= 0.) return
+ m_old            = massoftype(igas)
+ massoftype(igas) = m_old * exp(log(1. + mloadfactor) * dt / t_orb)
 
  if (id == master .and. iverbose >= 2) &
     write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
        '[mass_loading] t=', time, &
        '  dm/m=', (massoftype(igas) - m_old) / m_old, &
        '  m_gas=', massoftype(igas)
-end subroutine apply_mass_loading
+end subroutine apply_partmass_exp
 
+!-----------------------------------------------------------------------
+! step_mass_loading
+!   Public entry point called from evol_prestep each substep.
+!   Lazy-initialises on first call, then at each sync point refreshes
+!   r_orb and t_orb before applying the per-particle mass increment.
+!-----------------------------------------------------------------------
 subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
  use dim, only: ind_timesteps
  real,            intent(in) :: time, dt, dtmax
@@ -184,14 +297,24 @@ subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
 
  if (.not. initialised) call init_massloading()
  if (iload_factor < 0) return
- if (iload_factor /= 2 .and. dm_load <= 0.) return
- if (iload_factor == 2 .and. mloadfactor <= 0.) return
+ if (.not. dofrac_load .and. dm_load    == 0.) return
+ if (dofrac_load       .and. mloadfactor == 0.) return
 
- if (.not. ind_timesteps .or. istepfrac == 2**nbinmax) &
-    call calc_massloading_rate(time, dtmax)
+ if (.not. ind_timesteps .or. istepfrac == 2**nbinmax) then
+    call update_r_orb()
+    call update_t_orb(time, dtmax)
+ endif
 
- call apply_mass_loading(dt, time)
+ if (dofrac_load) then
+    call apply_partmass_exp(dt, time)
+ else
+    call apply_partmass_const(dt, time)
+ endif
 end subroutine step_mass_loading
+
+!-----------------------------------------------------------------------
+! I/O routines
+!-----------------------------------------------------------------------
 
 subroutine write_options_massloading(iunit)
  use infile_utils, only: write_inopt

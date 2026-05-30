@@ -43,6 +43,10 @@ References
    :cited:
    :style: plain
 
+.. seealso::
+
+   :doc:`evolve_massloading` — mass loading parameters validated by this module when ``-DMASS_LOADING`` is set.
+
 API Reference
 -------------
 
