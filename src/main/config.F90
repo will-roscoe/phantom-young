@@ -294,6 +294,15 @@ module dim
  logical, parameter :: inject_parts = .false.
 #endif
 
+!
+! Mass loading of gas particles (evolve_massloading.f90)
+!
+#ifdef MASS_LOADING
+ logical, parameter :: use_mass_loading = .true.
+#else
+ logical, parameter :: use_mass_loading = .false.
+#endif
+
 !--------------------
 ! Adaptive Particle Refinement (APR)
 !--------------------
