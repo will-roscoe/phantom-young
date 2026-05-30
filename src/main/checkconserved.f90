@@ -81,7 +81,7 @@ subroutine init_conservation_checks()
  ! comoving mass loading increases total energy and momentum proportionally;
  ! none of the standard conservation checks are meaningful during loading
  !
- if (iload_factor >= 0 .and. mloadfactor > 0.) then
+ if (iload_factor >= 0) then
     should_conserve_energy   = .false.
     should_conserve_momentum = .false.
     should_conserve_angmom   = .false.

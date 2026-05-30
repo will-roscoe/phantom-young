@@ -78,7 +78,6 @@ subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
 end subroutine step_mass_loading
 
 subroutine write_options_massloading(iunit)
- use infile_utils, only: write_inopt
  integer, intent(in) :: iunit
 end subroutine write_options_massloading
 
@@ -89,7 +88,6 @@ subroutine read_options_massloading(db, nerr)
 end subroutine read_options_massloading
 
 subroutine write_options_massloading_setup(iunit)
- use infile_utils, only: write_inopt
  integer, intent(in) :: iunit
 end subroutine write_options_massloading_setup
 

@@ -1120,8 +1120,10 @@ subroutine check_setup_massloading(nerror,nwarn)
  use io,           only:id,master
  integer, intent(inout) :: nerror,nwarn
 
- ! loading is active when either parameter specifies a positive amount
+ ! loading inactive: mode off (iload_factor<0) or factor is zero
  if (iload_factor < 0 .or. mloadfactor <= 0.) return
+
+ ! TODO: validate iload range per iload_factor mode (e.g. chi in (0,1] for mode 0)
 
  if (id == master) print "(/,a)",' checking mass loading setup...'
 
