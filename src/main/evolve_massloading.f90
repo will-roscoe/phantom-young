@@ -86,7 +86,8 @@ module mass_loading
            read_options_massloading_setup,                        &
            write_headeropts_massloading,                          &
            read_headeropts_massloading,                           &
-           set_massloading_r_ref
+           set_massloading_r_ref,                                 &
+           reset_massloading
 
  ! .in parameters
  integer, public :: iload_factor =  -1   ! -1=off, 0=chi, 1=xi, 2=beta
@@ -102,6 +103,9 @@ module mass_loading
     ! reference radius used to compute T_orb
  real, public :: t_orb        = 0.
     ! current effective loading interval (updated at each sync point)
+ real, public :: t_init       = -1.
+    ! simulation time of first loading step; -1 = not yet set (fresh start sentinel)
+    ! persisted in dump header; also settable from tests or setup code
 
  ! private state — set once at init, never in .in
  integer(kind=8), private :: n_p0        = 0
@@ -115,9 +119,6 @@ module mass_loading
  logical,         private :: calc_torb   = .false.
     ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
  logical,         private :: initialised = .false.
- real,            private :: t_init = -1.
-    ! simulation time when loading first applied; -1 = not yet set (fresh start sentinel)
-    ! persisted in dump header so restarts compute (time - t_init) correctly
 
  private
 
@@ -437,5 +438,19 @@ subroutine set_massloading_r_ref(r)
  real, intent(in) :: r
  if (r > 0.) r_orb = r
 end subroutine set_massloading_r_ref
+
+!-----------------------------------------------------------------------
+! reset_massloading
+!   Resets all private state to module defaults.  Intended for unit
+!   tests so that each test case starts from a known clean state.
+!-----------------------------------------------------------------------
+subroutine reset_massloading()
+ n_p0        = 0
+ m_p0        = 0.
+ dofrac_load = .false.
+ calc_torb   = .false.
+ initialised = .false.
+ t_init      = -1.
+end subroutine reset_massloading
 
 end module mass_loading
