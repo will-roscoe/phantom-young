@@ -73,9 +73,15 @@ parameterisations can be directly compared.
      - ``-1.``
      - Loading interval [code units].  ``<= 0`` computes the Keplerian orbital period at ``r_orb``.
 
-**Dump-header persistence** — ``dm_load`` and ``r_orb`` are written to every
-dump header so that restarts reproduce the correct loading rate without
-re-deriving :math:`\xi` from the evolved (no longer initial) disc mass.
+**Dump-header persistence** — four values are written to every dump header
+so that restarts continue exactly from where the previous run left off:
+``dm_load`` (:math:`\xi`), ``r_orb``, ``mload_mp0`` (:math:`m_{p,0}`, the
+original per-particle mass), and ``mload_tinit`` (:math:`t_\mathrm{init}`,
+the simulation time when loading first fired).  On restart the formulas
+:math:`m_{p,0} + \xi(t-t_\mathrm{init})/(T n_{p,0})` and
+:math:`m_{p,0}\exp(\ln(1+\beta)(t-t_\mathrm{init})/T)` are evaluated
+directly with the correct base state — no re-derivation from the evolved
+disc mass is needed.
 
 **v1 compatibility check** — both ``read_options_massloading`` and
 ``read_options_massloading_setup`` contain a clearly bracketed
@@ -96,20 +102,16 @@ Following Mercer & Stamatellos (2020), the accretion rate is
    \xi \equiv \chi M_{\mathrm{disc},0}, \quad
    T \equiv t_\mathrm{orb}(R) = \frac{2\pi R^{3/2}}{\sqrt{G M_\star}}.
 
-With :math:`n_{p,0}` gas particles the per-particle mass evolves as
+With :math:`n_{p,0}` gas particles the per-particle mass at simulation time
+:math:`t` is
 
 .. math::
 
-   m_p(t) = m_{p,0} + \frac{\xi\,t}{T\,n_{p,0}}.
+   m_p(t) = m_{p,0} + \frac{\xi\,(t - t_\mathrm{init})}{T\,n_{p,0}},
 
-Each timestep :math:`\delta t` the implementation applies the increment
-
-.. math::
-
-   m_p \leftarrow m_p + \frac{\xi\,\delta t}{T\,n_{p,0}}.
-
-Over :math:`N` binsteps spanning one interval (:math:`N \cdot \delta t = T`)
-this accumulates to exactly :math:`\xi / n_{p,0}`, independent of :math:`N`.
+where :math:`t_\mathrm{init}` is the simulation time of the first loading
+step (stored in the dump header for restart safety).  The implementation
+evaluates this formula directly each binstep — no incremental accumulation.
 
 **Exponential loading (mode 2):**
 
@@ -117,29 +119,37 @@ The disc mass scales as
 
 .. math::
 
-   M(t) = M_{\mathrm{disc},0}\,e^{\ln(1+\beta)\,t/T},
+   M(t) = M_{\mathrm{disc},0}\,e^{\ln(1+\beta)(t-t_\mathrm{init})/T},
 
-so that :math:`M(t+T)/M(t) = 1+\beta`.  Each timestep the implementation
-multiplies:
-
-.. math::
-
-   m_p \leftarrow m_p \cdot \exp\!\left(\frac{\ln(1+\beta)\,\delta t}{T}\right).
-
-After :math:`N` steps this gives
+so that :math:`M(t_\mathrm{init}+T)/M(t_\mathrm{init}) = 1+\beta`.  The
+per-particle mass is
 
 .. math::
 
-   m_p(N\,\delta t) = m_{p,0}
-     \cdot\left[\exp\!\left(\frac{\ln(1+\beta)\,\delta t}{T}\right)\right]^N
-     = m_{p,0}\cdot\exp(\ln(1+\beta)) = m_{p,0}\cdot(1+\beta),
+   m_p(t) = m_{p,0}\,\exp\!\left(\frac{\ln(1+\beta)\,(t - t_\mathrm{init})}{T}\right).
 
-which is also exactly timestep-independent.  This follows from the composition
-property :math:`\exp(a)\cdot\exp(b)=\exp(a+b)`, which decomposes the full
-step exactly into arbitrarily many sub-steps.  A naive first-order in-place
-update :math:`m_p \leftarrow m_p(1 + \beta\,\delta t/T)` would instead give
-:math:`(1+\beta/N)^N \to e^\beta \neq 1+\beta`, with a result that depends on
-:math:`N` and converges to the wrong value for finite :math:`\beta`.
+Again evaluated directly each binstep from :math:`m_{p,0}` and the current
+simulation time.
+
+**Why direct evaluation over incremental updates:**
+
+An incremental approach (e.g. :math:`m_p \leftarrow m_p + \xi\,\delta t / (T n_{p,0})`)
+accumulates a floating-point rounding error of
+:math:`\mathcal{O}(N\,\varepsilon_\mathrm{mach}\,m_{p,0})` after :math:`N`
+binsteps.  The direct formula carries only a single :math:`\mathcal{O}(\varepsilon_\mathrm{mach}\,m_{p,0})`
+error regardless of :math:`N`, and the result is the same at any timestep
+size.  This is particularly important for exponential loading, where an
+incremental first-order approximation :math:`m_p \leftarrow m_p(1+\beta\,\delta t/T)`
+converges to :math:`e^\beta \neq 1+\beta` rather than the intended value.
+
+**Varying** :math:`T` **approximation:**
+
+When ``iload_dt <= 0``, :math:`T` is recomputed from :math:`M_\star` at each
+sync point and may change over time.  The direct formulas above use the
+*current* :math:`T` for the entire elapsed time :math:`(t - t_\mathrm{init})`,
+which is an approximation when :math:`T` varies.  This is valid when the
+stellar mass changes slowly relative to the loading timescale, which holds
+for typical disc accretion scenarios.
 
 Negative values of :math:`\xi` and :math:`\beta` are supported (mass drain).
 

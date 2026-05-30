@@ -62,7 +62,7 @@ module mass_loading
 !   mode 2: mloadfactor = iload (user beta), dm_load = 0.
 !
 ! .in parameters (3 only): iload_factor, iload, iload_dt
-! Dump header:              dm_load, r_orb, m_p0, exponent_accum (restart safety)
+! Dump header:              dm_load, r_orb, m_p0, t_init (restart safety)
 ! Runtime-derived:          n_p0, m_p0 from part; t_orb from r_orb + M_star
 !
 ! Compile-time isolation: wrap `use mass_loading` and call site in evolve.f90
@@ -115,9 +115,9 @@ module mass_loading
  logical,         private :: calc_torb   = .false.
     ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
  logical,         private :: initialised = .false.
- real,            private :: exponent_accum = 0.
-    ! accumulated ln(1+beta)*dt/T for exponential mode; persisted in dump header
-    ! massoftype(igas) = m_p0 * exp(exponent_accum) avoids compounding fp error
+ real,            private :: t_init = -1.
+    ! simulation time when loading first applied; -1 = not yet set (fresh start sentinel)
+    ! persisted in dump header so restarts compute (time - t_init) correctly
 
  private
 
@@ -243,31 +243,39 @@ end subroutine update_t_orb
 
 !-----------------------------------------------------------------------
 ! apply_partmass_const
-!   Constant loading (modes 0 and 1): increments massoftype(igas) by
-!   dm_load * dt / (t_orb * n_p0)  each timestep.
+!   Constant loading (modes 0 and 1):
+!       m_p(t) = m_p0 + dm_load * (t - t_init) / (T * n_p0)
+!   Computed directly from m_p0 and elapsed time to avoid accumulating
+!   floating-point error over many binsteps.  t_init is set on first call.
+!   For varying T uses the current t_orb for the full elapsed time (a
+!   reasonable approximation when T changes slowly).
 !-----------------------------------------------------------------------
 subroutine apply_partmass_const(dt, time)
  use part, only: massoftype
  use io,   only: iprint, id, master, iverbose
  real, intent(in) :: dt, time
- real :: m_old, dm_p
+ real :: m_old
 
  if (dm_load == 0. .or. n_p0 <= 0 .or. t_orb <= 0. .or. dt <= 0.) return
+ if (t_init < 0.) t_init = time
  m_old            = massoftype(igas)
- dm_p             = dm_load * dt / (t_orb * real(n_p0))
- massoftype(igas) = m_old + dm_p
+ massoftype(igas) = m_p0 + dm_load * (time - t_init) / (t_orb * real(n_p0))
 
  if (id == master .and. iverbose >= 2) &
     write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
        '[mass_loading] t=', time, &
-       '  dm/m=', dm_p / m_old, &
+       '  dm/m=', (massoftype(igas) - m_old) / m_old, &
        '  m_gas=', massoftype(igas)
 end subroutine apply_partmass_const
 
 !-----------------------------------------------------------------------
 ! apply_partmass_exp
-!   Exponential/beta loading (mode 2): scales massoftype(igas) by
-!   exp( ln(1+beta) * dt / t_orb )  each timestep.
+!   Exponential/beta loading (mode 2):
+!       m_p(t) = m_p0 * exp( ln(1+beta) * (t - t_init) / T )
+!   Computed directly from m_p0 and elapsed time to avoid accumulating
+!   floating-point error over many binsteps.  t_init is set on first call.
+!   For varying T uses the current t_orb for the full elapsed time (a
+!   reasonable approximation when T changes slowly).
 !-----------------------------------------------------------------------
 subroutine apply_partmass_exp(dt, time)
  use part, only: massoftype
@@ -276,9 +284,9 @@ subroutine apply_partmass_exp(dt, time)
  real :: m_old
 
  if (mloadfactor == 0. .or. t_orb <= 0. .or. dt <= 0.) return
- m_old          = massoftype(igas)
- exponent_accum = exponent_accum + log(1. + mloadfactor) * dt / t_orb
- massoftype(igas) = m_p0 * exp(exponent_accum)
+ if (t_init < 0.) t_init = time
+ m_old            = massoftype(igas)
+ massoftype(igas) = m_p0 * exp(log(1. + mloadfactor) * (time - t_init) / t_orb)
 
  if (id == master .and. iverbose >= 2) &
     write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
@@ -408,10 +416,10 @@ subroutine write_headeropts_massloading(hdr, ierr)
  type(dump_h), intent(inout) :: hdr
  integer,      intent(inout) :: ierr
 
- call add_to_rheader(dm_load,        'dm_load',        hdr, ierr)
- call add_to_rheader(r_orb,          'r_orb',          hdr, ierr)
- call add_to_rheader(m_p0,           'mload_mp0',      hdr, ierr)
- call add_to_rheader(exponent_accum, 'mload_exponent', hdr, ierr)
+ call add_to_rheader(dm_load, 'dm_load',      hdr, ierr)
+ call add_to_rheader(r_orb,   'r_orb',        hdr, ierr)
+ call add_to_rheader(m_p0,    'mload_mp0',    hdr, ierr)
+ call add_to_rheader(t_init,  'mload_tinit',  hdr, ierr)
 end subroutine write_headeropts_massloading
 
 subroutine read_headeropts_massloading(hdr)
@@ -419,10 +427,10 @@ subroutine read_headeropts_massloading(hdr)
  type(dump_h), intent(in) :: hdr
  integer :: ierr
 
- ierr = 0;  call extract('dm_load',        dm_load,        hdr, ierr)
- ierr = 0;  call extract('r_orb',          r_orb,          hdr, ierr)
- ierr = 0;  call extract('mload_mp0',      m_p0,           hdr, ierr)
- ierr = 0;  call extract('mload_exponent', exponent_accum, hdr, ierr)
+ ierr = 0;  call extract('dm_load',     dm_load, hdr, ierr)
+ ierr = 0;  call extract('r_orb',       r_orb,   hdr, ierr)
+ ierr = 0;  call extract('mload_mp0',   m_p0,    hdr, ierr)
+ ierr = 0;  call extract('mload_tinit', t_init,  hdr, ierr)
 end subroutine read_headeropts_massloading
 
 subroutine set_massloading_r_ref(r)
