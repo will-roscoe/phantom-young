@@ -1115,13 +1115,13 @@ end subroutine check_HIIRegion
 !+
 !--------------------------------------------------------------------
 subroutine check_setup_massloading(nerror,nwarn)
- use mass_loading, only:iload,iload_dm,iload_dt,r_ref_load
+ use mass_loading, only:iload_factor,mloadfactor,iload_dt,r_orb
  use part,         only:npartoftype,igas
  use io,           only:id,master
  integer, intent(inout) :: nerror,nwarn
 
  ! loading is active when either parameter specifies a positive amount
- if (iload <= 0. .and. iload_dm <= 0.) return
+ if (iload_factor < 0 .or. mloadfactor <= 0.) return
 
  if (id == master) print "(/,a)",' checking mass loading setup...'
 
@@ -1130,8 +1130,8 @@ subroutine check_setup_massloading(nerror,nwarn)
     nerror = nerror + 1
  endif
 
- if (iload_dt < 0. .and. r_ref_load <= 0.) then
-    print*,'ERROR: orbital-period mass loading (iload_dt<0) requires r_ref_load > 0'
+ if (iload_dt < 0. .and. r_orb <= 0.) then
+    print*,'ERROR: orbital-period mass loading (iload_dt<0) requires r_orb > 0'
     nerror = nerror + 1
  endif
 

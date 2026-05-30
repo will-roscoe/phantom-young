@@ -43,7 +43,7 @@ subroutine init_conservation_checks()
  use dim,         only:mhd,maxvxyzu,periodic,inject_parts,use_apr
  use part,        only:iboundary,npartoftype
  use boundary_dyn,only:dynamic_bdy
- use mass_loading,only:iload,iload_dm
+ use mass_loading,only:iload_factor,mloadfactor
  !
  ! should conserve energy if using adiabatic equation of state with no cooling
  ! as long as all heating terms are included
@@ -81,7 +81,7 @@ subroutine init_conservation_checks()
  ! comoving mass loading increases total energy and momentum proportionally;
  ! none of the standard conservation checks are meaningful during loading
  !
- if (iload > 0. .or. iload_dm > 0.) then
+ if (iload_factor >= 0 .and. mloadfactor > 0.) then
     should_conserve_energy   = .false.
     should_conserve_momentum = .false.
     should_conserve_angmom   = .false.
