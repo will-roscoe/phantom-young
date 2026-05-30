@@ -69,6 +69,55 @@ module mass_loading
 contains
 
 subroutine init_massloading()
+ use part, only: massoftype, npartoftypetot
+ use io,   only: iprint, id, master
+ real :: m_disc0
+
+ n_p0 = npartoftypetot(igas)
+ if (n_p0 <= 0) return
+ m_p0    = massoftype(igas)
+ m_disc0 = m_p0 * real(n_p0)
+
+ ! restart path: dm_load already set from dump header — back-derive mloadfactor
+ if (dm_load > 0.) then
+    if (iload_factor == 0 .or. iload_factor == 1) then
+       ! back-derive chi for display only; m_disc0 here is evolved not initial
+       if (m_disc0 > 0.) mloadfactor = dm_load / m_disc0
+    endif
+    calc_torb   = (iload_dt <= 0.)
+    initialised = .true.
+    if (id == master) &
+       write(iprint,"(1x,a,i0,a,es12.4,a,es12.4)") &
+          '[mass_loading] restart: type=', iload_factor, &
+          '  dm_load=', dm_load, '  r_orb=', r_orb
+    return
+ endif
+
+ select case(iload_factor)
+ case(0)   ! chi mode: user gives chi, derive xi
+    mloadfactor = iload
+    dm_load     = iload * m_disc0
+ case(1)   ! xi mode: user gives xi, back-derive chi
+    dm_load     = iload
+    if (m_disc0 > 0.) mloadfactor = iload / m_disc0
+ case(2)   ! beta mode: no xi equivalent
+    mloadfactor = iload
+    dm_load     = 0.
+ case default  ! -1 or any invalid value: loading off
+    initialised = .true.
+    return
+ end select
+
+ calc_torb   = (iload_dt <= 0.)
+ initialised = .true.
+
+ if (id == master) &
+    write(iprint,"(1x,a,i0,a,es12.4,a,es12.4,a,es12.4,a,i0)") &
+       '[mass_loading] init: type=', iload_factor, &
+       '  iload=',       iload,       &
+       '  mloadfactor=', mloadfactor, &
+       '  dm_load=',     dm_load,     &
+       '  n_p0=',        n_p0
 end subroutine init_massloading
 
 subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
