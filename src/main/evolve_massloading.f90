@@ -194,38 +194,109 @@ subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
 end subroutine step_mass_loading
 
 subroutine write_options_massloading(iunit)
+ use infile_utils, only: write_inopt
  integer, intent(in) :: iunit
+
+ write(iunit,"(/,a)") '# options for mass loading'
+ call write_inopt(iload_factor, 'iload_factor', &
+    'loading mode: -1=off, 0=chi (fraction/orbit), 1=xi (absolute/orbit), 2=beta (exponential)', iunit)
+ call write_inopt(iload,   'iload',   &
+    'loading factor: chi (mode 0), xi [code units] (mode 1), or beta (mode 2)', iunit)
+ call write_inopt(iload_dt,'iload_dt', &
+    'loading interval [code units]; <=0 = orbital period at r_orb', iunit)
 end subroutine write_options_massloading
 
 subroutine read_options_massloading(db, nerr)
- use infile_utils, only: inopts
+ use infile_utils, only: inopts, read_inopt
+ use io,           only: iprint, id, master, fatal
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
+ integer :: ierr_v1
+ real    :: dummy_v1
+
+ ! >>> COMPAT_CHECK_V1: remove when all configs migrated to v2 params <<<
+ ierr_v1 = 0
+ call read_inopt(dummy_v1, 'iload_dm', db, err=ierr_v1)
+ if (ierr_v1 == 0) then
+    if (id == master) then
+       write(iprint,"(a)") '[mass_loading] FATAL: deprecated param "iload_dm" found.'
+       write(iprint,"(a)") '  Migrate: set  iload_factor = 1'
+       write(iprint,"(a)") '                iload        = <xi value from iload_dm>'
+       write(iprint,"(a)") '                iload_dt     = <interval>'
+       write(iprint,"(a)") '  Remove:  iload_dm  and old bare  iload  from .in file.'
+    endif
+    call fatal('mass_loading','deprecated v1 parameter "iload_dm" in .in file; see migration message above')
+ endif
+ ! >>> END COMPAT_CHECK_V1 <<<
+
+ call read_inopt(iload_factor, 'iload_factor', db, errcount=nerr, min=-1)
+ call read_inopt(iload,        'iload',        db, errcount=nerr)
+ call read_inopt(iload_dt,     'iload_dt',     db, errcount=nerr)
 end subroutine read_options_massloading
 
 subroutine write_options_massloading_setup(iunit)
+ use infile_utils, only: write_inopt
  integer, intent(in) :: iunit
+
+ write(iunit,"(/,a)") '# options for mass loading'
+ call write_inopt(iload_factor,'iload_factor', &
+    'loading mode: -1=off, 0=chi, 1=xi, 2=beta (exponential)', iunit)
+ call write_inopt(iload,   'iload',   'loading factor: chi / xi / beta', iunit)
+ call write_inopt(iload_dt,'iload_dt', &
+    'loading interval [code units]; <=0 = orbital period', iunit)
 end subroutine write_options_massloading_setup
 
 subroutine read_options_massloading_setup(db, nerr)
- use infile_utils, only: inopts
+ use infile_utils, only: inopts, read_inopt
+ use io,           only: iprint, id, master, fatal
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
+ real    :: r_ref_tmp, dummy_v1
+ integer :: ierr, ierr_v1
+
+ ! >>> COMPAT_CHECK_V1: remove when all configs migrated to v2 params <<<
+ ierr_v1 = 0
+ call read_inopt(dummy_v1, 'iload_dm', db, err=ierr_v1)
+ if (ierr_v1 == 0) then
+    if (id == master) then
+       write(iprint,"(a)") '[mass_loading] FATAL: deprecated param "iload_dm" found in .setup file.'
+       write(iprint,"(a)") '  Migrate: set  iload_factor = 1,  iload = <xi value>,  iload_dt = <interval>'
+    endif
+    call fatal('mass_loading','deprecated v1 parameter "iload_dm" in .setup file')
+ endif
+ ! >>> END COMPAT_CHECK_V1 <<<
+
+ call read_inopt(iload_factor, 'iload_factor', db, errcount=nerr, min=-1)
+ call read_inopt(iload,        'iload',        db, errcount=nerr)
+ call read_inopt(iload_dt,     'iload_dt',     db, errcount=nerr)
+
+ ! pick up R_ref from setup db so orbital-period loading works without .in edit
+ ierr = 0
+ call read_inopt(r_ref_tmp, 'R_ref', db, err=ierr, min=0.)
+ if (ierr == 0 .and. r_ref_tmp > 0.) r_orb = r_ref_tmp
 end subroutine read_options_massloading_setup
 
 subroutine write_headeropts_massloading(hdr, ierr)
- use dump_utils, only: dump_h
+ use dump_utils, only: dump_h, add_to_rheader
  type(dump_h), intent(inout) :: hdr
  integer,      intent(inout) :: ierr
+
+ call add_to_rheader(dm_load, 'dm_load', hdr, ierr)
+ call add_to_rheader(r_orb,   'r_orb',   hdr, ierr)
 end subroutine write_headeropts_massloading
 
 subroutine read_headeropts_massloading(hdr)
- use dump_utils, only: dump_h
+ use dump_utils, only: dump_h, extract
  type(dump_h), intent(in) :: hdr
+ integer :: ierr
+
+ ierr = 0;  call extract('dm_load', dm_load, hdr, ierr)
+ ierr = 0;  call extract('r_orb',   r_orb,   hdr, ierr)
 end subroutine read_headeropts_massloading
 
 subroutine set_massloading_r_ref(r)
  real, intent(in) :: r
+ if (r > 0.) r_orb = r
 end subroutine set_massloading_r_ref
 
 end module mass_loading
