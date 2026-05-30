@@ -62,7 +62,7 @@ module mass_loading
 !   mode 2: mloadfactor = iload (user beta), dm_load = 0.
 !
 ! .in parameters (3 only): iload_factor, iload, iload_dt
-! Dump header:              dm_load, r_orb (restart safety)
+! Dump header:              dm_load, r_orb, m_p0, exponent_accum (restart safety)
 ! Runtime-derived:          n_p0, m_p0 from part; t_orb from r_orb + M_star
 !
 ! Compile-time isolation: wrap `use mass_loading` and call site in evolve.f90
@@ -115,6 +115,9 @@ module mass_loading
  logical,         private :: calc_torb   = .false.
     ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
  logical,         private :: initialised = .false.
+ real,            private :: exponent_accum = 0.
+    ! accumulated ln(1+beta)*dt/T for exponential mode; persisted in dump header
+    ! massoftype(igas) = m_p0 * exp(exponent_accum) avoids compounding fp error
 
  private
 
@@ -134,7 +137,7 @@ subroutine init_massloading()
 
  n_p0 = npartoftypetot(igas)
  if (n_p0 <= 0) return
- m_p0    = massoftype(igas)
+ if (m_p0 == 0.) m_p0 = massoftype(igas)   ! fresh start; on restart m_p0 is read from dump header
  m_disc0 = m_p0 * real(n_p0)
 
  ! restart path: dm_load already set from dump header — back-derive mloadfactor
@@ -273,8 +276,9 @@ subroutine apply_partmass_exp(dt, time)
  real :: m_old
 
  if (mloadfactor == 0. .or. t_orb <= 0. .or. dt <= 0.) return
- m_old            = massoftype(igas)
- massoftype(igas) = m_old * exp(log(1. + mloadfactor) * dt / t_orb)
+ m_old          = massoftype(igas)
+ exponent_accum = exponent_accum + log(1. + mloadfactor) * dt / t_orb
+ massoftype(igas) = m_p0 * exp(exponent_accum)
 
  if (id == master .and. iverbose >= 2) &
     write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
@@ -404,8 +408,10 @@ subroutine write_headeropts_massloading(hdr, ierr)
  type(dump_h), intent(inout) :: hdr
  integer,      intent(inout) :: ierr
 
- call add_to_rheader(dm_load, 'dm_load', hdr, ierr)
- call add_to_rheader(r_orb,   'r_orb',   hdr, ierr)
+ call add_to_rheader(dm_load,        'dm_load',        hdr, ierr)
+ call add_to_rheader(r_orb,          'r_orb',          hdr, ierr)
+ call add_to_rheader(m_p0,           'mload_mp0',      hdr, ierr)
+ call add_to_rheader(exponent_accum, 'mload_exponent', hdr, ierr)
 end subroutine write_headeropts_massloading
 
 subroutine read_headeropts_massloading(hdr)
@@ -413,8 +419,10 @@ subroutine read_headeropts_massloading(hdr)
  type(dump_h), intent(in) :: hdr
  integer :: ierr
 
- ierr = 0;  call extract('dm_load', dm_load, hdr, ierr)
- ierr = 0;  call extract('r_orb',   r_orb,   hdr, ierr)
+ ierr = 0;  call extract('dm_load',        dm_load,        hdr, ierr)
+ ierr = 0;  call extract('r_orb',          r_orb,          hdr, ierr)
+ ierr = 0;  call extract('mload_mp0',      m_p0,           hdr, ierr)
+ ierr = 0;  call extract('mload_exponent', exponent_accum, hdr, ierr)
 end subroutine read_headeropts_massloading
 
 subroutine set_massloading_r_ref(r)
