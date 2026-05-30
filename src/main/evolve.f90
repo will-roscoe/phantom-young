@@ -167,7 +167,9 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
  use inject,       only:inject_particles
  use HIIRegion,    only:HII_feedback,iH2R,HIIuprate,nHIIsources
  use io_control,   only:nfulldump
- use mass_loading, only:iload,iload_dm,step_mass_loading
+#ifdef MASS_LOADING
+ use mass_loading, only:iload_factor,mloadfactor,step_mass_loading
+#endif
  use mpiutils,     only:reduceall_mpi
  use part,         only:npart,npartoftype,nptmass,xyzh,vxyzu,fxyzu,apr_level,&
                         xyzmh_ptmass,vxyz_ptmass,gravity,iboundary,ntot,ibin,iphase,&
@@ -235,8 +237,10 @@ subroutine evol_prestep(time,dtmax,dt,t1,tcpu1,nactive,inject_flag_present)
     nactive = npart
  endif
 
- if (iload > 0. .or. iload_dm > 0.) &
+#ifdef MASS_LOADING
+ if (iload_factor >= 0 .and. mloadfactor > 0.) &
     call step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
+#endif
 
  if (gravity .and. icreate_sinks > 0) call ptmass_create_and_update_forces(time,dtextforce)
 
