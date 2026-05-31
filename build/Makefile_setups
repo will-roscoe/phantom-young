@@ -14,6 +14,7 @@ ifeq ($(SETUP), planetary_raddisc2)
     RADIATION= no
     MULTIRUNFILE= multirun.f90
     IND_TIMESTEPS= yes
+    MASS_LOADING=yes
     #SRCINJECT= evolve_planet.f90 inject_randomwind.f90
     ISOTHERMAL= no
     DEBUG= true

@@ -240,6 +240,9 @@ ifeq ($(IND_TIMESTEPS), yes)
     FPPFLAGS += -DIND_TIMESTEPS
 endif
 
+ifeq ($(MASS_LOADING), yes)
+    FPPFLAGS += -DMASS_LOADING
+endif
 
 ifeq ($(RADIATION), yes)
     FPPFLAGS += -DRADIATION
