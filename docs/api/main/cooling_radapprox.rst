@@ -83,7 +83,25 @@ The minimum temperature is set by background irradiation and stellar heating:
    \frac{L_\star}{16\pi\sigma_\mathrm{SB}\,r^2},
 
 where the exponential factor provides approximate self-shielding from the
-stellar radiation field.
+stellar radiation field.  This is the default (``iprofile = 1``).
+
+When ``iprofile = 2`` is selected (the Mercer & Stamatellos 2020 disc setup,
+``lumdisc = 2``), the background floor :math:`T_{\rm BGR}` is instead taken
+directly from the analytic MS20 profile (see :doc:`eos_stamatellos`),
+
+.. math::
+
+   T_\mathrm{min} = T_{\rm BGR}(r) =
+   \left[\,T_0^2\left(\tfrac{r^2 + R_0^2}{\mathrm{AU}}\right)^{-0.7}
+   + T_\infty^2\,\right]^{1/2},
+
+evaluated at the spherical radius :math:`r = \sqrt{r_i^2}` from the central
+sink.  The profile parameters ``T0_ms20`` and ``R0_ms20`` are read from the
+``.in`` file (written automatically by the setup), and :math:`T_\infty` is
+synchronised to the input ``Tfloor`` so the floor matches the initial
+condition.  In this mode the stellar-irradiation/self-shielding term above is
+not applied — the MS20 profile already encodes the radial temperature
+structure.
 
 The equilibrium temperature toward which the gas relaxes is determined by the
 total energy input (hydrodynamic plus radiative):

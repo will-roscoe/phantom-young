@@ -82,12 +82,66 @@ using the table-interpolated values of :math:`T` and :math:`\mu`.  No analytic
 differentiation of the table is performed; the sound speed is then
 :math:`c_s = \sqrt{\gamma P/\rho}`.
 
+MS20 initial temperature profile (``iprofile = 2``)
+---------------------------------------------------
+
+In addition to the tabulated EOS, the module hosts the analytic disc
+temperature profile of Mercer & Stamatellos (2020, Eq. 8), exposed as the
+``pure`` function ``get_T_MS20(r)``:
+
+.. math::
+
+   T(R) = \left[\,T_0^2
+   \left(\frac{R^2 + R_0^2}{\mathrm{AU}}\right)^{-0.7}
+   + T_\infty^2\,\right]^{1/2}
+
+where :math:`R` is the cylindrical (setup) or spherical (cooling) radius,
+:math:`T_0` is the temperature at 1 AU, :math:`R_0` is a smoothing radius that
+caps the temperature near the star, and :math:`T_\infty` is the background
+temperature far from the star.  Internally the radius is converted to AU
+(``Rau = r*udist/au``) so the profile is independent of the chosen
+``dist_unit``.  The fixed exponent ``ms20_exp = 0.7`` is the defining slope of
+the profile (:math:`T \propto R^{-0.7}`) and is a ``parameter``, not a runtime
+option.
+
+This profile is selected by the module switch ``iprofile``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 12 88
+
+   * - ``iprofile``
+     - Temperature law used for both the initial condition and the cooling floor
+   * - ``1`` (default)
+     - Optically-thin radiative equilibrium :math:`T \propto R^{-1/2}`,
+       normalised by the stellar luminosity (the original behaviour).
+   * - ``2``
+     - MS20 Eq. 8 above, normalised by ``T0_ms20`` and independent of
+       :math:`L_\star`.
+
+The associated module variables ``T0_ms20``, ``R0_ms20`` and ``Tinf_ms20``
+hold :math:`T_0`, :math:`R_0` and :math:`T_\infty`.  They are set at setup time
+by ``setup_disc`` when ``lumdisc = 2`` (mapping the disc ``T_bg`` onto
+:math:`T_\infty`) and are written to / read from the ``.in`` file by
+:doc:`cooling_radapprox`, so the runtime cooling floor reproduces the same
+profile that was baked into the initial dump.  See :doc:`cooling_radapprox` for
+the role of this profile as the background floor :math:`T_{\rm BGR}` in the
+Eq. 4 cooling rate.
+
+.. note::
+
+   For the cooling floor, ``Tinf_ms20`` is synchronised to the runtime
+   ``Tfloor`` (not ``T_bg``).  To keep the floor consistent with the initial
+   condition, set ``Tfloor`` in the ``.in`` file equal to the ``T_bg`` used at
+   setup (both equal :math:`T_\infty`, e.g. 10 K).
+
 References
 ----------
 
 The following works are referenced in this module but not yet present in ``phantom.bib``:
 
 - Stamatellos, D., Whitworth, A. P., Bisbas, T. & Goodwin, S. 2007, A&A, 475, 37 — pseudo-cloud radiative cooling approximation
+- Mercer, A. & Stamatellos, D. 2020, A&A, 633, A116 — disc initial temperature profile (Eq. 8), used by ``iprofile = 2``
 - Young, A. K. et al. 2024 — updated tabulated cooling method for Phantom (icooling=9)
 - Lombardi, J. C. et al. 2015, MNRAS, 447, 25 — opacity/EoS table (eos_lom.dat source)
 - Forgan, D., Rice, K., Stamatellos, D. & Whitworth, A. 2009, MNRAS, 394, 882 — FLD hybrid cooling method
