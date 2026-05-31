@@ -1491,33 +1491,48 @@ end function m_to_f
 pure real function get_cs_from_lum(L_star,r,T_bg,gamma)
  use physcon, only:kb_on_mh,steboltz,solarl,fourpi
  use units,   only:udist,unit_velocity
+ use eos_stamatellos, only:iprofile,get_T_MS20
  real, intent(in) :: L_star,r,T_bg,gamma
- real :: mu
+ real :: mu,Tloc
 
  mu = 2.381 !mean molecular mass
- get_cs_from_lum = sqrt(gamma*kb_on_mh/mu) * ( (L_star*solarl/fourpi/steboltz) / &
-               (r*udist)**2 + T_bg**4)**0.125
+ if (iprofile == 2) then
+    Tloc = get_T_MS20(r)
+    get_cs_from_lum = sqrt(gamma*kb_on_mh/mu*Tloc)
+ else
+    get_cs_from_lum = sqrt(gamma*kb_on_mh/mu) * ( (L_star*solarl/fourpi/steboltz) / &
+                  (r*udist)**2 + T_bg**4)**0.125
+ endif
  get_cs_from_lum = get_cs_from_lum/unit_velocity
 end function get_cs_from_lum
 
 real function get_T_from_lum(L_star,r,T_bg)
  use physcon, only:steboltz,solarl,fourpi
  use units,   only:udist
+ use eos_stamatellos, only:iprofile,get_T_MS20
  real, intent(in) :: L_star,r,T_bg
  real :: Tfourth
- Tfourth = L_star*solarl/fourpi/steboltz/(r*udist)**2 + T_bg**4
- get_T_from_lum = Tfourth**0.25
+ if (iprofile == 2) then
+    get_T_from_lum = get_T_MS20(r)
+ else
+    Tfourth = L_star*solarl/fourpi/steboltz/(r*udist)**2 + T_bg**4
+    get_T_from_lum = Tfourth**0.25
+ endif
 end function get_T_from_lum
 
 real function get_u_stamatellos(L_star,r,T_bg,hsmooth,particle_mass,hfact)
- use eos_stamatellos, only:getintenerg_opdep
+ use eos_stamatellos, only:getintenerg_opdep,iprofile,get_T_MS20
  use physcon, only:steboltz,solarl,fourpi
  use units,   only:unit_ergg,unit_density
  real, intent(in) :: L_star,r,T_bg,hsmooth,particle_mass,hfact
  real :: temperature,rho,u
  rho = particle_mass * (hfact/hsmooth)**3 * unit_density
- temperature = (L_star*solarl/fourpi/steboltz /(r*udist)**2) + T_bg**4
- temperature = temperature**0.25
+ if (iprofile == 2) then
+    temperature = get_T_MS20(r)
+ else
+    temperature = (L_star*solarl/fourpi/steboltz /(r*udist)**2) + T_bg**4
+    temperature = temperature**0.25
+ endif
  call getintenerg_opdep(temperature,rho,u)
  get_u_stamatellos = u/unit_ergg
 
