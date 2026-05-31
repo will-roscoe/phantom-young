@@ -108,7 +108,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  use physcon,  only:steboltz,pi,solarl,kb_on_mh,piontwo,rpiontwo
  use units,    only:umass,udist,unit_density,unit_ergg,utime,unit_pressure
  use eos_stamatellos, only:getopac_opdep,getintenerg_opdep,gradP_cool,&
-      ttherm_store,ueqi_store,tau_store,du_store
+      ttherm_store,ueqi_store,tau_store,du_store,iprofile,get_T_MS20,Tinf_ms20
  use eos_stamatellos, only:Gpot_cool,duFLD,doFLD
  use part,       only:xyzmh_ptmass,igas,eos_vars,iTemp
  integer, intent(in) :: i
@@ -183,7 +183,10 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
     
 !    Tfloor is from input parameters and is background heating
 !    Stellar heating
- if (isink_star > 0 .and. Lstar > 0.) then
+ if (iprofile == 2) then
+    Tinf_ms20 = Tfloor                       ! keep MS20 background floor in sync with Tfloor
+    Tmini4 = get_T_MS20(sqrt(ri2))**4
+ elseif (isink_star > 0 .and. Lstar > 0.) then
     Tmini4 = Tfloor**4 + exp(-coldensi*kappaBari)*(Lstar*solarl/(16.*pi*steboltz*ri2*udist*udist))
  else
     Tmini4 = Tfloor**4
@@ -234,12 +237,17 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,iprofile,T0_ms20,R0_ms20
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
  call write_inopt(eos_file,'EOS_file','File containing tabulated EOS values',iunit)
  call write_inopt(Lstar,'Lstar','Luminosity of host star for calculating Tmin (Lsun)',iunit)
+ call write_inopt(iprofile,'iprofile','Tmin profile: 1=radiative L_star, 2=MS20 Eq.8',iunit)
+ if (iprofile == 2) then
+    call write_inopt(T0_ms20,'T0_ms20','MS20 temperature at 1 AU (K)',iunit)
+    call write_inopt(R0_ms20,'R0_ms20','MS20 smoothing radius R0 (AU)',iunit)
+ endif
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
  call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
@@ -247,7 +255,7 @@ end subroutine write_options_cooling_radapprox
 
 subroutine read_options_cooling_radapprox(db,nerr)
  use io,              only:fatal
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,iprofile,T0_ms20,R0_ms20
  use infile_utils,    only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
@@ -256,6 +264,11 @@ subroutine read_options_cooling_radapprox(db,nerr)
  call read_inopt(Lstar,'Lstar',db,errcount=nerr,min=0.)
  call read_inopt(eos_file,'EOS_file',db,errcount=nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
+ call read_inopt(iprofile,'iprofile',db,errcount=nerr,min=1,max=2,default=1)
+ if (iprofile == 2) then
+    call read_inopt(T0_ms20,'T0_ms20',db,errcount=nerr,min=0.)
+    call read_inopt(R0_ms20,'R0_ms20',db,errcount=nerr,min=0.)
+ endif
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
  call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=1,default=1)
 
