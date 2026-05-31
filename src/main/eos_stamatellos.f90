@@ -14,7 +14,7 @@ module eos_stamatellos
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: allocutils, datafiles, dim, io
+! :Dependencies: allocutils, datafiles, dim, io, physcon, units
 !
 
  implicit none
@@ -28,8 +28,15 @@ module eos_stamatellos
  integer, public :: iunitst=19
  integer,save :: nx,ny ! dimensions of optable read in
 
+ ! --- MS20 (Mercer & Stamatellos 2020) temperature profile ---
+ integer, public :: iprofile  = 1     ! 1 = radiative equilibrium (default), 2 = MS20
+ real,    public :: T0_ms20   = 100.  ! K,  temperature at 1 AU
+ real,    public :: R0_ms20   = 0.01  ! AU, smoothing radius
+ real,    public :: Tinf_ms20 = 10.   ! K,  background temperature far from star
+ real, parameter, public :: ms20_exp = 0.7  ! fixed slope (T ~ R^-0.7)
+
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
- public :: get_k_fld
+ public :: get_k_fld,get_T_MS20
 
 contains
 
@@ -71,6 +78,25 @@ subroutine init_coolra()
     print *, "NOT using FLD. Using cooling only"
  endif
 end subroutine init_coolra
+
+!----------------------------------------------------------------
+!+
+!  MS20 (Mercer & Stamatellos 2020, Eq. 8) disc temperature.
+!  T(R) = [ T0^2 * (Rau^2 + R0^2)^(-0.7) + Tinf^2 ]^(1/2)
+!  r is in code distance units; Rau converts to AU so the result
+!  is independent of the chosen dist_unit.
+!+
+!----------------------------------------------------------------
+pure real function get_T_MS20(r)
+ use units,   only:udist
+ use physcon, only:au
+ real, intent(in) :: r
+ real :: Rau
+
+ Rau = r*udist/au
+ get_T_MS20 = sqrt( T0_ms20**2 * (Rau**2 + R0_ms20**2)**(-ms20_exp) + Tinf_ms20**2 )
+
+end function get_T_MS20
 
 subroutine finish_coolra()
  if (allocated(optable)) deallocate(optable)

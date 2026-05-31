@@ -19,7 +19,7 @@ module test_eos_stam
 
  use testutils,     only:checkval,update_test_scores,checkvalbuf,checkvalbuf_end,checkvalbuf_start
  use eos_stamatellos, only:read_optab,getintenerg_opdep,getopac_opdep,eos_file
- use eos_stamatellos, only:optable
+ use eos_stamatellos, only:optable,get_T_MS20
  implicit none
  public :: run_test_stam
 
@@ -35,6 +35,7 @@ subroutine run_test_stam(ntests,npass)
  logical :: got_phantom_dir
  character(len=20) :: pdir
 
+ call test_ms20_profile(ntests,npass)
  call get_environment_variable('PHANTOM_DIR',pdir)
  got_phantom_dir = (len_trim(pdir) > 0)
  if (.not. got_phantom_dir) return
@@ -49,6 +50,34 @@ subroutine run_test_stam(ntests,npass)
  call update_test_scores(ntests,nfail(:),npass)
  call finish_test_stam
 end subroutine run_test_stam
+
+subroutine test_ms20_profile(ntests,npass)
+ use eos_stamatellos, only:get_T_MS20,T0_ms20,R0_ms20,Tinf_ms20
+ use physcon,         only:au,solarm
+ use units,           only:set_units,udist
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(3)
+ real :: T_1au,T_10au,ratio
+
+ nfail(:) = 0
+ call set_units(dist=au,mass=solarm,G=1.d0) ! AU / Msun units
+ T0_ms20 = 100.; R0_ms20 = 0.01; Tinf_ms20 = 10.
+
+ ! T(1 AU) = sqrt(100^2 + 10^2) = 100.4988 K
+ T_1au = get_T_MS20(au/udist)
+ call checkval(T_1au,100.4988d0,1.e-3,nfail(1),'T_MS20 at 1 AU')
+
+ ! slope: T(10)/T(1) ~ 10^-0.7
+ T_10au = get_T_MS20(10.*au/udist)
+ ratio  = T_10au/T_1au
+ call checkval(ratio,0.2221d0,2.e-2,nfail(2),'T_MS20 R^-0.7 slope')
+
+ ! floor: far out T -> Tinf
+ call checkval(get_T_MS20(1.e6*au/udist),10.d0,1.e-3,nfail(3),'T_MS20 -> Tinf far out')
+
+ ntests = ntests + 3
+ call update_test_scores(ntests,nfail,npass)
+end subroutine test_ms20_profile
 
 subroutine test_interp_optab(nfail,npass)
  use units,  only:unit_density,unit_ergg,unit_velocity
