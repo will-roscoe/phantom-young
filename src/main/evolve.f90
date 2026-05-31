@@ -276,6 +276,9 @@ subroutine evol_poststep(infile,logfile,evfile,dumpfile,time,t1,tcpu1,dt,dtmax,n
  use io_control,    only:nout,nmaxdumps,twallmax,nfulldump
  use io_summary,    only:iosum_nreal,summary_counter,summary_printout,summary_printnow
  use part,          only:npart,nptmass,ntot
+#ifdef MASS_LOADING
+ use mass_loading,  only: log_massloading
+#endif
  use timing,        only:get_timings,increment_timer,itimer_step,itimer_lastdump,timers,print_time
  use timestep,      only:nsteps,rhomaxnow
  use timestep_ind,  only:istepfrac
@@ -326,6 +329,9 @@ subroutine evol_poststep(infile,logfile,evfile,dumpfile,time,t1,tcpu1,dt,dtmax,n
     call check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
                               nout,noutput,noutput_dtmax,ncount_fulldumps,&
                               dumpfile,infile,evfile,logfile,abortrun)
+#ifdef MASS_LOADING
+    call log_massloading(time)
+#endif
 
     ! reset counters for when the next dump should be written
     call print_log(nsteps,nalivetot,nmovedtot,nsteplast,dtmax,tall,tcpulast,twalllast)

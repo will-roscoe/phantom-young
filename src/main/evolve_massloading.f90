@@ -81,6 +81,7 @@ module mass_loading
  implicit none
 
  public :: init_massloading, step_mass_loading,                   &
+           log_massloading,                                       &
            write_options_massloading, read_options_massloading,   &
            write_options_massloading_setup,                       &
            read_options_massloading_setup,                        &
@@ -324,6 +325,32 @@ subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
     call apply_partmass_const(dt, time)
  endif
 end subroutine step_mass_loading
+
+!-----------------------------------------------------------------------
+! log_massloading
+!   Print a one-line summary of disc mass evolution at each dump point.
+!   M_disc_now = massoftype(igas) * npartoftypetot(igas)
+!   M_disc_0   = m_p0 * n_p0
+!   No-op when iload_factor < 0 (mass loading off) or not yet initialised.
+!-----------------------------------------------------------------------
+subroutine log_massloading(time)
+ use part, only: massoftype, npartoftypetot
+ use io,   only: iprint, id, master
+ real, intent(in) :: time
+ real             :: m_disc_now, m_disc_0, dm_p, ratio
+
+ if (iload_factor < 0 .or. n_p0 <= 0 .or. m_p0 <= 0.) return
+
+ m_disc_now = massoftype(igas) * real(npartoftypetot(igas))
+ m_disc_0   = m_p0 * real(n_p0)
+ ratio      = m_disc_now / m_disc_0
+ dm_p       = massoftype(igas) - m_p0
+
+ if (id == master) write(iprint, &
+    "('[mass_loading] dump: t=',es10.3,'  M_disc/M_disc0=',es10.3,'  dm_p=',es10.3)") &
+    time, ratio, dm_p
+
+end subroutine log_massloading
 
 !-----------------------------------------------------------------------
 ! I/O routines
