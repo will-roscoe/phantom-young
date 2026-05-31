@@ -203,6 +203,7 @@ module setup
 
  logical :: istratify,lumdisc_logi
  integer :: nplanets,discstrat,lumdisc
+ real    :: T_MS20_0,R_MS20_0
  real    :: mplanet(maxplanets),rplanet(maxplanets)
  real    :: accrplanet(maxplanets),inclplan(maxplanets)
  real    :: eccplanet(maxplanets)
@@ -451,6 +452,8 @@ subroutine set_default_options()
  lumdisc      = 0
  L_star(:)    = 1.
  T_bg         = 5.
+ T_MS20_0     = 100.
+ R_MS20_0     = 0.01
  lumdisc_logi = .false.
 
  !--floor temperature
@@ -616,7 +619,7 @@ subroutine equation_of_state(gamma)
                            ieos,icooling,ipdv_heating,ishock_heating
  use io_control,      only:nfulldump
  use shock_capturing, only:alphau
- use eos_stamatellos, only:init_coolra,read_optab,eos_file
+ use eos_stamatellos, only:init_coolra,read_optab,eos_file,iprofile,T0_ms20,R0_ms20,Tinf_ms20
  use physcon, only:rpiontwo,mass_proton_cgs,kboltz
  use units,   only:unit_velocity
  use sethier_utils,   only:findloc_local
@@ -725,6 +728,14 @@ subroutine equation_of_state(gamma)
        ieos = 24
        icooling = 9
        gamma = 5./3. ! in case it's needed
+       if (lumdisc == 2) then
+          iprofile  = 2
+          T0_ms20   = T_MS20_0
+          R0_ms20   = R_MS20_0
+          Tinf_ms20 = T_bg        ! reuse background temperature as Tinf
+       else
+          iprofile  = 1
+       endif
        call init_coolra()
        call read_optab(eos_file,ierr)
        if (ndiscs > 1) then
@@ -2954,10 +2965,15 @@ subroutine write_setupfile(filename)
           call write_inopt(Q_min(i),'Q_min'//trim(disclabel),'minimum Toomre Q',iunit)
 
        end select
-       call write_inopt(lumdisc,'lumdisc', 'Set qindex from stellar luminosity (ieos=24) (0=no 1=yes)',iunit)
+       call write_inopt(lumdisc,'lumdisc', &
+            'Temperature profile (ieos=24): 0=off, 1=radiative L_star, 2=MS20 Eq.8',iunit)
        if (lumdisc > 0) then
           call write_inopt(L_star(i),'L_star'//trim(disclabel),'Stellar luminosity (Lsun)',iunit)
           call write_inopt(T_bg,'T_bg'//trim(disclabel),'background Temperature (K)',iunit)
+       endif
+       if (lumdisc == 2) then
+          call write_inopt(T_MS20_0,'T_MS20_0','MS20 temperature at 1 AU (K)',iunit)
+          call write_inopt(R_MS20_0,'R_MS20_0','MS20 smoothing radius R0 (AU)',iunit)
        endif
        call write_inopt(pindex(i),'pindex'//trim(disclabel),'power law index of surface density sig=sig0*r^-p',iunit)
        if (lumdisc == 0) then
@@ -3496,6 +3512,10 @@ subroutine read_setupfile(filename,ierr)
  if (lumdisc > 0) then
     call read_inopt(L_star(1),'L_star',db,min=0.,errcount=nerr)
     call read_inopt(T_bg,'T_bg',db,min=0.,errcount=nerr)
+ endif
+ if (lumdisc == 2) then
+    call read_inopt(T_MS20_0,'T_MS20_0',db,min=0.,errcount=nerr)
+    call read_inopt(R_MS20_0,'R_MS20_0',db,min=0.,errcount=nerr)
  endif
 
  call close_db(db)
