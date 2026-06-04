@@ -305,6 +305,137 @@ The 4:1 ratio between the two merge radii is a sensible separation.
 
 ----
 
+Calculating h_sph and choosing parameter values
+-------------------------------------------------
+
+**Step 1 — compute the local smoothing length at the fragmentation radius**
+
+Given disc mass :math:`M_d`, particle count :math:`N`, surface density slope
+:math:`p`, aspect ratio :math:`H/R`, and fragmentation radius :math:`R_f`:
+
+.. math::
+
+   m_p &= \frac{M_d}{N} \\[4pt]
+   \Sigma_0 &= \frac{M_d}{2\pi \displaystyle\int_{R_\text{in}}^{R_\text{out}} R^{1-p}\,dR}
+   \quad \xrightarrow{p=1} \quad \frac{M_d}{2\pi(R_\text{out}-R_\text{in})} \\[4pt]
+   \rho(R_f) &\approx \frac{\Sigma(R_f)}{\sqrt{2\pi}\,H(R_f)}
+             = \frac{\Sigma_0 R_f^{-p}}{\sqrt{2\pi}(H/R)\,R_f} \\[4pt]
+   h_\text{sph}(R_f) &= h_\text{fact}\left(\frac{m_p}{\rho(R_f)}\right)^{1/3}
+
+Use :math:`R_f \sim 50\text{–}100` AU for where fragmentation is expected.
+Use :math:`R_\text{in}` for the tightest scale any sink will encounter.
+
+**Step 2 — resolution scaling with N**
+
+Since :math:`m_p \propto N^{-1}` and :math:`\rho` is fixed by the disc,
+:math:`h_\text{sph} \propto N^{-1/3}`. All sink length scales should scale
+the same way:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 18 18 18 18
+
+   * - Radius (AU)
+     - N = 10\ :sup:`4`
+     - N = 10\ :sup:`5`
+     - N = 10\ :sup:`6`
+     - N = 10\ :sup:`7`
+   * - 1 AU
+     - 0.32
+     - 0.15
+     - 0.07
+     - 0.03
+   * - 20 AU
+     - 2.35
+     - 1.09
+     - 0.51
+     - 0.24
+   * - 50 AU
+     - 4.33
+     - 2.01
+     - 0.93
+     - 0.43
+   * - 100 AU
+     - 6.87
+     - 3.19
+     - 1.48
+     - 0.69
+
+*(0.2 M*\ :sub:`☉` *star, 0.059 M*\ :sub:`☉` *disc,* :math:`\Sigma \propto R^{-1}`,
+:math:`H/R = 0.1`\ *)*
+
+**Step 3 — apply the rules of thumb**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Parameter
+     - Rule
+   * - ``h_acc``
+     - :math:`\sim h_\text{sph}(R_\text{in})` — resolved, but at the inner-disc scale
+   * - ``r_merge_uncond``
+     - :math:`\sim 10 \times h_\text{acc}`
+   * - ``r_merge_cond``
+     - :math:`\sim 2\text{–}3 \times h_\text{acc}` (keep ~4:1 ratio with ``r_merge_uncond``)
+   * - ``h_soft_*``
+     - 0.000 unless a specific scenario applies (see below)
+   * - ``f_acc``
+     - 0.800 unless a specific scenario applies (see below)
+
+----
+
+When to change ``h_soft_*``, ``r_merge_*``, and ``f_acc``
+-----------------------------------------------------------
+
+**``h_soft_sinkgas`` — change when:**
+
+- ``h_acc`` is intentionally set *below* the local :math:`h_\text{sph}` (e.g. to
+  track very early fragment accretion). Without softening, gas particles at
+  sub-:math:`h_\text{acc}` separations experience unbounded gravitational forces.
+  Set :math:`h_\text{soft\_sinkgas} \approx h_\text{acc}` to cap the force.
+- The simulation produces NaN accelerations or runaway particles near a sink —
+  this is a sign that unsoftened sink–gas gravity is diverging.
+
+**``h_soft_sinksink`` — change when:**
+
+- Two or more fragment sinks are expected to form close binary-like pairs that
+  survive without merging (e.g. studying binary fragment statistics). Without
+  softening, close-pass encounters produce large force spikes and erratic
+  timestep behaviour. Set :math:`h_\text{soft\_sinksink} \lesssim r_\text{merge\_cond}`
+  to damp the spike without altering long-range orbital dynamics.
+- The simulation wall-time per step increases sharply after a fragmentation event
+  (sign of a small-timestep runaway from two nearby sinks).
+
+**``r_merge_uncond`` — change when:**
+
+- Wall-time per step increases sharply after the first fragmentation event, and
+  inspection shows two sinks orbiting at sub-resolution separations. Increase
+  ``r_merge_uncond`` to catch them earlier.
+- Studying wide binary fragment formation: decrease ``r_merge_uncond`` (carefully,
+  ensuring it stays above the timestep-stability floor) to allow wider pairs to
+  survive without unconditionally merging.
+
+**``r_merge_cond`` — change when:**
+
+- Many fragments are forming and immediately merging even on clearly hyperbolic
+  (unbound) trajectories. This means ``r_merge_cond`` is too large relative to
+  the fragment separation at formation. Decrease it toward :math:`2 \times h_\text{acc}`.
+- Studying close binary fragment survival: decrease to allow bound pairs at
+  larger separations to be tracked without merging.
+
+**``f_acc`` — change when:**
+
+- Particles are being numerically ejected from sink neighbourhoods with high
+  outward velocities (sign that the bound-check zone extends too far and unbound
+  particles are crossing it). Increase ``f_acc`` toward 0.9 to widen the
+  unconditional zone.
+- Studying fragment accretion physics carefully, where you want *all* accretion
+  to be subject to the bound check. Decrease ``f_acc`` toward 0.5, accepting
+  that some very-close particles may scatter rather than accrete.
+
+----
+
 Summary table
 -------------
 
