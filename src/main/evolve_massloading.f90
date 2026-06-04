@@ -486,6 +486,7 @@ contains
       type(dump_h), intent(in) :: hdr
       integer :: ierr
 
+      if (iload_factor < 0) return
       ierr = 0;  call extract('dm_load',     dm_load, hdr, ierr)
       ierr = 0;  call extract('r_orb',       r_orb,   hdr, ierr)
       ierr = 0;  call extract('mload_mp0',   m_p0,    hdr, ierr)

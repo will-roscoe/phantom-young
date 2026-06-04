@@ -1138,6 +1138,9 @@ subroutine setup_discs(id,fileprefix,hfact,gamma,npart,polyk,&
  use sethier_utils,   only:findloc_local
  use setdisc,         only:set_disc
  use growth,          only:alpha_dg
+#ifdef MASS_LOADING
+ use mass_loading,   only:set_massloading_r_ref
+#endif
  integer,           intent(in)    :: id
  character(len=20), intent(in)    :: fileprefix
  real,              intent(out)   :: hfact
@@ -1490,6 +1493,10 @@ subroutine setup_discs(id,fileprefix,hfact,gamma,npart,polyk,&
        'multiple discs: cannot use alpha_AV for alpha_SS, setting equal to 0.1')
     alpha = 0.1
  endif
+
+#ifdef MASS_LOADING
+ if (onlydisc > 0) call set_massloading_r_ref(R_ref(onlydisc))
+#endif
 
 end subroutine setup_discs
 
