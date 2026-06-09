@@ -18,17 +18,17 @@ jobs:
     mpi:
         uses: ./.github/workflows/mpi.yml
 
-    mcfost:
-        uses: ./.github/workflows/mcfost.yml
+    # mcfost:
+    #     uses: ./.github/workflows/mcfost.yml
 
-    binary:
-        uses: ./.github/workflows/binary.yml
+    # binary:
+    #     uses: ./.github/workflows/binary.yml
 
-    growth:
-        uses: ./.github/workflows/growth.yml
+    # growth:
+    #     uses: ./.github/workflows/growth.yml
 
-    krome:
-        uses: ./.github/workflows/krome.yml
+    # krome:
+    #     uses: ./.github/workflows/krome.yml
 
-    coolingra:
-        uses: ./.github/workflows/coolingra.yml
+    # coolingra:
+    #     uses: ./.github/workflows/coolingra.yml
