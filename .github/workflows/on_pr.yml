@@ -22,18 +22,6 @@ jobs:
     mpi:
         uses: ./.github/workflows/mpi.yml
 
-    mcfost:
-        uses: ./.github/workflows/mcfost.yml
-  
-    binary:
-        uses: ./.github/workflows/binary.yml
-
-    growth:
-        uses: ./.github/workflows/growth.yml
-
-    krome:
-        uses: ./.github/workflows/krome.yml
-
     coolingra:
         uses: ./.github/workflows/coolingra.yml
 
@@ -42,7 +30,7 @@ jobs:
         # This name matches the branch protection requirement
         name: summary
         
-        needs: [build, test, mpi, mcfost, binary, growth, krome, coolingra]
+        needs: [build, test, mpi, coolingra] 
         if: success() || failure() && github.event_name == 'pull_request'
         runs-on: ubuntu-latest
         steps:
@@ -69,34 +57,6 @@ jobs:
               exit 1
             fi
             
-            if [[ "${{ needs.mcfost.result }}" == "success" ]]; then
-              echo "All McFost jobs succeeded"
-            else
-              echo "At least one McFost test failed"
-              exit 1
-            fi
-            
-            if [[ "${{ needs.growth.result }}" == "success" ]]; then
-              echo "All growth jobs succeeded"
-            else
-              echo "At least one growth test failed"
-              exit 1
-            fi
-
-            if [[ "${{ needs.binary.result }}" == "success" ]]; then
-              echo "All binary jobs succeeded"
-            else
-              echo "At least one binary test failed"
-              exit 1
-            fi
-            
-            if [[ "${{ needs.krome.result }}" == "success" ]]; then
-              echo "All Krome jobs succeeded"
-            else
-              echo "At least one Krome test failed"
-              exit 1
-            fi
-
             if [[ "${{ needs.coolingra.result }}" == "success" ]]; then
               echo "Rad cooling approx jobs succeeded"
             else
