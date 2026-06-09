@@ -16,5 +16,5 @@ jobs:
     test:
         uses: ./.github/workflows/test.yml
 
-    mpi:
-        uses: ./.github/workflows/mpi.yml
+    coolingra:
+        uses: ./.github/workflows/coolingra.yml
