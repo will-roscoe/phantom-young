@@ -2216,6 +2216,7 @@ subroutine setup_interactive(id)
  use sethierarchical,  only:hs,hierarchy,print_chess_logo,generate_hierarchy_string
  use sethier_utils,    only:findloc_local
  use eos_stamatellos,  only:qprofile
+ use setunits,         only:mass_unit
 
  integer, intent(in) :: id
  integer :: i
@@ -2482,7 +2483,14 @@ subroutine setup_interactive(id)
           endif
           if (lumdisc > 0) then
              !get luminosity ...
-             L_star(1) = get_Lstar_from_mass(m1)
+             select case(trim(mass_unit))
+             case('jupiterm')
+                L_star(1) = get_Lstar_from_mass(m1 * jupiterm/solarm)
+             case('earthm')
+                L_star(1) = get_Lstar_from_mass(m1 * earthm/solarm)
+             case default  ! 'solarm' or unrecognised
+                L_star(1) = get_Lstar_from_mass(m1)
+             end select
              call prompt("Enter the luminosity of star",L_star(1))
              call prompt("Enter the background temperature e.g. 10 (K)", T_bg)
              if (qprofile > 0.) then
