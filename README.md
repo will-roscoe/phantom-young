@@ -1,12 +1,16 @@
 Phantom
 =======
 
-> The Phantom Smoothed Particle Hydrodynamics code
+> The Phantom Smoothed Particle Hydrodynamics code (Customized implementation)
 
+>[!NOTE] Note on this implementation
+> This implementation of PHANTOM is based on [Alison K. Young's fork](https://github.com/alisonkyoung1/phantom).
+> The main repository for PHANTOM can be found [here](https://github.com/danieljprice/phantom).
+ 
 About
 -----
 
-Phantom is a 3D Smoothed Particle Hydrodynamics and Magnetohydrodynamics code for astrophysics. It was written and developed by Daniel Price with contributions from many others (see [AUTHORS](https://github.com/danieljprice/phantom/blob/master/AUTHORS)). It is designed to be a fast, 3D SPH code for production runs. It is not a code for testing algorithms. Key features include:
+Phantom is a 3D Smoothed Particle Hydrodynamics and Magnetohydrodynamics code for astrophysics. It was written and developed by Daniel Price with contributions from many others (see [AUTHORS](https://github.com/will-roscoe/phantom-young/blob/master/AUTHORS)). It is designed to be a fast, 3D SPH code for production runs. It is not a code for testing algorithms. Key features include:
 
 - Compressible hydrodynamics and magnetohydrodynamics
 - Advanced shock capturing using state-of-the-art methods
@@ -27,11 +31,11 @@ Phantom is a 3D Smoothed Particle Hydrodynamics and Magnetohydrodynamics code fo
 Status
 ------
 
-[![build](https://github.com/danieljprice/phantom/actions/workflows/build.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/build.yml)
-[![test](https://github.com/danieljprice/phantom/actions/workflows/test.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/test.yml)
-[![mpi](https://github.com/danieljprice/phantom/actions/workflows/mpi.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/mpi.yml)
-[![mcfost](https://github.com/danieljprice/phantom/actions/workflows/mcfost.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/mcfost.yml)
-[![Documentation](https://readthedocs.org/projects/phantomsph/badge/?version=latest)](https://phantomsph.readthedocs.io/en/latest/?badge=latest)
+[![build](https://github.com/will-roscoe/phantom-young/actions/workflows/build.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/build.yml)
+[![test](https://github.com/will-roscoe/phantom-young/actions/workflows/test.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/test.yml)
+
+[![Documentation (Main Repo)](https://readthedocs.org/projects/phantomsph/badge/?version=latest)](https://phantomsph.readthedocs.io/en/latest/?badge=latest)
+
 
 Links
 -----
