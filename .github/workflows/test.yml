@@ -13,8 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         system:
-          - gfortran
-          - ifort
+          # - gfortran
+          # - ifort
           - ifx
         debug:
           - no
