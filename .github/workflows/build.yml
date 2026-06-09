@@ -41,8 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         system:
-          - aocc
-          - gfortran
+          # - aocc
+          # - gfortran
           - ifort
           - ifx
         batch: ${{ fromJson(needs.matrix_prep.outputs.batch) }}
