@@ -1,11 +1,12 @@
 name: push 
 
 on:
-    push:
-      branches: [ master ]
-      paths-ignore:
-        - 'docs/**'
-        - 'README.md'
+    workflow_call: 
+    # push:
+    #   branches: [ master ]
+    #   paths-ignore:
+    #     - 'docs/**'
+    #     - 'README.md'
 
 jobs:
 
@@ -17,18 +18,3 @@ jobs:
 
     mpi:
         uses: ./.github/workflows/mpi.yml
-
-    # mcfost:
-    #     uses: ./.github/workflows/mcfost.yml
-
-    # binary:
-    #     uses: ./.github/workflows/binary.yml
-
-    # growth:
-    #     uses: ./.github/workflows/growth.yml
-
-    # krome:
-    #     uses: ./.github/workflows/krome.yml
-
-    # coolingra:
-    #     uses: ./.github/workflows/coolingra.yml
