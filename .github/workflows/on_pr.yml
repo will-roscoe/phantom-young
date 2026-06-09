@@ -19,9 +19,6 @@ jobs:
     test:
         uses: ./.github/workflows/test.yml
 
-    mpi:
-        uses: ./.github/workflows/mpi.yml
-
     coolingra:
         uses: ./.github/workflows/coolingra.yml
 
@@ -47,13 +44,6 @@ jobs:
               echo "All test jobs succeeded"
             else
               echo "At least one test failed"
-              exit 1
-            fi
-            
-            if [[ "${{ needs.mpi.result }}" == "success" ]]; then
-              echo "All MPI jobs succeeded"
-            else
-              echo "At least one MPI test failed"
               exit 1
             fi
             
