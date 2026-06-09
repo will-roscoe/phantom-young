@@ -27,6 +27,7 @@ module eos_stamatellos
  logical, public :: floor_energy = .False.
  integer, public :: iunitst=19
  integer,save :: nx,ny ! dimensions of optable read in
+ real, public :: qprofile = 0. ! q index override for lumdisc=1; 0=standard (qindex=0.25), otherwise use as qindex
 
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
  public :: get_k_fld

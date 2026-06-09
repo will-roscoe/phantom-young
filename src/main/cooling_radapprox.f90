@@ -234,7 +234,7 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,qprofile
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
@@ -243,11 +243,13 @@ subroutine write_options_cooling_radapprox(iunit)
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
  call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
+ call write_inopt(qprofile,'qprofile',&
+      'q index for T profile (lumdisc=1): 0=standard qindex=0.25, otherwise use specified qindex',iunit)
 end subroutine write_options_cooling_radapprox
 
 subroutine read_options_cooling_radapprox(db,nerr)
  use io,              only:fatal
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,qprofile
  use infile_utils,    only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
@@ -258,6 +260,7 @@ subroutine read_options_cooling_radapprox(db,nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
  call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=1,default=1)
+ call read_inopt(qprofile,'qprofile',db,errcount=nerr,min=0.,default=0.)
 
  if (ieosread /= 24) call fatal('ieosread','For icooling=9, you need ieos=24')
 
