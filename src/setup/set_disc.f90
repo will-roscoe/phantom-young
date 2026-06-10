@@ -716,7 +716,7 @@ subroutine set_disc_positions(npart_tot,npart_start_count,do_mixture,R_ref,R_in,
     !--set z
     !--first get sound speed at R
     if (lumdisc) then
-       cs = get_cs_from_lum(L_star,R,T_bg,gamma)
+       cs = get_cs_from_lum(L_star,R,T_bg,gamma,q_index)
     else
        cs = cs_func(cs0,R,q_index)
     endif
@@ -878,7 +878,7 @@ subroutine set_disc_velocities(npart_tot,npart_start_count,itype,G,star_m,aspin,
        select case(itype)
        case(igas)
           if (lumdisc) then
-             cs = get_cs_from_lum(L_star,R,T_bg,gamma)
+             cs = get_cs_from_lum(L_star,R,T_bg,gamma,q_index)
           else
              cs = cs_func(cs0,R,q_index)
           endif
@@ -940,7 +940,7 @@ subroutine set_disc_velocities(npart_tot,npart_start_count,itype,G,star_m,aspin,
        if (maxvxyzu >= 4) then
           if (itype==igas) then
              if (lumdisc) then
-                vxyzu(4,ipart) = get_u_stamatellos(L_star,R,T_bg,xyzh(4,i),particle_mass,hfact)
+                vxyzu(4,ipart) = get_u_stamatellos(L_star,R,T_bg,xyzh(4,i),particle_mass,hfact,q_index)
              elseif (gamma > 1.) then
                 vxyzu(4,ipart) = cs**2/(gamma - 1.)/gamma
              else
@@ -1059,7 +1059,7 @@ pure real function get_HonR(r,cs0,q_index,star_m,G,lumdisc_setup,L_lumdisc,Tbg_l
 
  omega = sqrt(G*star_m/r**3)
  if (lumdisc_setup) then
-    cs = get_cs_from_lum(L_lumdisc,r,Tbg_lumdisc,5./3.)
+    cs = get_cs_from_lum(L_lumdisc,r,Tbg_lumdisc,5./3.,q_index)
  else
     cs    = cs_func(cs0,r,q_index)
  endif
@@ -1136,11 +1136,11 @@ subroutine write_discinfo(iunit,R_in,R_out,R_ref,Q,npart,sigmaprofile, &
  if (itype == igas) call write_inopt(cs0,'cs0','sound speed at R=1',iunit)
 
  if (itype == igas .and. lumdisc_setup) then
-    T0 = get_T_from_lum(L_lumdisc,R_in,Tbg_lumdisc)
+    T0 = get_T_from_lum(L_lumdisc,R_in,Tbg_lumdisc,q_index)
     call write_inopt(T0,'T_in','temperature (K) at R=R_in',iunit)
-    T_ref = get_T_from_lum(L_lumdisc,R_ref,Tbg_lumdisc)
+    T_ref = get_T_from_lum(L_lumdisc,R_ref,Tbg_lumdisc,q_index)
     call write_inopt(T_ref,'T_ref','temperature (K) at R=R_ref',iunit)
-    T0 = get_T_from_lum(L_lumdisc,R_out,Tbg_lumdisc)
+    T0 = get_T_from_lum(L_lumdisc,R_out,Tbg_lumdisc,q_index)
     call write_inopt(T0,'T_out','temperature (K) at R=R_out',iunit)
  elseif (itype == igas) then
     T0 = (cs_func(cs0,R_in,q_index)*unit_velocity)**2*gmw/kb_on_mh
@@ -1488,35 +1488,36 @@ function m_to_f(ecc,M) result(F)
 
 end function m_to_f
 
-pure real function get_cs_from_lum(L_star,r,T_bg,gamma)
+pure real function get_cs_from_lum(L_star,r,T_bg,gamma,q_index)
  use physcon, only:kb_on_mh,steboltz,solarl,fourpi
  use units,   only:udist,unit_velocity
- real, intent(in) :: L_star,r,T_bg,gamma
+ real, intent(in) :: L_star,r,T_bg,gamma,q_index
  real :: mu
 
  mu = 2.381 !mean molecular mass
+ ! T^4 ∝ r^(-8*q_index) gives T ∝ r^(-2*q_index); q_index=0.25 reproduces the old T ∝ r^(-0.5)
  get_cs_from_lum = sqrt(gamma*kb_on_mh/mu) * ( (L_star*solarl/fourpi/steboltz) / &
-               (r*udist)**2 + T_bg**4)**0.125
+               udist**2 * r**(-8.*q_index) + T_bg**4)**0.125
  get_cs_from_lum = get_cs_from_lum/unit_velocity
 end function get_cs_from_lum
 
-real function get_T_from_lum(L_star,r,T_bg)
+real function get_T_from_lum(L_star,r,T_bg,q_index)
  use physcon, only:steboltz,solarl,fourpi
  use units,   only:udist
- real, intent(in) :: L_star,r,T_bg
+ real, intent(in) :: L_star,r,T_bg,q_index
  real :: Tfourth
- Tfourth = L_star*solarl/fourpi/steboltz/(r*udist)**2 + T_bg**4
+ Tfourth = L_star*solarl/fourpi/steboltz/udist**2 * r**(-8.*q_index) + T_bg**4
  get_T_from_lum = Tfourth**0.25
 end function get_T_from_lum
 
-real function get_u_stamatellos(L_star,r,T_bg,hsmooth,particle_mass,hfact)
+real function get_u_stamatellos(L_star,r,T_bg,hsmooth,particle_mass,hfact,q_index)
  use eos_stamatellos, only:getintenerg_opdep
  use physcon, only:steboltz,solarl,fourpi
- use units,   only:unit_ergg,unit_density
- real, intent(in) :: L_star,r,T_bg,hsmooth,particle_mass,hfact
+ use units,   only:udist,unit_ergg,unit_density
+ real, intent(in) :: L_star,r,T_bg,hsmooth,particle_mass,hfact,q_index
  real :: temperature,rho,u
  rho = particle_mass * (hfact/hsmooth)**3 * unit_density
- temperature = (L_star*solarl/fourpi/steboltz /(r*udist)**2) + T_bg**4
+ temperature = (L_star*solarl/fourpi/steboltz /udist**2 * r**(-8.*q_index)) + T_bg**4
  temperature = temperature**0.25
  call getintenerg_opdep(temperature,rho,u)
  get_u_stamatellos = u/unit_ergg

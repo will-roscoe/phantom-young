@@ -731,7 +731,7 @@ subroutine equation_of_state(gamma)
           print *, "We can't set up multiple radapprox discs yet :,("
           stop
        else
-          cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma) / rpiontwo
+          cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma,qindex(1)) / rpiontwo
           H_R(1) = cs * R_ref(1)**0.5 / sqrt(m1) ! single central star, G=1
        endif
     else
