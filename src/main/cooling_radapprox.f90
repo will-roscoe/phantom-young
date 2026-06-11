@@ -109,7 +109,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  use units,    only:umass,udist,unit_density,unit_ergg,utime,unit_pressure
  use eos_stamatellos, only:getopac_opdep,getintenerg_opdep,gradP_cool,&
       ttherm_store,ueqi_store,tau_store,du_store
- use eos_stamatellos, only:Gpot_cool,duFLD,doFLD
+ use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,qprofile
  use part,       only:xyzmh_ptmass,igas,eos_vars,iTemp
  integer, intent(in) :: i
  real, intent(in) :: xi,yi,zi,rhoi
@@ -118,7 +118,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  real            :: gmwi,Tmini4,Ti,dudti_rad,Teqi,HLom,du_tot
  real            :: opaci,ueqi,umini,tthermi,presi,Hcomb
  real            :: cs2,Om2,Hmod2,rhoi_cgs,ui_cgs
- real            :: Hstam,poti,du_FLDi
+ real            :: Hstam,poti,du_FLDi,q_eff
 
  coldensi = huge(coldensi)
  poti = Gpot_cool(i)
@@ -183,8 +183,12 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
     
 !    Tfloor is from input parameters and is background heating
 !    Stellar heating
+!    q_eff sets the radial slope T ∝ r^(-2*q_eff) of the irradiation floor to match the disc setup
+!    (qprofile=0 -> default q_eff=0.25 -> T ∝ r^(-0.5); same merge rule as setup qindex)
+ q_eff = 0.25
+ if (qprofile > 0.) q_eff = qprofile
  if (isink_star > 0 .and. Lstar > 0.) then
-    Tmini4 = Tfloor**4 + exp(-coldensi*kappaBari)*(Lstar*solarl/(16.*pi*steboltz*ri2*udist*udist))
+    Tmini4 = Tfloor**4 + exp(-coldensi*kappaBari)*(Lstar*solarl/(16.*pi*steboltz*udist*udist) * ri2**(-4.*q_eff))
  else
     Tmini4 = Tfloor**4
  endif
@@ -234,7 +238,7 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,qprofile
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
@@ -243,11 +247,13 @@ subroutine write_options_cooling_radapprox(iunit)
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
  call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
+ call write_inopt(qprofile,'qprofile',&
+      'q index for T profile (lumdisc=1): 0=standard qindex=0.25, otherwise use specified qindex',iunit)
 end subroutine write_options_cooling_radapprox
 
 subroutine read_options_cooling_radapprox(db,nerr)
  use io,              only:fatal
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,qprofile
  use infile_utils,    only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
@@ -258,6 +264,7 @@ subroutine read_options_cooling_radapprox(db,nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
  call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=1,default=1)
+ call read_inopt(qprofile,'qprofile',db,errcount=nerr,min=0.,default=0.)
 
  if (ieosread /= 24) call fatal('ieosread','For icooling=9, you need ieos=24')
 

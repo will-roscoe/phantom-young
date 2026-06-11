@@ -731,7 +731,7 @@ subroutine equation_of_state(gamma)
           print *, "We can't set up multiple radapprox discs yet :,("
           stop
        else
-          cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma) / rpiontwo
+          cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma,qindex(1)) / rpiontwo
           H_R(1) = cs * R_ref(1)**0.5 / sqrt(m1) ! single central star, G=1
        endif
     else
@@ -2215,6 +2215,8 @@ subroutine setup_interactive(id)
  use sethierarchical,  only:set_hierarchical_default_options,get_hier_level_mass
  use sethierarchical,  only:hs,hierarchy,print_chess_logo,generate_hierarchy_string
  use sethier_utils,    only:findloc_local
+ use eos_stamatellos,  only:qprofile
+ use setunits,         only:mass_unit
 
  integer, intent(in) :: id
  integer :: i
@@ -2481,10 +2483,22 @@ subroutine setup_interactive(id)
           endif
           if (lumdisc > 0) then
              !get luminosity ...
+             select case(trim(mass_unit))
+             case('jupiterm')
+                L_star(1) = get_Lstar_from_mass(m1 * jupiterm/solarm)
+             case('earthm')
+                L_star(1) = get_Lstar_from_mass(m1 * earthm/solarm)
+             case default  ! 'solarm' or unrecognised
+                L_star(1) = get_Lstar_from_mass(m1)
+             end select
              call prompt("Enter the luminosity of star",L_star(1))
              call prompt("Enter the background temperature e.g. 10 (K)", T_bg)
-             qindex(1) = 0.25
-             qindex = 0.25
+             if (qprofile > 0.) then
+                qindex(1) = qprofile
+             else
+                qindex(1) = 0.25
+             endif
+             qindex = qindex(1)
           else
              call prompt('Enter q_index',qindex(1))
              qindex=qindex(1)
@@ -2695,7 +2709,7 @@ subroutine write_setupfile(filename)
  use sethierarchical,  only:write_hierarchical_setupfile,hs
  use setorbit,         only:write_options_orbit
  use setunits,         only:write_options_units
- use eos_stamatellos, only:eos_file
+ use eos_stamatellos, only:eos_file,qprofile
  character(len=*), intent(in) :: filename
  logical            :: done_alpha
  integer            :: i,j,n_possible_discs,iunit
@@ -2965,6 +2979,7 @@ subroutine write_setupfile(filename)
        if (lumdisc > 0) then
           call write_inopt(L_star(i),'L_star'//trim(disclabel),'Stellar luminosity (Lsun)',iunit)
           call write_inopt(T_bg,'T_bg'//trim(disclabel),'background Temperature (K)',iunit)
+          call write_inopt(qprofile,'qprofile','q index override: 0=default qindex=0.25, otherwise use specified qindex',iunit)
        endif
        call write_inopt(pindex(i),'pindex'//trim(disclabel),'power law index of surface density sig=sig0*r^-p',iunit)
        if (lumdisc == 0) then
@@ -3129,6 +3144,7 @@ subroutine read_setupfile(filename,ierr)
  use sethierarchical,  only:read_hierarchical_setupfile,hs
  use setorbit,         only:read_options_orbit
  use setunits,         only:read_options_and_set_units
+ use eos_stamatellos,  only:qprofile
  character(len=*), intent(in)  :: filename
  integer,          intent(out) :: ierr
 
@@ -3267,6 +3283,8 @@ subroutine read_setupfile(filename,ierr)
 
  call read_inopt(discstrat,'discstrat',db,errcount=nerr)
  call read_inopt(lumdisc,'lumdisc',db,default=0)
+ call read_inopt(qprofile,'qprofile',db,errcount=nerr,min=0.,default=0.)
+ if (lumdisc > 0 .and. qprofile > 0.) qindex = qprofile
 
  if (discstrat==1) then
     call read_inopt(istrat,'istrat',db,errcount=nerr)
@@ -3783,5 +3801,31 @@ subroutine get_hier_disc_label(i, disclabel)
  endif
 
 end subroutine get_hier_disc_label
+
+!--------------------------------------------------------------------
+! Estimate stellar luminosity from mass via piecewise M-L relation.
+! Ref: Eker et al. / Wikipedia "Mass-luminosity relation: Advanced forms"
+!   M < 0.43:       L = 0.23 * M^2.3
+!   0.43 <= M < 2:  L = M^4
+!   2 <= M < 55:    L = 1.4 * M^3.5
+!   M >= 55:        L = 32000 * M
+! (M in solar masses, L in solar luminosities)
+!--------------------------------------------------------------------
+real function get_Lstar_from_mass(mass_solar)
+ real, intent(in) :: mass_solar
+ real :: m
+
+ m = max(mass_solar, 1.e-10) ! guard against zero/negative mass
+ if (m < 0.43) then
+    get_Lstar_from_mass = 0.23 * m**2.3
+ elseif (m < 2.) then
+    get_Lstar_from_mass = m**4
+ elseif (m < 55.) then
+    get_Lstar_from_mass = 1.4 * m**3.5
+ else
+    get_Lstar_from_mass = 32000. * m
+ endif
+
+end function get_Lstar_from_mass
 
 end module setup
