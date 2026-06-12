@@ -42,6 +42,7 @@ subroutine test_massloading(ntests, npass)
  call test_options_io(ntests, npass)
  call test_headeropts_io(ntests, npass)
  call test_set_r_ref(ntests, npass)
+ call test_first_substep_init(ntests, npass)
 end subroutine test_massloading
 
 !---------------------------------------------------------------------------
@@ -674,5 +675,61 @@ subroutine test_set_r_ref(ntests, npass)
 
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_set_r_ref
+
+!---------------------------------------------------------------------------
+! test_first_substep_init
+!   Regression for the first-interval t_orb gap.  On a fresh (or restarted)
+!   run the first sub-steps occur with istepfrac < 2**nbinmax while t_orb is
+!   still at its 0 default, because update_t_orb used to be invoked only at
+!   sync points (istepfrac == 2**nbinmax).  apply_partmass_* then early-
+!   returned on t_orb<=0 for the whole first dtmax interval, freezing
+!   massoftype(igas) and emitting no [mass_loading] output.  The fix makes
+!   step_mass_loading also derive t_orb on any call where it is still <=0, so
+!   loading is active from the very first sub-step.
+!
+!   This case is exercised off-sync (istepfrac=1, nbinmax=4 -> 2**4=16): the
+!   pre-fix gate would NOT enter the update block under individual timesteps,
+!   leaving t_orb=0 and the mass unchanged.  Post-fix the mass advances to the
+!   exact direct-evaluation value regardless of the build's ind_timesteps.
+!---------------------------------------------------------------------------
+subroutine test_first_substep_init(ntests, npass)
+ use part,      only: massoftype, npartoftypetot, igas, nptmass, xyzmh_ptmass
+ use io,        only: id, master
+ use testutils, only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ integer  :: nfailed(2)
+ real     :: mp_saved, m_expected, t_orb_expected
+ real, parameter :: tol = 1.e-5
+
+ if (id == master) write(*,"(a)") '  --> first sub-step t_orb-init regression'
+ nfailed(:) = 0
+
+ ! calc_torb (Kepler) path with a sink present so t_orb resolves to a finite
+ ! positive value when derived: t_orb = 2*pi*r_orb^1.5 / sqrt(M_star).
+ call reset_massloading()
+ massoftype(igas)     = 1.e-4
+ npartoftypetot(igas) = 1000
+ nptmass = 1
+ xyzmh_ptmass(:,:)  = 0.
+ xyzmh_ptmass(4,1)  = 4.0
+ r_orb = 1.0
+ iload_factor = 0;  iload = 0.1;  iload_dt = -1.
+ dm_load = 0.;  mloadfactor = 0.
+ call init_massloading()
+ t_init = 0.
+ t_orb  = 0.   ! reset_massloading does not clear t_orb; force the fresh-start sentinel
+
+ mp_saved       = massoftype(igas)
+ t_orb_expected = 2. * acos(-1.) * r_orb**1.5 / sqrt(xyzmh_ptmass(4,1))
+ m_expected     = mp_saved + dm_load * 0.5 / (t_orb_expected * real(npartoftypetot(igas)))
+
+ ! off-sync first sub-step: time=0.5, dt=0.5, dtmax=10, istepfrac=1, nbinmax=4
+ call step_mass_loading(0.5, 0.5, 10.0, 1, 4_1)
+
+ call checkval(t_orb,            t_orb_expected, tol, nfailed(1), 'first sub-step: t_orb derived off-sync')
+ call checkval(massoftype(igas), m_expected,     tol, nfailed(2), 'first sub-step: mass advances off-sync')
+
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_first_substep_init
 
 end module testmassloading
