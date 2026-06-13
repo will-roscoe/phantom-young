@@ -275,7 +275,7 @@ contains
       m_old            = massoftype(igas)
       massoftype(igas) = m_p0 + dm_load * (time - t_init) / (t_orb * real(n_p0))
 
-      if (  id == master .and. iverbose >= 2  ) then
+      if (  id == master .and. iverbose >= 1  ) then
          write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
             '[mass_loading] t=', time, &
             '  dm/m=', (massoftype(igas) - m_old) / m_old, &
@@ -310,7 +310,7 @@ contains
       m_old            = massoftype(igas)
       massoftype(igas) = m_p0 * exp(log(1. + mloadfactor) * (time - t_init) / t_orb)
 
-      if (  id == master .and. iverbose >= 2  ) then
+      if (  id == master .and. iverbose >= 1  ) then
          write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
             '[mass_loading] t=', time, &
             '  dm/m=', (massoftype(igas) - m_old) / m_old, &
@@ -322,8 +322,14 @@ contains
    !-----------------------------------------------------------------------
    !+
    !   Public entry point called from evol_prestep each substep.
-   !   Lazy-initialises on first call, then at each sync point refreshes
-   !   r_orb and t_orb before applying the per-particle mass increment.
+   !   Lazy-initialises on first call, then refreshes r_orb and t_orb before
+   !   applying the per-particle mass increment.  The refresh fires at each
+   !   sync point and, in addition, on any call where t_orb has not yet been
+   !   derived (t_orb<=0).  That extra condition covers the first dtmax
+   !   interval of a fresh or restarted run: no sync point has occurred yet,
+   !   but loading must already be active.  Without it the first interval
+   !   (and each restart's first interval, since t_orb is not persisted in the
+   !   dump header) would silently apply no loading at all.
    !+
    !-----------------------------------------------------------------------
    subroutine step_mass_loading(time, dt, dtmax, istepfrac, nbinmax)
@@ -337,7 +343,7 @@ contains
       endif
       if ( (  iload_factor < 0  ) .or. (  .not. dofrac_load .and. dm_load == 0.  ) .or. (  dofrac_load .and. mloadfactor == 0.  )  ) return
   
-      if (  .not. ind_timesteps .or. istepfrac == 2**nbinmax  ) then
+      if (  .not. ind_timesteps .or. istepfrac == 2**nbinmax .or. t_orb <= 0.  ) then
          call update_r_orb()
          call update_t_orb(time, dtmax)
       endif
