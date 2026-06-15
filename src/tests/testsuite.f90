@@ -54,6 +54,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  use testexternf,  only:test_externf
  use testindtstep, only:test_indtstep
  use testmassloading, only:test_massloading
+ use teststopcond, only:test_stopcond
  use testrwdump,   only:test_rwdump
  use testsetdisc,  only:test_setdisc
  use testsetstar,  only:test_setstar
@@ -83,7 +84,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  logical :: dosetdisc,dosetstar,doeos,docooling,dodust,donimhd,docorotate,doany,dogrowth
  logical :: dogr,doradiation,dopart,dopoly,dompi,dohier,dodamp,dowind
  logical :: doiorig,doapr,dounits,dolum,dosinktree,doorbits,dolinalg
- logical :: domassloading
+ logical :: domassloading,dostopcond
  real(kind=4) :: twall1,tcpu1,twall2,tcpu2
 
  call summary_initialise
@@ -144,6 +145,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  doorbits    = .false.
  dolinalg    = .false.
  domassloading = .false.
+ dostopcond  = .false.
 
  if (index(string,'deriv')     /= 0) doderivs    = .true.
  if (index(string,'grav')      /= 0) dogravity   = .true.
@@ -199,6 +201,8 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     doindtstep = .true.
  case('massloading','massload')
     domassloading = .true.
+ case('stopcond','stop')
+    dostopcond = .true.
  case('gravity','grav','plummer','hernquist','fmm','taylorseries','directsum','plotplummer')
     dogravity = .true.
  case('dump','rwdump','dumprw')
@@ -360,6 +364,13 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
 !
  if (domassloading.or.testall) then
     call test_massloading(ntests,npass)
+    call set_default_options_testsuite(iverbose) ! restore defaults
+ endif
+!
+!--test of stop-condition module
+!
+ if (dostopcond.or.testall) then
+    call test_stopcond(ntests,npass)
     call set_default_options_testsuite(iverbose) ! restore defaults
  endif
 !
