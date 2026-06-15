@@ -71,7 +71,8 @@ contains
          stopcond_triggered = .true.
       else
          if (iverbose > 1 .and. id==master) then 
-            write("max created sinks > current. stop condition not met.")
+            write(iprint,"(a)") & 
+               'max created sinks > current. stop condition not met.'
          endif
       endif
 
