@@ -54,7 +54,7 @@ contains
    !+
    !----------------------------------------------------------------
    subroutine check_stopcond(nptmass, fulldump)
-      use io, only:iprint,id,master
+      use io, only:iprint,id,master,iverbose
       integer, intent(in)    :: nptmass
       logical, intent(inout) :: fulldump
 
