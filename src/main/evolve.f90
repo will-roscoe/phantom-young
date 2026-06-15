@@ -52,7 +52,8 @@ contains
 subroutine evol_init(time,dtmax,rhomaxnow,dt)
  use io,             only:iprint
  use checkconserved, only:init_conservation_checks
- use part,           only:npart
+ use part,           only:npart,nptmass
+ use stopcond,       only:init_stopcond
  use ptmass,         only:set_integration_precision
  use step_lf_global, only:init_step
  use timestep,       only:dtinject,dtrad
@@ -69,6 +70,7 @@ subroutine evol_init(time,dtmax,rhomaxnow,dt)
 
  call init_conservation_checks()
  call init_counters(time,dtmax) ! set istepfrac to 0 as well as tprint and noutput
+ call init_stopcond(nptmass)
  !
  ! Set substepping integration precision depending on the system (default is FSI)
  !
@@ -274,6 +276,7 @@ subroutine evol_poststep(infile,logfile,evfile,dumpfile,time,t1,tcpu1,dt,dtmax,n
  use evolve_utils,  only:update_time_and_dt,write_ev_files,check_and_write_dump,print_log
  use forcing,       only:correct_bulk_motion
  use io_control,    only:nout,nmaxdumps,twallmax,nfulldump
+ use stopcond,      only:stopcond_triggered
  use io_summary,    only:iosum_nreal,summary_counter,summary_printout,summary_printnow
  use part,          only:npart,nptmass,ntot
 #ifdef MASS_LOADING
@@ -355,6 +358,13 @@ subroutine evol_poststep(infile,logfile,evfile,dumpfile,time,t1,tcpu1,dt,dtmax,n
 
     if (nmaxdumps > 0 .and. ncount_fulldumps >= nmaxdumps) then
        if (id==master) write(iprint,"(a)") '>> reached maximum number of full dumps as specified in input file, stopping...'
+       abortrun = .true.
+       return
+    endif
+
+    if (stopcond_triggered) then
+       if (id==master) write(iprint,"(a)") &
+          '>> reached max created sinks as specified in input file, stopping...'
        abortrun = .true.
        return
     endif
