@@ -36,40 +36,106 @@ module stopcond
 
 contains
 
+!----------------------------------------------------------------
+!+
+!  capture the t=0 sink count baseline (once), reset trigger.
+!  On restart nptmass0 has already been restored from the dump
+!  header, so it is left untouched (only captured when < 0).
+!+
+!----------------------------------------------------------------
 subroutine init_stopcond(nptmass)
  integer, intent(in) :: nptmass
- ! STUB
+
+ if (nptmass0 < 0) nptmass0 = nptmass
+ stopcond_triggered = .false.
+
 end subroutine init_stopcond
 
+!----------------------------------------------------------------
+!+
+!  evaluate the stop condition at a dump-write point.
+!  If tripped, promote the dump to a full dump and flag the run
+!  to stop. No-op when disabled (max_created_sinks < 0) or before
+!  the baseline has been captured.
+!+
+!----------------------------------------------------------------
 subroutine check_stopcond(nptmass, fulldump)
+ use io, only:iprint,id,master
  integer, intent(in)    :: nptmass
  logical, intent(inout) :: fulldump
- ! STUB
+
+ if (max_created_sinks < 0) return     ! feature off
+ if (nptmass0 < 0) return              ! baseline not yet captured
+
+ if ((nptmass - nptmass0) > max_created_sinks) then
+    if (.not.stopcond_triggered .and. id==master) then
+       write(iprint,"(1x,a,i0,a)") &
+          '>> MAX CREATED SINKS REACHED (',nptmass-nptmass0, &
+          ' formed); PROMOTING DUMP TO FULL DUMP AND STOPPING...'
+    endif
+    fulldump = .true.
+    stopcond_triggered = .true.
+ endif
+
 end subroutine check_stopcond
 
+!----------------------------------------------------------------
+!+
+!  write stop-condition options to the .in file
+!+
+!----------------------------------------------------------------
 subroutine write_options_stopcond(iunit)
+ use infile_utils, only:write_inopt
  integer, intent(in) :: iunit
- ! STUB
+
+ call write_inopt(max_created_sinks,'max_created_sinks', &
+    'stop after this many sinks form since t=0 (-1=off)',iunit)
+
 end subroutine write_options_stopcond
 
+!----------------------------------------------------------------
+!+
+!  read stop-condition options from the .in file
+!+
+!----------------------------------------------------------------
 subroutine read_options_stopcond(db, nerr)
- use infile_utils, only:inopts
+ use infile_utils, only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
- ! STUB
+
+ call read_inopt(max_created_sinks,'max_created_sinks',db,errcount=nerr,min=-1)
+
 end subroutine read_options_stopcond
 
+!----------------------------------------------------------------
+!+
+!  persist the t=0 baseline in the dump header
+!+
+!----------------------------------------------------------------
 subroutine write_headeropts_stopcond(hdr, ierr)
- use dump_utils, only:dump_h
+ use dump_utils, only:dump_h,add_to_iheader
  type(dump_h), intent(inout) :: hdr
  integer,      intent(inout) :: ierr
- ! STUB
+
+ call add_to_iheader(nptmass0,'nptmass0',hdr,ierr)
+
 end subroutine write_headeropts_stopcond
 
+!----------------------------------------------------------------
+!+
+!  restore the t=0 baseline from the dump header; silently keeps
+!  the module default (-1) for dumps written before this feature
+!+
+!----------------------------------------------------------------
 subroutine read_headeropts_stopcond(hdr)
- use dump_utils, only:dump_h
+ use dump_utils, only:dump_h,extract
  type(dump_h), intent(in) :: hdr
- ! STUB
+ integer :: ival,ierr
+
+ ierr = 0
+ call extract('nptmass0',ival,hdr,ierr,default=-1)
+ if (ierr == 0) nptmass0 = ival
+
 end subroutine read_headeropts_stopcond
 
 end module stopcond
