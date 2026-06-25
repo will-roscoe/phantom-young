@@ -458,6 +458,8 @@ contains
       call write_inopt(iload,   'iload',   'loading factor: chi / xi / beta', iunit)
       call write_inopt(iload_dt,'iload_dt', &
          'loading interval [code units]; <=0 = orbital period', iunit)
+      call write_inopt(R_load,'R_load', &
+         'radius for orbital-period loading [code units]; <0 = use disc R_ref', iunit)
    end subroutine write_options_massloading_setup
 
    subroutine read_options_massloading_setup(db, nerr)
@@ -484,10 +486,17 @@ contains
       call read_inopt(iload,        'iload',        db, errcount=nerr)
       call read_inopt(iload_dt,     'iload_dt',     db, errcount=nerr)
 
+      ! R_load: explicit loading-radius override (optional)
+      ierr = 0
+      call read_inopt(R_load, 'R_load', db, err=ierr)
+
       ! pick up R_ref from setup db so orbital-period loading works without .in edit
       ierr = 0
       call read_inopt(r_ref_tmp, 'R_ref', db, err=ierr, min=0.)
-      if (  ierr == 0 .and. r_ref_tmp > 0.  ) then 
+      ! resolve r_orb by precedence: R_load (>=0) wins, else R_ref
+      if (  R_load >= 0.  ) then
+         r_orb = R_load
+      else if (  ierr == 0 .and. r_ref_tmp > 0.  ) then
          r_orb = r_ref_tmp
       endif
    end subroutine read_options_massloading_setup

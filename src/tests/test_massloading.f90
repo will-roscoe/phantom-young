@@ -558,7 +558,7 @@ subroutine test_options_io(ntests, npass)
  use testutils,    only: checkval, update_test_scores
  integer, intent(inout) :: ntests, npass
  type(inopts), allocatable :: db(:)
- integer :: nfailed(8), ierr, nerr, lu
+ integer :: nfailed(9), ierr, nerr, lu
  character(len=*), parameter :: fname = 'test_massloading_opts.tmp'
  real, parameter :: tol = 1.e-5
 
@@ -599,6 +599,21 @@ subroutine test_options_io(ntests, npass)
  call close_db(db)
  call checkval(iload_factor, 2,    0,   nfailed(6), 'setup options: iload_factor round-trips')
  call checkval(r_orb,        50.0, tol, nfailed(7), 'setup options: r_orb picked up from R_ref entry')
+
+ ! --- setup options: R_load (=33) overrides R_ref (=50) ---
+ call reset_massloading()
+ iload_factor = 2;  iload = 0.08;  iload_dt = -1.;  r_orb = 1.0;  R_load = 33.0
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_options_massloading_setup(lu)
+ call write_inopt(50.0, 'R_ref', 'reference radius', lu)
+ close(lu)
+
+ r_orb = -99.;  R_load = -99.
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading_setup(db, nerr)
+ call close_db(db)
+ call checkval(r_orb, 33.0, tol, nfailed(9), 'setup options: R_load overrides R_ref')
 
  ! clean up temp file: open_db_from_file already closed unit 78, so
  ! reopen+delete to remove it from disk
