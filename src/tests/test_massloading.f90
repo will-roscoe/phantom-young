@@ -13,7 +13,7 @@ module testmassloading
 !
  use mass_loading, only: iload_factor, iload, iload_dt,                  &
                          dm_load, mloadfactor, r_orb, t_orb,             &
-                         t_init,                                          &
+                         t_init, R_load,                                  &
                          init_massloading, step_mass_loading,             &
                          log_massloading,                                 &
                          write_options_massloading, read_options_massloading,       &
@@ -41,6 +41,8 @@ subroutine test_massloading(ntests, npass)
  call test_log_massloading(ntests, npass)
  call test_options_io(ntests, npass)
  call test_headeropts_io(ntests, npass)
+ call test_rload_precedence(ntests, npass)
+ call test_headeropts_legacy(ntests, npass)
  call test_set_r_ref(ntests, npass)
  call test_first_substep_init(ntests, npass)
 end subroutine test_massloading
@@ -557,7 +559,7 @@ subroutine test_options_io(ntests, npass)
  use testutils,    only: checkval, update_test_scores
  integer, intent(inout) :: ntests, npass
  type(inopts), allocatable :: db(:)
- integer :: nfailed(7), ierr, nerr, lu
+ integer :: nfailed(9), ierr, nerr, lu
  character(len=*), parameter :: fname = 'test_massloading_opts.tmp'
  real, parameter :: tol = 1.e-5
 
@@ -566,12 +568,12 @@ subroutine test_options_io(ntests, npass)
 
  ! --- runtime (.in) options round-trip ---
  call reset_massloading()
- iload_factor = 1;  iload = 0.025;  iload_dt = 3.5
+ iload_factor = 1;  iload = 0.025;  iload_dt = 3.5;  R_load = 7.5
  open(newunit=lu, file=fname, status='replace', form='formatted')
  call write_options_massloading(lu)
  close(lu)
 
- iload_factor = -99;  iload = -99.;  iload_dt = -99.   ! clobber before reading back
+ iload_factor = -99;  iload = -99.;  iload_dt = -99.;  R_load = -99.   ! clobber before reading back
  nerr = 0
  call open_db_from_file(db, fname, 78, ierr)
  call checkval(ierr, 0, 0, nfailed(1), 'options: db opened from written .in file')
@@ -581,6 +583,7 @@ subroutine test_options_io(ntests, npass)
  call checkval(iload,        0.025, tol, nfailed(3), 'options: iload round-trips')
  call checkval(iload_dt,     3.5,   tol, nfailed(4), 'options: iload_dt round-trips')
  call checkval(nerr,         0,     0,   nfailed(5), 'options: no read errors reported')
+ call checkval(R_load,       7.5,   tol, nfailed(8), 'options: R_load round-trips')
 
  ! --- setup (.setup) options round-trip, including R_ref pickup ---
  call reset_massloading()
@@ -598,6 +601,21 @@ subroutine test_options_io(ntests, npass)
  call checkval(iload_factor, 2,    0,   nfailed(6), 'setup options: iload_factor round-trips')
  call checkval(r_orb,        50.0, tol, nfailed(7), 'setup options: r_orb picked up from R_ref entry')
 
+ ! --- setup options: R_load (=33) overrides R_ref (=50) ---
+ call reset_massloading()
+ iload_factor = 2;  iload = 0.08;  iload_dt = -1.;  r_orb = 1.0;  R_load = 33.0
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_options_massloading_setup(lu)
+ call write_inopt(50.0, 'R_ref', 'reference radius', lu)
+ close(lu)
+
+ r_orb = -99.;  R_load = -99.
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading_setup(db, nerr)
+ call close_db(db)
+ call checkval(r_orb, 33.0, tol, nfailed(9), 'setup options: R_load overrides R_ref')
+
  ! clean up temp file: open_db_from_file already closed unit 78, so
  ! reopen+delete to remove it from disk
  open(newunit=lu, file=fname, status='old', form='formatted')
@@ -614,12 +632,13 @@ end subroutine test_options_io
 !   loading is switched off (fields left untouched).
 !---------------------------------------------------------------------------
 subroutine test_headeropts_io(ntests, npass)
- use dump_utils, only: dump_h, allocate_header, free_header
+ use dump_utils, only: dump_h, allocate_header, free_header, extract
  use io,         only: id, master
  use testutils,  only: checkval, update_test_scores
  integer, intent(inout) :: ntests, npass
  type(dump_h) :: hdr
- integer :: nfailed(6), ierr
+ integer :: nfailed(7), ierr
+ real    :: rload_chk
  real, parameter :: tol = 1.e-5
 
  if (id == master) write(*,"(a)") '  --> dump-header I/O round-trip tests'
@@ -628,11 +647,15 @@ subroutine test_headeropts_io(ntests, npass)
  ! --- write + read round-trip when loading is active ---
  call reset_massloading()
  iload_factor = 1
- dm_load = 4.2e-7;  r_orb = 12.5;  t_init = 3.3
+ dm_load = 4.2e-7;  r_orb = 12.5;  t_init = 3.3;  R_load = -1.
  hdr  = allocate_header(nreal=10)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
  call checkval(ierr, 0, 0, nfailed(1), 'header write: no error')
+
+ ! R_load is provenance-only (written, never read back): verify it was written
+ ierr = 0;  call extract('R_load', rload_chk, hdr, ierr)
+ call checkval(rload_chk, -1., tol, nfailed(7), 'header write: R_load persisted (provenance)')
 
  dm_load = -1.;  r_orb = -1.;  t_init = -1.   ! clobber before reading back
  call read_headeropts_massloading(hdr)
@@ -650,6 +673,137 @@ subroutine test_headeropts_io(ntests, npass)
  call free_header(hdr)
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_headeropts_io
+
+!---------------------------------------------------------------------------
+! test_headeropts_legacy
+!   A pre-R_load dump header has no 'R_load' key. read_headeropts must NOT
+!   touch R_load (it is provenance-only, never read back) and r_orb must fall
+!   back to the header value. Builds a legacy-style header directly with
+!   add_to_rheader (NOT write_headeropts_massloading, which writes R_load).
+!---------------------------------------------------------------------------
+subroutine test_headeropts_legacy(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header, add_to_rheader
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(2), ierr
+ real, parameter :: tol = 1.e-5
+
+ if (id == master) write(*,"(a)") '  --> legacy dump-header (no R_load key) test'
+ nfailed(:) = 0
+
+ ! build a pre-R_load header: legacy fields present, NO R_load key
+ call reset_massloading()
+ iload_factor = 1
+ hdr  = allocate_header(nreal=10)
+ ierr = 0
+ call add_to_rheader(4.2e-7, 'dm_load',     hdr, ierr)
+ call add_to_rheader(12.5,   'r_orb',       hdr, ierr)
+ call add_to_rheader(0.,     'mload_mp0',   hdr, ierr)
+ call add_to_rheader(3.3,    'mload_tinit', hdr, ierr)
+
+ ! no .in read and no R_load key in header: R_load must keep its clobbered
+ ! value (never read back), r_orb must fall back to the header value
+ R_load = -77.;  r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(R_load, -77., tol, nfailed(1), 'legacy header: R_load untouched (provenance-only)')
+ call checkval(r_orb,  12.5, tol, nfailed(2), 'legacy header: r_orb falls back to header value')
+
+ call free_header(hdr)
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_headeropts_legacy
+
+!---------------------------------------------------------------------------
+! test_rload_precedence
+!   Verifies r_orb resolution finalised in read_headeropts:
+!     1. a live .in R_load (>=0) overrides
+!     2. a stray 'R_ref' in the .in is ignored (R_ref is not a .in key; it
+!        lives in .setup/.discparams), so r_orb falls back to the header
+!     3. with neither key, r_orb falls back to the header (seeded from R_ref
+!        at phantomsetup)
+!   Each case drives the real .in read (read_options_massloading) then the
+!   dump-header read (read_headeropts_massloading), mirroring startup order.
+!---------------------------------------------------------------------------
+subroutine test_rload_precedence(ntests, npass)
+ use infile_utils, only: inopts, open_db_from_file, close_db, write_inopt
+ use dump_utils,   only: dump_h, allocate_header, free_header
+ use io,           only: id, master
+ use testutils,    only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(inopts), allocatable :: db(:)
+ type(dump_h) :: hdr
+ integer :: nfailed(3), ierr, nerr, lu
+ character(len=*), parameter :: fname = 'test_massloading_prec.tmp'
+ real, parameter :: tol = 1.e-5
+
+ if (id == master) write(*,"(a)") '  --> r_orb precedence tests'
+ nfailed(:) = 0
+
+ ! seed a dump header with r_orb = 99 (set R_load = -1 in header so it is inert)
+ call reset_massloading()
+ iload_factor = 1;  r_orb = 99.;  R_load = -1.
+ hdr = allocate_header(nreal=10)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+
+ ! --- case 1: a live .in R_load (=15) overrides the header r_orb (=99) ---
+ call reset_massloading()
+ iload_factor = 1
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_inopt(1,    'iload_factor', 'mode',           lu)
+ call write_inopt(0.,   'iload',        'factor',         lu)
+ call write_inopt(-1.,  'iload_dt',     'interval',       lu)
+ call write_inopt(15.0, 'R_load',       'loading radius', lu)
+ close(lu)
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading(db, nerr)
+ call close_db(db)
+ r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(r_orb, 15.0, tol, nfailed(1), 'precedence: .in R_load wins')
+
+ ! --- case 2: a stray 'R_ref' in the .in is IGNORED (R_ref is not a .in key);
+ !     with R_load<0, r_orb falls back to the header value (=99) ---
+ call reset_massloading()
+ iload_factor = 1
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_inopt(1,    'iload_factor', 'mode',             lu)
+ call write_inopt(0.,   'iload',        'factor',           lu)
+ call write_inopt(-1.,  'iload_dt',     'interval',         lu)
+ call write_inopt(-1.0, 'R_load',       'loading radius',   lu)
+ call write_inopt(50.0, 'R_ref',        'reference radius', lu)
+ close(lu)
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading(db, nerr)
+ call close_db(db)
+ r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(r_orb, 99.0, tol, nfailed(2), 'precedence: stray .in R_ref ignored, header r_orb wins')
+
+ ! --- case 3: neither R_load nor R_ref in .in -> header r_orb (=99) ---
+ call reset_massloading()
+ iload_factor = 1
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_inopt(1,   'iload_factor', 'mode',     lu)
+ call write_inopt(0.,  'iload',        'factor',   lu)
+ call write_inopt(-1., 'iload_dt',     'interval', lu)
+ close(lu)
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading(db, nerr)
+ call close_db(db)
+ r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(r_orb, 99.0, tol, nfailed(3), 'precedence: header r_orb fallback')
+
+ call free_header(hdr)
+ open(newunit=lu, file=fname, status='old', form='formatted')
+ close(lu, status='delete')
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_rload_precedence
 
 !---------------------------------------------------------------------------
 ! test_set_r_ref

@@ -62,7 +62,7 @@ module mass_loading
    !   mode 2: mloadfactor = iload (user beta), dm_load = 0.
    !
    ! .in parameters (3 only): iload_factor, iload, iload_dt
-   ! Dump header:              dm_load, r_orb, m_p0, t_init (restart safety)
+   ! Dump header:              dm_load, r_orb, R_load, m_p0, t_init (restart safety)
    ! Runtime-derived:          n_p0, m_p0 from part; t_orb from r_orb + M_star
    !
    ! Compile-time isolation: wrap `use mass_loading` and call site in evolve.f90
@@ -74,6 +74,7 @@ module mass_loading
    !   iload_factor -- loading mode (-1=off, 0=chi, 1=xi, 2=beta)
    !   iload        -- factor value (chi / xi / beta)
    !   iload_dt     -- interval [code units]; <=0 = orbital period at r_orb
+   !   R_load       -- loading radius override [code units]; <0 = use disc R_ref
    !
    ! :Dependencies: dim, dump_utils, infile_utils, io, mpiutils, part
    !
@@ -100,6 +101,7 @@ module mass_loading
    real,               public   :: r_orb          = 1.        ! reference radius used to compute T_orb
    real,               public   :: t_orb          = 0.        ! current effective loading interval (updated at each sync point)
    real,               public   :: t_init         = -1.       ! simulation time of first loading step; -1 = not yet set (fresh start sentinel), persisted in dump header; also settable from tests or setup code
+   real,               public   :: R_load         = -1.       ! explicit loading-radius override; <0 = use R_ref
    ! private state — set once at init, never in .in
    integer(kind=8),    private  :: n_p0           = 0         ! initial gas particle count
    real,               private  :: m_p0           = 0.        ! initial per-particle mass (M_disc0 / n_p0)
@@ -401,6 +403,8 @@ contains
          'loading factor: chi (mode 0), xi [code units] (mode 1), or beta (mode 2)', iunit)
       call write_inopt(iload_dt,'iload_dt', &
          'loading interval [code units]; <=0 = orbital period at r_orb', iunit)
+      call write_inopt(R_load,'R_load', &
+         'radius for orbital-period loading [code units]; <0 = use disc R_ref', iunit)
       end subroutine write_options_massloading
 
       subroutine read_options_massloading(db, nerr)
@@ -408,7 +412,7 @@ contains
       use io,           only: iprint, id, master, fatal
       type(inopts), intent(inout) :: db(:)
       integer,      intent(inout) :: nerr
-      integer :: ierr_v1
+      integer :: ierr_v1, ierr
       real    :: dummy_v1
 
       ! >>> COMPAT_CHECK_V1: remove when all configs migrated to v2 params <<<
@@ -429,6 +433,14 @@ contains
       call read_inopt(iload_factor, 'iload_factor', db, errcount=nerr, min=-1)
       call read_inopt(iload,        'iload',        db, errcount=nerr)
       call read_inopt(iload_dt,     'iload_dt',     db, errcount=nerr)
+
+      ! R_load: explicit loading-radius override (optional, backward compatible).
+      ! R_ref is deliberately NOT read here: it lives in the .setup/.discparams,
+      ! never in the .in. It reaches r_orb via the dump header (seeded at
+      ! phantomsetup by set_massloading_r_ref); when R_load<0 the precedence in
+      ! read_headeropts falls back to that header r_orb.
+      ierr = 0
+      call read_inopt(R_load, 'R_load', db, err=ierr)
    end subroutine read_options_massloading
 
    subroutine write_options_massloading_setup(iunit)
@@ -441,6 +453,8 @@ contains
       call write_inopt(iload,   'iload',   'loading factor: chi / xi / beta', iunit)
       call write_inopt(iload_dt,'iload_dt', &
          'loading interval [code units]; <=0 = orbital period', iunit)
+      call write_inopt(R_load,'R_load', &
+         'radius for orbital-period loading [code units]; <0 = use disc R_ref', iunit)
    end subroutine write_options_massloading_setup
 
    subroutine read_options_massloading_setup(db, nerr)
@@ -467,10 +481,17 @@ contains
       call read_inopt(iload,        'iload',        db, errcount=nerr)
       call read_inopt(iload_dt,     'iload_dt',     db, errcount=nerr)
 
+      ! R_load: explicit loading-radius override (optional)
+      ierr = 0
+      call read_inopt(R_load, 'R_load', db, err=ierr)
+
       ! pick up R_ref from setup db so orbital-period loading works without .in edit
       ierr = 0
       call read_inopt(r_ref_tmp, 'R_ref', db, err=ierr, min=0.)
-      if (  ierr == 0 .and. r_ref_tmp > 0.  ) then 
+      ! resolve r_orb by precedence: R_load (>=0) wins, else R_ref
+      if (  R_load >= 0.  ) then
+         r_orb = R_load
+      else if (  ierr == 0 .and. r_ref_tmp > 0.  ) then
          r_orb = r_ref_tmp
       endif
    end subroutine read_options_massloading_setup
@@ -482,6 +503,7 @@ contains
 
       call add_to_rheader(dm_load, 'dm_load',      hdr, ierr)
       call add_to_rheader(r_orb,   'r_orb',        hdr, ierr)
+      call add_to_rheader(R_load,  'R_load',       hdr, ierr)
       call add_to_rheader(m_p0,    'mload_mp0',    hdr, ierr)
       call add_to_rheader(t_init,  'mload_tinit',  hdr, ierr)
    end subroutine write_headeropts_massloading
@@ -496,6 +518,16 @@ contains
       ierr = 0;  call extract('r_orb',       r_orb,   hdr, ierr)
       ierr = 0;  call extract('mload_mp0',   m_p0,    hdr, ierr)
       ierr = 0;  call extract('mload_tinit', t_init,  hdr, ierr)
+      ! R_load is written to the header for provenance only and is NOT read
+      ! back here: the resolved radius lives in the header 'r_orb' (restored
+      ! above), which keeps legacy dumps (no 'R_load' key) safe from extract's
+      ! missing-key default. The loading-radius choice is sourced live from
+      ! the .in via read_options_massloading.
+      ! finalise r_orb: a live .in R_load (>=0) overrides; otherwise keep the
+      ! header r_orb (seeded from R_ref at phantomsetup, or a prior R_load).
+      if (  R_load >= 0.  ) then
+         r_orb = R_load
+      endif
    end subroutine read_headeropts_massloading
 
    subroutine set_massloading_r_ref(r)
@@ -518,6 +550,7 @@ contains
       calc_torb   = .false.
       initialised = .false.
       t_init      = -1.
+      R_load             = -1.
    end subroutine reset_massloading
 
 end module mass_loading
