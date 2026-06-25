@@ -716,10 +716,12 @@ end subroutine test_headeropts_legacy
 
 !---------------------------------------------------------------------------
 ! test_rload_precedence
-!   Verifies r_orb resolution precedence finalised in read_headeropts:
-!     1. .in R_load (>=0) wins
-!     2. .in R_ref (>0) used when R_load < 0
-!     3. header r_orb used when the .in supplies neither
+!   Verifies r_orb resolution finalised in read_headeropts:
+!     1. a live .in R_load (>=0) overrides
+!     2. a stray 'R_ref' in the .in is ignored (R_ref is not a .in key; it
+!        lives in .setup/.discparams), so r_orb falls back to the header
+!     3. with neither key, r_orb falls back to the header (seeded from R_ref
+!        at phantomsetup)
 !   Each case drives the real .in read (read_options_massloading) then the
 !   dump-header read (read_headeropts_massloading), mirroring startup order.
 !---------------------------------------------------------------------------
@@ -745,12 +747,14 @@ subroutine test_rload_precedence(ntests, npass)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
 
- ! --- case 1: .in R_load (=15) overrides .in R_ref (=50) and header r_orb (=99) ---
+ ! --- case 1: a live .in R_load (=15) overrides the header r_orb (=99) ---
  call reset_massloading()
  iload_factor = 1
  open(newunit=lu, file=fname, status='replace', form='formatted')
- call write_inopt(15.0, 'R_load', 'loading radius', lu)
- call write_inopt(50.0, 'R_ref',  'reference radius', lu)
+ call write_inopt(1,    'iload_factor', 'mode',           lu)
+ call write_inopt(0.,   'iload',        'factor',         lu)
+ call write_inopt(-1.,  'iload_dt',     'interval',       lu)
+ call write_inopt(15.0, 'R_load',       'loading radius', lu)
  close(lu)
  nerr = 0
  call open_db_from_file(db, fname, 78, ierr)
@@ -760,12 +764,16 @@ subroutine test_rload_precedence(ntests, npass)
  call read_headeropts_massloading(hdr)
  call checkval(r_orb, 15.0, tol, nfailed(1), 'precedence: .in R_load wins')
 
- ! --- case 2: R_load < 0 falls back to .in R_ref (=50), over header r_orb (=99) ---
+ ! --- case 2: a stray 'R_ref' in the .in is IGNORED (R_ref is not a .in key);
+ !     with R_load<0, r_orb falls back to the header value (=99) ---
  call reset_massloading()
  iload_factor = 1
  open(newunit=lu, file=fname, status='replace', form='formatted')
- call write_inopt(-1.0, 'R_load', 'loading radius', lu)
- call write_inopt(50.0, 'R_ref',  'reference radius', lu)
+ call write_inopt(1,    'iload_factor', 'mode',             lu)
+ call write_inopt(0.,   'iload',        'factor',           lu)
+ call write_inopt(-1.,  'iload_dt',     'interval',         lu)
+ call write_inopt(-1.0, 'R_load',       'loading radius',   lu)
+ call write_inopt(50.0, 'R_ref',        'reference radius', lu)
  close(lu)
  nerr = 0
  call open_db_from_file(db, fname, 78, ierr)
@@ -773,13 +781,15 @@ subroutine test_rload_precedence(ntests, npass)
  call close_db(db)
  r_orb = -1.
  call read_headeropts_massloading(hdr)
- call checkval(r_orb, 50.0, tol, nfailed(2), 'precedence: .in R_ref fallback')
+ call checkval(r_orb, 99.0, tol, nfailed(2), 'precedence: stray .in R_ref ignored, header r_orb wins')
 
- ! --- case 3: neither in .in -> header r_orb (=99) ---
+ ! --- case 3: neither R_load nor R_ref in .in -> header r_orb (=99) ---
  call reset_massloading()
  iload_factor = 1
  open(newunit=lu, file=fname, status='replace', form='formatted')
- call write_inopt(1, 'iload_factor', 'mode', lu)
+ call write_inopt(1,   'iload_factor', 'mode',     lu)
+ call write_inopt(0.,  'iload',        'factor',   lu)
+ call write_inopt(-1., 'iload_dt',     'interval', lu)
  close(lu)
  nerr = 0
  call open_db_from_file(db, fname, 78, ierr)

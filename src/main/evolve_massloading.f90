@@ -109,8 +109,6 @@ module mass_loading
    logical,            private  :: dofrac_load    = .false.   ! .true. for beta/exponential mode (iload_factor=2)
    logical,            private  :: calc_torb      = .false.   ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
    logical,            private  :: initialised    = .false.
-   real,               private  :: r_ref_infile        = -1.      ! R_ref read from .in (fallback radius)
-   logical,            private  :: r_ref_from_infile   = .false.  ! .true. if a positive R_ref present in .in
    private
 
 contains
@@ -436,13 +434,13 @@ contains
       call read_inopt(iload,        'iload',        db, errcount=nerr)
       call read_inopt(iload_dt,     'iload_dt',     db, errcount=nerr)
 
-      ! R_load: explicit loading-radius override (optional, backward compatible)
+      ! R_load: explicit loading-radius override (optional, backward compatible).
+      ! R_ref is deliberately NOT read here: it lives in the .setup/.discparams,
+      ! never in the .in. It reaches r_orb via the dump header (seeded at
+      ! phantomsetup by set_massloading_r_ref); when R_load<0 the precedence in
+      ! read_headeropts falls back to that header r_orb.
       ierr = 0
       call read_inopt(R_load, 'R_load', db, err=ierr)
-      ! R_ref: disc reference radius, stashed as the fallback radius for r_orb
-      ierr = 0
-      call read_inopt(r_ref_infile, 'R_ref', db, err=ierr, min=0.)
-      r_ref_from_infile = (  ierr == 0 .and. r_ref_infile > 0.  )
    end subroutine read_options_massloading
 
    subroutine write_options_massloading_setup(iunit)
@@ -525,12 +523,10 @@ contains
       ! above), which keeps legacy dumps (no 'R_load' key) safe from extract's
       ! missing-key default. The loading-radius choice is sourced live from
       ! the .in via read_options_massloading.
-      ! finalise r_orb by precedence: .in R_load > .in R_ref > header r_orb
+      ! finalise r_orb: a live .in R_load (>=0) overrides; otherwise keep the
+      ! header r_orb (seeded from R_ref at phantomsetup, or a prior R_load).
       if (  R_load >= 0.  ) then
          r_orb = R_load
-      else if (  r_ref_from_infile  ) then
-         r_orb = r_ref_infile
-      ! else: keep header r_orb (restart continuity / setup seed)
       endif
    end subroutine read_headeropts_massloading
 
@@ -555,8 +551,6 @@ contains
       initialised = .false.
       t_init      = -1.
       R_load             = -1.
-      r_ref_infile       = -1.
-      r_ref_from_infile  = .false.
    end subroutine reset_massloading
 
 end module mass_loading
