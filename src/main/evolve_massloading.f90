@@ -90,7 +90,6 @@ module mass_loading
             read_headeropts_massloading,                           &
             set_massloading_r_ref,                                 &
             reset_massloading
-   ! (R_load is a public module variable, declared below)
 
    ! .in parameters
    integer,            public   :: iload_factor   = -1        ! -1=off, 0=chi, 1=xi, 2=beta
@@ -111,7 +110,6 @@ module mass_loading
    logical,            private  :: calc_torb      = .false.   ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
    logical,            private  :: initialised    = .false.
    real,               private  :: r_ref_infile        = -1.      ! R_ref read from .in (fallback radius)
-   logical,            private  :: r_load_from_infile  = .false.  ! .true. if R_load present in .in
    logical,            private  :: r_ref_from_infile   = .false.  ! .true. if a positive R_ref present in .in
    private
 
@@ -441,7 +439,6 @@ contains
       ! R_load: explicit loading-radius override (optional, backward compatible)
       ierr = 0
       call read_inopt(R_load, 'R_load', db, err=ierr)
-      r_load_from_infile = (  ierr == 0  )
       ! R_ref: disc reference radius, stashed as the fallback radius for r_orb
       ierr = 0
       call read_inopt(r_ref_infile, 'R_ref', db, err=ierr, min=0.)
@@ -523,15 +520,17 @@ contains
       ierr = 0;  call extract('r_orb',       r_orb,   hdr, ierr)
       ierr = 0;  call extract('mload_mp0',   m_p0,    hdr, ierr)
       ierr = 0;  call extract('mload_tinit', t_init,  hdr, ierr)
-      ! R_load: prefer the .in value; otherwise restore from the header
-      if (  .not. r_load_from_infile  ) then
-         ierr = 0;  call extract('R_load', R_load, hdr, ierr)
-      endif
+      ! R_load is written to the header for provenance only and is NOT read
+      ! back here: the resolved radius lives in the header 'r_orb' (restored
+      ! above), which keeps legacy dumps (no 'R_load' key) safe from extract's
+      ! missing-key default. The loading-radius choice is sourced live from
+      ! the .in via read_options_massloading.
       ! finalise r_orb by precedence: .in R_load > .in R_ref > header r_orb
       if (  R_load >= 0.  ) then
          r_orb = R_load
       else if (  r_ref_from_infile  ) then
          r_orb = r_ref_infile
+      ! else: keep header r_orb (restart continuity / setup seed)
       endif
    end subroutine read_headeropts_massloading
 
@@ -557,7 +556,6 @@ contains
       t_init      = -1.
       R_load             = -1.
       r_ref_infile       = -1.
-      r_load_from_infile = .false.
       r_ref_from_infile  = .false.
    end subroutine reset_massloading
 

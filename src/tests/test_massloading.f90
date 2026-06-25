@@ -42,6 +42,7 @@ subroutine test_massloading(ntests, npass)
  call test_options_io(ntests, npass)
  call test_headeropts_io(ntests, npass)
  call test_rload_precedence(ntests, npass)
+ call test_headeropts_legacy(ntests, npass)
  call test_set_r_ref(ntests, npass)
  call test_first_substep_init(ntests, npass)
 end subroutine test_massloading
@@ -631,12 +632,13 @@ end subroutine test_options_io
 !   loading is switched off (fields left untouched).
 !---------------------------------------------------------------------------
 subroutine test_headeropts_io(ntests, npass)
- use dump_utils, only: dump_h, allocate_header, free_header
+ use dump_utils, only: dump_h, allocate_header, free_header, extract
  use io,         only: id, master
  use testutils,  only: checkval, update_test_scores
  integer, intent(inout) :: ntests, npass
  type(dump_h) :: hdr
  integer :: nfailed(7), ierr
+ real    :: rload_chk
  real, parameter :: tol = 1.e-5
 
  if (id == master) write(*,"(a)") '  --> dump-header I/O round-trip tests'
@@ -651,12 +653,15 @@ subroutine test_headeropts_io(ntests, npass)
  call write_headeropts_massloading(hdr, ierr)
  call checkval(ierr, 0, 0, nfailed(1), 'header write: no error')
 
- dm_load = -1.;  r_orb = -1.;  t_init = -1.;  R_load = -99.   ! clobber before reading back
+ ! R_load is provenance-only (written, never read back): verify it was written
+ ierr = 0;  call extract('R_load', rload_chk, hdr, ierr)
+ call checkval(rload_chk, -1., tol, nfailed(7), 'header write: R_load persisted (provenance)')
+
+ dm_load = -1.;  r_orb = -1.;  t_init = -1.   ! clobber before reading back
  call read_headeropts_massloading(hdr)
  call checkval(dm_load, 4.2e-7, tol, nfailed(2), 'header round-trip: dm_load')
  call checkval(r_orb,   12.5,   tol, nfailed(3), 'header round-trip: r_orb')
  call checkval(t_init,  3.3,    tol, nfailed(4), 'header round-trip: t_init')
- call checkval(R_load,  -1.,    tol, nfailed(7), 'header round-trip: R_load')
 
  ! --- read early-return when loading disabled: fields left untouched ---
  iload_factor = -1
@@ -668,6 +673,46 @@ subroutine test_headeropts_io(ntests, npass)
  call free_header(hdr)
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_headeropts_io
+
+!---------------------------------------------------------------------------
+! test_headeropts_legacy
+!   A pre-R_load dump header has no 'R_load' key. read_headeropts must NOT
+!   touch R_load (it is provenance-only, never read back) and r_orb must fall
+!   back to the header value. Builds a legacy-style header directly with
+!   add_to_rheader (NOT write_headeropts_massloading, which writes R_load).
+!---------------------------------------------------------------------------
+subroutine test_headeropts_legacy(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header, add_to_rheader
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(2), ierr
+ real, parameter :: tol = 1.e-5
+
+ if (id == master) write(*,"(a)") '  --> legacy dump-header (no R_load key) test'
+ nfailed(:) = 0
+
+ ! build a pre-R_load header: legacy fields present, NO R_load key
+ call reset_massloading()
+ iload_factor = 1
+ hdr  = allocate_header(nreal=10)
+ ierr = 0
+ call add_to_rheader(4.2e-7, 'dm_load',     hdr, ierr)
+ call add_to_rheader(12.5,   'r_orb',       hdr, ierr)
+ call add_to_rheader(0.,     'mload_mp0',   hdr, ierr)
+ call add_to_rheader(3.3,    'mload_tinit', hdr, ierr)
+
+ ! no .in read and no R_load key in header: R_load must keep its clobbered
+ ! value (never read back), r_orb must fall back to the header value
+ R_load = -77.;  r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(R_load, -77., tol, nfailed(1), 'legacy header: R_load untouched (provenance-only)')
+ call checkval(r_orb,  12.5, tol, nfailed(2), 'legacy header: r_orb falls back to header value')
+
+ call free_header(hdr)
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_headeropts_legacy
 
 !---------------------------------------------------------------------------
 ! test_rload_precedence
