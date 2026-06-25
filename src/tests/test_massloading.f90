@@ -41,6 +41,7 @@ subroutine test_massloading(ntests, npass)
  call test_log_massloading(ntests, npass)
  call test_options_io(ntests, npass)
  call test_headeropts_io(ntests, npass)
+ call test_rload_precedence(ntests, npass)
  call test_set_r_ref(ntests, npass)
  call test_first_substep_init(ntests, npass)
 end subroutine test_massloading
@@ -652,6 +653,87 @@ subroutine test_headeropts_io(ntests, npass)
  call free_header(hdr)
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_headeropts_io
+
+!---------------------------------------------------------------------------
+! test_rload_precedence
+!   Verifies r_orb resolution precedence finalised in read_headeropts:
+!     1. .in R_load (>=0) wins
+!     2. .in R_ref (>0) used when R_load < 0
+!     3. header r_orb used when the .in supplies neither
+!   Each case drives the real .in read (read_options_massloading) then the
+!   dump-header read (read_headeropts_massloading), mirroring startup order.
+!---------------------------------------------------------------------------
+subroutine test_rload_precedence(ntests, npass)
+ use infile_utils, only: inopts, open_db_from_file, close_db, write_inopt
+ use dump_utils,   only: dump_h, allocate_header, free_header
+ use io,           only: id, master
+ use testutils,    only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(inopts), allocatable :: db(:)
+ type(dump_h) :: hdr
+ integer :: nfailed(3), ierr, nerr, lu
+ character(len=*), parameter :: fname = 'test_massloading_prec.tmp'
+ real, parameter :: tol = 1.e-5
+
+ if (id == master) write(*,"(a)") '  --> r_orb precedence tests'
+ nfailed(:) = 0
+
+ ! seed a dump header with r_orb = 99 (set R_load = -1 in header so it is inert)
+ call reset_massloading()
+ iload_factor = 1;  r_orb = 99.;  R_load = -1.
+ hdr = allocate_header(nreal=10)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+
+ ! --- case 1: .in R_load (=15) overrides .in R_ref (=50) and header r_orb (=99) ---
+ call reset_massloading()
+ iload_factor = 1
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_inopt(15.0, 'R_load', 'loading radius', lu)
+ call write_inopt(50.0, 'R_ref',  'reference radius', lu)
+ close(lu)
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading(db, nerr)
+ call close_db(db)
+ r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(r_orb, 15.0, tol, nfailed(1), 'precedence: .in R_load wins')
+
+ ! --- case 2: R_load < 0 falls back to .in R_ref (=50), over header r_orb (=99) ---
+ call reset_massloading()
+ iload_factor = 1
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_inopt(-1.0, 'R_load', 'loading radius', lu)
+ call write_inopt(50.0, 'R_ref',  'reference radius', lu)
+ close(lu)
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading(db, nerr)
+ call close_db(db)
+ r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(r_orb, 50.0, tol, nfailed(2), 'precedence: .in R_ref fallback')
+
+ ! --- case 3: neither in .in -> header r_orb (=99) ---
+ call reset_massloading()
+ iload_factor = 1
+ open(newunit=lu, file=fname, status='replace', form='formatted')
+ call write_inopt(1, 'iload_factor', 'mode', lu)
+ close(lu)
+ nerr = 0
+ call open_db_from_file(db, fname, 78, ierr)
+ call read_options_massloading(db, nerr)
+ call close_db(db)
+ r_orb = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(r_orb, 99.0, tol, nfailed(3), 'precedence: header r_orb fallback')
+
+ call free_header(hdr)
+ open(newunit=lu, file=fname, status='old', form='formatted')
+ close(lu, status='delete')
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_rload_precedence
 
 !---------------------------------------------------------------------------
 ! test_set_r_ref

@@ -518,6 +518,12 @@ contains
       if (  .not. r_load_from_infile  ) then
          ierr = 0;  call extract('R_load', R_load, hdr, ierr)
       endif
+      ! finalise r_orb by precedence: .in R_load > .in R_ref > header r_orb
+      if (  R_load >= 0.  ) then
+         r_orb = R_load
+      else if (  r_ref_from_infile  ) then
+         r_orb = r_ref_infile
+      endif
    end subroutine read_headeropts_massloading
 
    subroutine set_massloading_r_ref(r)
