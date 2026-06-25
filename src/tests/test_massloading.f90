@@ -13,7 +13,7 @@ module testmassloading
 !
  use mass_loading, only: iload_factor, iload, iload_dt,                  &
                          dm_load, mloadfactor, r_orb, t_orb,             &
-                         t_init,                                          &
+                         t_init, R_load,                                  &
                          init_massloading, step_mass_loading,             &
                          log_massloading,                                 &
                          write_options_massloading, read_options_massloading,       &
@@ -557,7 +557,7 @@ subroutine test_options_io(ntests, npass)
  use testutils,    only: checkval, update_test_scores
  integer, intent(inout) :: ntests, npass
  type(inopts), allocatable :: db(:)
- integer :: nfailed(7), ierr, nerr, lu
+ integer :: nfailed(8), ierr, nerr, lu
  character(len=*), parameter :: fname = 'test_massloading_opts.tmp'
  real, parameter :: tol = 1.e-5
 
@@ -566,12 +566,12 @@ subroutine test_options_io(ntests, npass)
 
  ! --- runtime (.in) options round-trip ---
  call reset_massloading()
- iload_factor = 1;  iload = 0.025;  iload_dt = 3.5
+ iload_factor = 1;  iload = 0.025;  iload_dt = 3.5;  R_load = 7.5
  open(newunit=lu, file=fname, status='replace', form='formatted')
  call write_options_massloading(lu)
  close(lu)
 
- iload_factor = -99;  iload = -99.;  iload_dt = -99.   ! clobber before reading back
+ iload_factor = -99;  iload = -99.;  iload_dt = -99.;  R_load = -99.   ! clobber before reading back
  nerr = 0
  call open_db_from_file(db, fname, 78, ierr)
  call checkval(ierr, 0, 0, nfailed(1), 'options: db opened from written .in file')
@@ -581,6 +581,7 @@ subroutine test_options_io(ntests, npass)
  call checkval(iload,        0.025, tol, nfailed(3), 'options: iload round-trips')
  call checkval(iload_dt,     3.5,   tol, nfailed(4), 'options: iload_dt round-trips')
  call checkval(nerr,         0,     0,   nfailed(5), 'options: no read errors reported')
+ call checkval(R_load,       7.5,   tol, nfailed(8), 'options: R_load round-trips')
 
  ! --- setup (.setup) options round-trip, including R_ref pickup ---
  call reset_massloading()
@@ -619,7 +620,7 @@ subroutine test_headeropts_io(ntests, npass)
  use testutils,  only: checkval, update_test_scores
  integer, intent(inout) :: ntests, npass
  type(dump_h) :: hdr
- integer :: nfailed(6), ierr
+ integer :: nfailed(7), ierr
  real, parameter :: tol = 1.e-5
 
  if (id == master) write(*,"(a)") '  --> dump-header I/O round-trip tests'
@@ -628,17 +629,18 @@ subroutine test_headeropts_io(ntests, npass)
  ! --- write + read round-trip when loading is active ---
  call reset_massloading()
  iload_factor = 1
- dm_load = 4.2e-7;  r_orb = 12.5;  t_init = 3.3
+ dm_load = 4.2e-7;  r_orb = 12.5;  t_init = 3.3;  R_load = -1.
  hdr  = allocate_header(nreal=10)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
  call checkval(ierr, 0, 0, nfailed(1), 'header write: no error')
 
- dm_load = -1.;  r_orb = -1.;  t_init = -1.   ! clobber before reading back
+ dm_load = -1.;  r_orb = -1.;  t_init = -1.;  R_load = -99.   ! clobber before reading back
  call read_headeropts_massloading(hdr)
  call checkval(dm_load, 4.2e-7, tol, nfailed(2), 'header round-trip: dm_load')
  call checkval(r_orb,   12.5,   tol, nfailed(3), 'header round-trip: r_orb')
  call checkval(t_init,  3.3,    tol, nfailed(4), 'header round-trip: t_init')
+ call checkval(R_load,  -1.,    tol, nfailed(7), 'header round-trip: R_load')
 
  ! --- read early-return when loading disabled: fields left untouched ---
  iload_factor = -1
