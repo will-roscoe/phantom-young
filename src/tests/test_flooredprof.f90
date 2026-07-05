@@ -47,6 +47,9 @@ subroutine run_test_flooredprof(ntests,npass)
  call checkval(get_T_profile(10.d0),   18.741d0, tol, nfail(4), 'T(10 AU) with qprofile=0.4')
 
  call update_test_scores(ntests,nfail,npass)
+
+ iprofile = 1
+ qprofile = 0.
 end subroutine run_test_flooredprof
 
 end module test_flooredprof
