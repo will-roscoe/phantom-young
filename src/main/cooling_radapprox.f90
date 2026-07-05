@@ -243,7 +243,7 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file,qprofile,iprofile,T0_prof,n_prof,R0_prof
+ use eos_stamatellos, only:eos_file,qprofile,iprofile,T0_prof,n_prof,R0_prof,T_bg_prof
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
@@ -259,12 +259,13 @@ subroutine write_options_cooling_radapprox(iunit)
     call write_inopt(T0_prof,'T0','normalization temperature at 1 AU (K)',iunit)
     call write_inopt(n_prof,'nprof','combination index (2=MS20,4=T^4)',iunit)
     call write_inopt(R0_prof,'R0','inner smoothing radius (AU)',iunit)
+    call write_inopt(T_bg_prof,'Tinf','background temperature T_inf (K)',iunit)
  endif
 end subroutine write_options_cooling_radapprox
 
 subroutine read_options_cooling_radapprox(db,nerr)
  use io,              only:fatal
- use eos_stamatellos, only:eos_file,qprofile,iprofile,T0_prof,n_prof,R0_prof
+ use eos_stamatellos, only:eos_file,qprofile,iprofile,T0_prof,n_prof,R0_prof,T_bg_prof
  use infile_utils,    only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
@@ -281,6 +282,7 @@ subroutine read_options_cooling_radapprox(db,nerr)
  call read_inopt(T0_prof,'T0',db,err=ierr,default=100.)
  call read_inopt(n_prof,'nprof',db,err=ierr,default=2.)
  call read_inopt(R0_prof,'R0',db,err=ierr,default=0.01)
+ call read_inopt(T_bg_prof,'Tinf',db,err=ierr,default=10.)
 
  if (ieosread /= 24) call fatal('ieosread','For icooling=9, you need ieos=24')
 
