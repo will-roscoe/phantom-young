@@ -29,8 +29,16 @@ module eos_stamatellos
  integer,save :: nx,ny ! dimensions of optable read in
  real, public :: qprofile = 0. ! q index override for lumdisc=1; 0=standard (qindex=0.25), otherwise use as qindex
 
+ ! floored power-law temperature profile (lumdisc=2 / iprofile=2)
+ integer, public :: iprofile  = 1     ! 1 = legacy radiative, 2 = floored power-law
+ real,    public :: T0_prof   = 100.  ! K,  normalization temperature (value at 1 AU)
+ real,    public :: n_prof    = 2.    ! combination index: 2 = MS20 (T^2), 4 = flux-add (T^4)
+ real,    public :: R0_prof   = 0.01  ! AU, inner smoothing radius
+ real,    public :: T_bg_prof = 10.   ! K,  background floor T_inf (set = T_bg/Tfloor)
+
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
  public :: get_k_fld
+ public :: get_T_profile
 
 contains
 
@@ -302,6 +310,20 @@ subroutine get_k_fld(rhoi,eni,i,ki,Ti)
     endif
  endif
 end subroutine get_k_fld
+
+!
+! Floored power-law temperature profile (MS20-style)
+!
+real function get_T_profile(r)
+   use units,   only:udist
+   use physcon, only:au
+   real, intent(in) :: r          ! radius in code distance units
+   real :: Rau, q_eff
+   Rau   = r*udist/au             ! robust to any dist_unit
+   q_eff = merge(qprofile, 0.35, qprofile > 0.)   ! slope: T proportional to R^(-2*q_eff)
+   get_T_profile = ( T0_prof**n_prof * (Rau**2 + R0_prof**2)**(-n_prof*q_eff) &
+                     + T_bg_prof**n_prof )**(1./n_prof)
+end function get_T_profile
 
 end module eos_stamatellos
 

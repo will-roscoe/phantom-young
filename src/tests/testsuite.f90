@@ -60,6 +60,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  use testsetstar,  only:test_setstar
  use testsethier,  only:test_sethier
  use testeos,      only:test_eos
+ use test_flooredprof, only:run_test_flooredprof
  use testcooling,  only:test_cooling
  use testgeometry, only:test_geometry
  use testwind,     only:test_wind
@@ -213,6 +214,8 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     dosetstar = .true.
  case('eos')
     doeos = .true.
+ case('flooredprof','tprofile')
+    call run_test_flooredprof(ntests,npass)
  case('dust')
     dodust = .true.
  case('gr')
