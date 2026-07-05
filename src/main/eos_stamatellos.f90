@@ -39,6 +39,7 @@ module eos_stamatellos
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
  public :: get_k_fld
  public :: get_T_profile
+ public :: write_headeropts_flooredprof,read_headeropts_flooredprof
 
 contains
 
@@ -324,6 +325,52 @@ real function get_T_profile(r)
    get_T_profile = ( T0_prof**n_prof * (Rau**2 + R0_prof**2)**(-n_prof*q_eff) &
                      + T_bg_prof**n_prof )**(1./n_prof)
 end function get_T_profile
+
+!-----------------------------------------------------------------------
+!+
+!   Persist the floored power-law temperature profile parameters (mode
+!   iprofile=2) in the dump header, so a restart uses exactly the values
+!   the IC was built with rather than whatever is (or isn't) in the .in
+!   file.  No-op (writes nothing) for legacy iprofile=1.
+!+
+!-----------------------------------------------------------------------
+subroutine write_headeropts_flooredprof(hdr,ierr)
+ use dump_utils, only:dump_h,add_to_rheader,add_to_iheader
+ type(dump_h), intent(inout) :: hdr
+ integer,      intent(inout) :: ierr
+
+ if (iprofile /= 2) return
+ call add_to_iheader(iprofile,  'iprofile', hdr, ierr)
+ call add_to_rheader(T0_prof,   'T0_prof',  hdr, ierr)
+ call add_to_rheader(n_prof,    'nprof',    hdr, ierr)
+ call add_to_rheader(R0_prof,   'R0_prof',  hdr, ierr)
+ call add_to_rheader(T_bg_prof, 'Tinf',     hdr, ierr)
+ call add_to_rheader(qprofile,  'qprofile', hdr, ierr)
+end subroutine write_headeropts_flooredprof
+
+!-----------------------------------------------------------------------
+!+
+!   Restores the floored power-law temperature profile parameters from
+!   the dump header.  iprofile is extracted first; if absent (legacy
+!   dump, written before this feature existed) it is left at its
+!   compiled-in default (1) and nothing else is read.
+!+
+!-----------------------------------------------------------------------
+subroutine read_headeropts_flooredprof(hdr)
+ use dump_utils, only:dump_h,extract
+ type(dump_h), intent(in) :: hdr
+ integer :: ierr
+
+ ierr = 0
+ call extract('iprofile', iprofile, hdr, ierr, default=iprofile)
+ if (iprofile == 2) then
+    ierr = 0;  call extract('T0_prof',  T0_prof,   hdr, ierr)
+    ierr = 0;  call extract('nprof',    n_prof,    hdr, ierr)
+    ierr = 0;  call extract('R0_prof',  R0_prof,   hdr, ierr)
+    ierr = 0;  call extract('Tinf',     T_bg_prof, hdr, ierr)
+    ierr = 0;  call extract('qprofile', qprofile,  hdr, ierr)
+ endif
+end subroutine read_headeropts_flooredprof
 
 end module eos_stamatellos
 

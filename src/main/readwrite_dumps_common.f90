@@ -265,6 +265,7 @@ subroutine fill_header(sphNGdump,t,nparttot,npartoftypetot,nblocks,nptmass,hdr,i
                           idust,grainsize,graindens,ndusttypes
  use checkconserved, only:get_conserv,etot_in,angtot_in,totmom_in,mdust_in,mtot_in
  use mass_loading,   only:write_headeropts_massloading
+ use eos_stamatellos, only:write_headeropts_flooredprof
  use stopcond,       only:write_headeropts_stopcond
  use setup_params,   only:rhozero
  use timestep,       only:C_cour,C_force
@@ -371,6 +372,7 @@ subroutine fill_header(sphNGdump,t,nparttot,npartoftypetot,nblocks,nptmass,hdr,i
     call add_to_rheader(totmom_in,'totmom_in',hdr,ierr)
     call add_to_rheader(mdust_in(1:ndusttypes),'mdust_in',hdr,ierr)
     call write_headeropts_massloading(hdr, ierr)
+    call write_headeropts_flooredprof(hdr, ierr)
     call write_headeropts_stopcond(hdr, ierr)
     if (use_dust) then
        call add_to_rheader(grainsize(1:ndusttypes),'grainsize',hdr,ierr)
@@ -408,6 +410,7 @@ subroutine unfill_rheader(hdr,phantomdump,ntypesinfile,nptmass,&
                           maxtypes,grainsize,graindens,ndusttypes
  use checkconserved, only:get_conserv,etot_in,angtot_in,totmom_in,mdust_in,mtot_in
  use mass_loading,   only:read_headeropts_massloading
+ use eos_stamatellos, only:read_headeropts_flooredprof
  use stopcond,       only:read_headeropts_stopcond
  use setup_params,   only:rhozero
  use externalforces, only:read_headeropts_extern,extract_iextern_from_hdr
@@ -551,6 +554,9 @@ subroutine unfill_rheader(hdr,phantomdump,ntypesinfile,nptmass,&
  endif
  ! mass loading state; silently falls back to module defaults if not in old dumps
  call read_headeropts_massloading(hdr)
+ ! floored power-law temperature profile state; silently falls back to
+ ! module defaults (iprofile=1) if not in old dumps
+ call read_headeropts_flooredprof(hdr)
  ! t=0 sink baseline for the stop condition; silently keeps the module
  ! default (-1) for dumps written before this feature existed
  call read_headeropts_stopcond(hdr)
