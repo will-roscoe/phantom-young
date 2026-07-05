@@ -592,6 +592,9 @@ subroutine set_disc_positions(npart_tot,npart_start_count,do_mixture,R_ref,R_in,
  use part,           only:set_particle_type
  use random,         only:ran2
  use fileutils, only:load_data_file
+ use physcon,         only:kb_on_mh
+ use units,           only:unit_velocity
+ use eos_stamatellos, only:get_T_profile,iprofile
  integer, intent(in)    :: npart_start_count,npart_tot
  real,    intent(in)    :: R_ref,R_in,R_out,phi_min,phi_max
  real,    intent(in)    :: sigma_norm,p_index,cs0,q_index,star_m,G,particle_mass,hfact
@@ -716,7 +719,11 @@ subroutine set_disc_positions(npart_tot,npart_start_count,do_mixture,R_ref,R_in,
     !--set z
     !--first get sound speed at R
     if (lumdisc) then
-       cs = get_cs_from_lum(L_star,R,T_bg,gamma,q_index)
+       if (iprofile == 2) then
+          cs = sqrt(gamma*kb_on_mh/2.381 * get_T_profile(R)) / unit_velocity   ! floored power-law; 2.381 = mean molecular weight, matches get_cs_from_lum
+       else
+          cs = get_cs_from_lum(L_star,R,T_bg,gamma,q_index)     ! legacy (verbatim)
+       endif
     else
        cs = cs_func(cs0,R,q_index)
     endif
@@ -824,6 +831,9 @@ subroutine set_disc_velocities(npart_tot,npart_start_count,itype,G,star_m,aspin,
  use options,        only:iexternalforce
  use part,           only:gravity
  use dim,            only:gr
+ use physcon,         only:kb_on_mh
+ use units,           only:unit_velocity,unit_ergg,unit_density
+ use eos_stamatellos, only:get_T_profile,iprofile,getintenerg_opdep
  integer, intent(in)    :: npart_tot,npart_start_count,itype
  real,    intent(in)    :: G,star_m,aspin,aspin_angle,clight,cs0,p_index,q_index
  real,    intent(in)    :: rad(:),enc_m(:),gamma,R_in
@@ -833,6 +843,7 @@ subroutine set_disc_velocities(npart_tot,npart_start_count,itype,G,star_m,aspin,
  logical, intent(in)    :: lumdisc
  real,    intent(inout) :: vxyzu(:,:)
  real :: term,term_pr,term_bh,det,vr,vphi,cs,R,phi,a_smj,ecc
+ real :: rho_cgs,u_cgs
  integer :: i,itable,ipart,ierr
  real :: rg,vkep
  logical :: isecc
@@ -878,7 +889,11 @@ subroutine set_disc_velocities(npart_tot,npart_start_count,itype,G,star_m,aspin,
        select case(itype)
        case(igas)
           if (lumdisc) then
-             cs = get_cs_from_lum(L_star,R,T_bg,gamma,q_index)
+             if (iprofile == 2) then
+                cs = sqrt(gamma*kb_on_mh/2.381 * get_T_profile(R)) / unit_velocity   ! floored power-law; 2.381 = mean molecular weight, matches get_cs_from_lum
+             else
+                cs = get_cs_from_lum(L_star,R,T_bg,gamma,q_index)     ! legacy (verbatim)
+             endif
           else
              cs = cs_func(cs0,R,q_index)
           endif
@@ -940,7 +955,13 @@ subroutine set_disc_velocities(npart_tot,npart_start_count,itype,G,star_m,aspin,
        if (maxvxyzu >= 4) then
           if (itype==igas) then
              if (lumdisc) then
-                vxyzu(4,ipart) = get_u_stamatellos(L_star,R,T_bg,xyzh(4,i),particle_mass,hfact,q_index)
+                if (iprofile == 2) then
+                   rho_cgs = particle_mass*(hfact/xyzh(4,i))**3*unit_density
+                   call getintenerg_opdep(get_T_profile(R),rho_cgs,u_cgs)
+                   vxyzu(4,ipart) = u_cgs/unit_ergg
+                else
+                   vxyzu(4,ipart) = get_u_stamatellos(L_star,R,T_bg,xyzh(4,i),particle_mass,hfact,q_index)     ! legacy (verbatim)
+                endif
              elseif (gamma > 1.) then
                 vxyzu(4,ipart) = cs**2/(gamma - 1.)/gamma
              else
@@ -1051,7 +1072,10 @@ end subroutine set_incline_or_warp
 !  Compute H/R at a given radius
 !
 !------------------------------------
-pure real function get_HonR(r,cs0,q_index,star_m,G,lumdisc_setup,L_lumdisc,Tbg_lumdisc)
+real function get_HonR(r,cs0,q_index,star_m,G,lumdisc_setup,L_lumdisc,Tbg_lumdisc)
+ use physcon,         only:kb_on_mh
+ use units,           only:unit_velocity
+ use eos_stamatellos, only:get_T_profile,iprofile
  real, intent(in) :: r,cs0,q_index,star_m,G
  logical, intent(in) :: lumdisc_setup
  real, optional, intent(in) :: L_lumdisc,Tbg_lumdisc
@@ -1059,7 +1083,11 @@ pure real function get_HonR(r,cs0,q_index,star_m,G,lumdisc_setup,L_lumdisc,Tbg_l
 
  omega = sqrt(G*star_m/r**3)
  if (lumdisc_setup) then
-    cs = get_cs_from_lum(L_lumdisc,r,Tbg_lumdisc,5./3.,q_index)
+    if (iprofile == 2) then
+       cs = sqrt((5./3.)*kb_on_mh/2.381 * get_T_profile(r)) / unit_velocity   ! floored power-law; 2.381 = mean molecular weight, matches get_cs_from_lum
+    else
+       cs = get_cs_from_lum(L_lumdisc,r,Tbg_lumdisc,5./3.,q_index)     ! legacy (verbatim)
+    endif
  else
     cs    = cs_func(cs0,r,q_index)
  endif
@@ -1083,6 +1111,7 @@ subroutine write_discinfo(iunit,R_in,R_out,R_ref,Q,npart,sigmaprofile, &
  use physcon,      only:kb_on_mh
  use units,        only:unit_velocity
  use grids_for_setup, only:init_grid_sigma,deallocate_sigma
+ use eos_stamatellos, only:get_T_profile,iprofile
 
  integer, intent(in) :: iunit,npart,itype,sigmaprofile
  real,    intent(in) :: R_in,R_out,R_ref,Q,p_index,q_index,star_m,disc_m,sigma_norm,L_tot_mag
@@ -1136,11 +1165,23 @@ subroutine write_discinfo(iunit,R_in,R_out,R_ref,Q,npart,sigmaprofile, &
  if (itype == igas) call write_inopt(cs0,'cs0','sound speed at R=1',iunit)
 
  if (itype == igas .and. lumdisc_setup) then
-    T0 = get_T_from_lum(L_lumdisc,R_in,Tbg_lumdisc,q_index)
+    if (iprofile == 2) then
+       T0 = get_T_profile(R_in)                                  ! floored power-law
+    else
+       T0 = get_T_from_lum(L_lumdisc,R_in,Tbg_lumdisc,q_index)   ! legacy (verbatim)
+    endif
     call write_inopt(T0,'T_in','temperature (K) at R=R_in',iunit)
-    T_ref = get_T_from_lum(L_lumdisc,R_ref,Tbg_lumdisc,q_index)
+    if (iprofile == 2) then
+       T_ref = get_T_profile(R_ref)                                  ! floored power-law
+    else
+       T_ref = get_T_from_lum(L_lumdisc,R_ref,Tbg_lumdisc,q_index)   ! legacy (verbatim)
+    endif
     call write_inopt(T_ref,'T_ref','temperature (K) at R=R_ref',iunit)
-    T0 = get_T_from_lum(L_lumdisc,R_out,Tbg_lumdisc,q_index)
+    if (iprofile == 2) then
+       T0 = get_T_profile(R_out)                                 ! floored power-law
+    else
+       T0 = get_T_from_lum(L_lumdisc,R_out,Tbg_lumdisc,q_index)  ! legacy (verbatim)
+    endif
     call write_inopt(T0,'T_out','temperature (K) at R=R_out',iunit)
  elseif (itype == igas) then
     T0 = (cs_func(cs0,R_in,q_index)*unit_velocity)**2*gmw/kb_on_mh
