@@ -617,8 +617,8 @@ subroutine equation_of_state(gamma)
  use io_control,      only:nfulldump
  use shock_capturing, only:alphau
  use eos_stamatellos, only:init_coolra,read_optab,eos_file,&
-                           iprofile,T0_prof,n_prof,R0_prof,T_bg_prof
- use physcon, only:rpiontwo,mass_proton_cgs,kboltz
+                           iprofile,T0_prof,n_prof,R0_prof,T_bg_prof,get_T_profile
+ use physcon, only:rpiontwo,mass_proton_cgs,kboltz,kb_on_mh
  use units,   only:unit_velocity
  use sethier_utils,   only:findloc_local
  real, intent(out) :: gamma
@@ -738,7 +738,11 @@ subroutine equation_of_state(gamma)
           print *, "We can't set up multiple radapprox discs yet :,("
           stop
        else
-          cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma,qindex(1)) / rpiontwo
+          if (iprofile == 2) then
+             cs = sqrt(gamma*kb_on_mh/2.381 * get_T_profile(R_ref(1))) / unit_velocity / rpiontwo
+          else
+             cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma,qindex(1)) / rpiontwo
+          endif
           H_R(1) = cs * R_ref(1)**0.5 / sqrt(m1) ! single central star, G=1
        endif
     else
