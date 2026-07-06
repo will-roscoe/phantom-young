@@ -15,6 +15,7 @@ are described in the `code paper <http://ui.adsabs.harvard.edu/abs/2018PASA...35
    eos
    composition
    radiation
+   phantom-young-modifications
    floored-power-law-profile
    params-conserved
    
