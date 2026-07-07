@@ -60,6 +60,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  use testsetstar,  only:test_setstar
  use testsethier,  only:test_sethier
  use testeos,      only:test_eos
+ use test_flooredprof, only:run_test_flooredprof
  use testcooling,  only:test_cooling
  use testgeometry, only:test_geometry
  use testwind,     only:test_wind
@@ -81,7 +82,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  integer,          intent(inout) :: ntests,npass,nfail
  logical :: testall,doneigh,dokdtree,doderivs,dokernel,dostep,dorwdump,dosmol
  logical :: doptmass,dognewton,dosedov,doexternf,doindtstep,dogravity,dogeom
- logical :: dosetdisc,dosetstar,doeos,docooling,dodust,donimhd,docorotate,doany,dogrowth
+ logical :: dosetdisc,dosetstar,doeos,doflooredprof,docooling,dodust,donimhd,docorotate,doany,dogrowth
  logical :: dogr,doradiation,dopart,dopoly,dompi,dohier,dodamp,dowind
  logical :: doiorig,doapr,dounits,dolum,dosinktree,doorbits,dolinalg
  logical :: domassloading,dostopcond
@@ -124,6 +125,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  dosetdisc   = .false.
  dosetstar   = .false.
  doeos       = .false.
+ doflooredprof = .false.
  dodust      = .false.
  dogrowth    = .false.
  donimhd     = .false.
@@ -213,6 +215,8 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     dosetstar = .true.
  case('eos')
     doeos = .true.
+ case('flooredprof','tprofile')
+    doflooredprof = .true.
  case('dust')
     dodust = .true.
  case('gr')
@@ -289,6 +293,10 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     call test_eos(ntests,npass)
     call set_default_options_testsuite(iverbose) ! restore defaults
  endif
+!
+!--test of floored power-law temperature profile
+!
+ if (doflooredprof.or.testall) call run_test_flooredprof(ntests,npass)
 !
 !--test of equation of state module
 !

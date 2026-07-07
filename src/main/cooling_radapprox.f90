@@ -109,7 +109,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  use units,    only:umass,udist,unit_density,unit_ergg,utime,unit_pressure
  use eos_stamatellos, only:getopac_opdep,getintenerg_opdep,gradP_cool,&
       ttherm_store,ueqi_store,tau_store,du_store
- use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,qprofile
+ use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,qprofile,get_T_profile,iprofile
  use part,       only:xyzmh_ptmass,igas,eos_vars,iTemp
  integer, intent(in) :: i
  real, intent(in) :: xi,yi,zi,rhoi
@@ -185,12 +185,17 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
 !    Stellar heating
 !    q_eff sets the radial slope T ∝ r^(-2*q_eff) of the irradiation floor to match the disc setup
 !    (qprofile=0 -> default q_eff=0.25 -> T ∝ r^(-0.5); same merge rule as setup qindex)
- q_eff = 0.25
- if (qprofile > 0.) q_eff = qprofile
- if (isink_star > 0 .and. Lstar > 0.) then
-    Tmini4 = Tfloor**4 + exp(-coldensi*kappaBari)*(Lstar*solarl/(16.*pi*steboltz*udist*udist) * ri2**(-4.*q_eff))
+ if (iprofile == 2) then
+    ! floored power-law: floor == IC by construction, no optical-depth shielding
+    Tmini4 = get_T_profile(sqrt(ri2))**4
  else
-    Tmini4 = Tfloor**4
+    q_eff = 0.25
+    if (qprofile > 0.) q_eff = qprofile
+    if (isink_star > 0 .and. Lstar > 0.) then
+       Tmini4 = Tfloor**4 + exp(-coldensi*kappaBari)*(Lstar*solarl/(16.*pi*steboltz*udist*udist) * ri2**(-4.*q_eff))
+    else
+       Tmini4 = Tfloor**4
+    endif
  endif
 
  call getintenerg_opdep(Tmini4**(1.0/4.0),rhoi_cgs,umini)

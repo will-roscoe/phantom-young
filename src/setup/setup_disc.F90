@@ -616,8 +616,9 @@ subroutine equation_of_state(gamma)
                            ieos,icooling,ipdv_heating,ishock_heating
  use io_control,      only:nfulldump
  use shock_capturing, only:alphau
- use eos_stamatellos, only:init_coolra,read_optab,eos_file
- use physcon, only:rpiontwo,mass_proton_cgs,kboltz
+ use eos_stamatellos, only:init_coolra,read_optab,eos_file,&
+                           iprofile,T0_prof,n_prof,R0_prof,T_bg_prof,get_T_profile
+ use physcon, only:rpiontwo,mass_proton_cgs,kboltz,kb_on_mh
  use units,   only:unit_velocity
  use sethier_utils,   only:findloc_local
  real, intent(out) :: gamma
@@ -724,6 +725,12 @@ subroutine equation_of_state(gamma)
        lumdisc_logi = .True.
        ieos = 24
        icooling = 9
+       if (lumdisc == 2) then
+          iprofile  = 2
+          T_bg_prof = T_bg     ! reuse background as T_inf
+       else
+          iprofile  = 1
+       endif
        gamma = 5./3. ! in case it's needed
        call init_coolra()
        call read_optab(eos_file,ierr)
@@ -731,7 +738,11 @@ subroutine equation_of_state(gamma)
           print *, "We can't set up multiple radapprox discs yet :,("
           stop
        else
-          cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma,qindex(1)) / rpiontwo
+          if (iprofile == 2) then
+             cs = sqrt(gamma*kb_on_mh/2.381 * get_T_profile(R_ref(1))) / unit_velocity / rpiontwo
+          else
+             cs = get_cs_from_lum(L_star(1),R_ref(1),T_bg,gamma,qindex(1)) / rpiontwo
+          endif
           H_R(1) = cs * R_ref(1)**0.5 / sqrt(m1) ! single central star, G=1
        endif
     else
@@ -2709,7 +2720,7 @@ subroutine write_setupfile(filename)
  use sethierarchical,  only:write_hierarchical_setupfile,hs
  use setorbit,         only:write_options_orbit
  use setunits,         only:write_options_units
- use eos_stamatellos, only:eos_file,qprofile
+ use eos_stamatellos, only:eos_file,qprofile,T0_prof,n_prof,R0_prof
  character(len=*), intent(in) :: filename
  logical            :: done_alpha
  integer            :: i,j,n_possible_discs,iunit
@@ -2975,11 +2986,17 @@ subroutine write_setupfile(filename)
           call write_inopt(Q_min(i),'Q_min'//trim(disclabel),'minimum Toomre Q',iunit)
 
        end select
-       call write_inopt(lumdisc,'lumdisc', 'Set qindex from stellar luminosity (ieos=24) (0=no 1=yes)',iunit)
+       call write_inopt(lumdisc,'lumdisc', &
+          'Set qindex from stellar luminosity (ieos=24) (0=no, 1=luminosity radiative, 2=floored power-law)',iunit)
        if (lumdisc > 0) then
           call write_inopt(L_star(i),'L_star'//trim(disclabel),'Stellar luminosity (Lsun)',iunit)
           call write_inopt(T_bg,'T_bg'//trim(disclabel),'background Temperature (K)',iunit)
           call write_inopt(qprofile,'qprofile','q index override: 0=default qindex=0.25, otherwise use specified qindex',iunit)
+          if (lumdisc == 2) then
+             call write_inopt(T0_prof,'T0','normalization temperature at 1 AU (K)',iunit)
+             call write_inopt(n_prof, 'nprof','combination index (2=MS20 T^2, 4=T^4)',iunit)
+             call write_inopt(R0_prof,'R0','inner smoothing radius (AU)',iunit)
+          endif
        endif
        call write_inopt(pindex(i),'pindex'//trim(disclabel),'power law index of surface density sig=sig0*r^-p',iunit)
        if (lumdisc == 0) then
@@ -3144,7 +3161,7 @@ subroutine read_setupfile(filename,ierr)
  use sethierarchical,  only:read_hierarchical_setupfile,hs
  use setorbit,         only:read_options_orbit
  use setunits,         only:read_options_and_set_units
- use eos_stamatellos,  only:qprofile
+ use eos_stamatellos,  only:qprofile,T0_prof,n_prof,R0_prof
  character(len=*), intent(in)  :: filename
  integer,          intent(out) :: ierr
 
@@ -3285,6 +3302,9 @@ subroutine read_setupfile(filename,ierr)
  call read_inopt(lumdisc,'lumdisc',db,default=0)
  call read_inopt(qprofile,'qprofile',db,errcount=nerr,min=0.,default=0.)
  if (lumdisc > 0 .and. qprofile > 0.) qindex = qprofile
+ call read_inopt(T0_prof,'T0',db,err=ierr,default=100.)
+ call read_inopt(n_prof, 'nprof',db,err=ierr,default=2.)
+ call read_inopt(R0_prof,'R0',db,err=ierr,default=0.01)
 
  if (discstrat==1) then
     call read_inopt(istrat,'istrat',db,errcount=nerr)

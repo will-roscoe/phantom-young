@@ -69,6 +69,57 @@ by interpolating the :math:`u(T, \rho)` slice of the table, returning the specif
 internal energy :math:`u_{\rm eq}` that corresponds to a given equilibrium
 temperature :math:`T_{\rm eq}`.
 
+Floored power-law profile (``lumdisc=2`` / ``iprofile=2``)
+------------------------------------------------------------
+
+In addition to the legacy luminosity-derived radiative floor (``lumdisc=1``),
+the module provides a purely analytic "floored power-law" temperature profile
+selected by ``iprofile = 2`` (set automatically when the disc-setup option
+``lumdisc = 2``).  The profile is evaluated by ``get_T_profile(r)``:
+
+.. math::
+
+   T(R) = \left[\, T_0^{\,n}\,\bigl(R_{\rm au}^2 + R_0^2\bigr)^{-n\,q_{\rm eff}}
+                 + T_{\rm bg}^{\,n} \,\right]^{1/n}
+
+where :math:`R_{\rm au}` is the radius in AU (converted from code units via
+``udist``/``au``, so it is robust to any ``dist_unit``), and
+:math:`q_{\rm eff} = q_{\rm profile}` if ``qprofile > 0``, otherwise the
+default :math:`q_{\rm eff}=0.35` — the same ``merge`` rule used to set the
+irradiation slope in the legacy (``iprofile=1``) branch.
+
+**Parameters** (module-level, in :f:mod:`eos_stamatellos`):
+
+======================  =======================================================
+Parameter                Meaning
+======================  =======================================================
+``T0`` (``T0_prof``)     Normalisation temperature at 1 AU (K)
+``nprof`` (``n_prof``)   Combination index :math:`n`: ``2`` gives an MS20-style
+                         :math:`T^2` quadrature sum, ``4`` gives a flux-additive
+                         :math:`T^4` sum
+``R0`` (``R0_prof``)     Inner smoothing radius (AU), regularises the profile
+                         as :math:`R\to 0`
+``qprofile``             Reused from the legacy branch: overrides
+                         :math:`q_{\rm eff}` when ``> 0`` (default ``0.35``
+                         when unset)
+``T_bg`` (``T_bg_prof``) Reused from the legacy branch: background/floor
+                         temperature :math:`T_{\rm bg}` at large :math:`R`
+======================  =======================================================
+
+The MS20 preset (Stamatellos-style outer-disc floor) corresponds to
+``nprof=2``, ``qprofile=0.35``, ``T0=100``, ``R0=0.01``, ``T_bg=10``.
+
+**Floor == IC, no** ``exp(-tau)`` **shielding.**  When ``iprofile=2``, both the
+disc initial condition (:f:mod:`set_disc`, via ``get_T_profile`` at setup
+time) and the runtime cooling floor (:f:mod:`cooling_radapprox`, via
+``Tmini4 = get_T_profile(r)**4``) call the *same* function with the *same*
+parameters.  Unlike the ``iprofile=1`` branch — where the floor is attenuated
+by ``exp(-coldensi*kappaBari)`` optical-depth shielding of the stellar flux —
+the floored power-law profile is applied directly with no optical-depth
+attenuation: the particle temperature floor at any radius is, by
+construction, identical to the temperature the disc was initialised with at
+that radius.
+
 Derivations
 -----------
 
