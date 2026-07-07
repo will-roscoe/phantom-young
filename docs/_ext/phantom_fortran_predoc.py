@@ -21,7 +21,56 @@ by a fence line, which is skipped.  Only plain comment content lines between
 the two !+ markers are kept; blank !+ and fence lines are stripped.
 """
 import re
+import six
 from sphinxfortran.fortran_autodoc import F90toRst
+from sphinx.environment import BuildEnvironment
+
+# sphinx-fortran 1.1.1 (last released 2018) still calls the old
+# BuildEnvironment.warn(docname, msg, lineno) API, removed in modern Sphinx.
+# Restore it as a thin shim so duplicate-object/cross-reference warnings from
+# the fortran domain don't crash the build instead of just being logged.
+if not hasattr(BuildEnvironment, 'warn'):
+    from sphinx.util import logging as _sphinx_logging
+
+    def _env_warn(self, docname, msg, lineno=None):
+        _sphinx_logging.getLogger(__name__).warning(msg, location=docname)
+
+    BuildEnvironment.warn = _env_warn
+
+
+def _format_quickaccess(self, module, indent=F90toRst.indent):
+    """Format an abstract of all types, variables and routines of a module"""
+    # Upstream wraps get_blocklist('types', ...) in sorted(), which fails in
+    # Python 3 (list of dicts has no ordering). get_blocklist already sorts
+    # by name internally (sort=True default), so just drop the outer sorted().
+    if not isinstance(module, six.string_types):
+        module = module['name']
+
+    title = self.format_subsection('Quick access', indent=indent) + '\n'
+
+    decs = []
+    tlist = self.get_blocklist('types', module)
+    if tlist:
+        decs.append(':Types: ' +
+                    ', '.join([':f:type:`%s`' % tt['name'] for tt in tlist]))
+
+    vlist = self.get_blocklist('variables', module)
+    if vlist:
+        decs.append(':Variables: ' +
+                    ', '.join([':f:var:`%s`' % vv['name'] for vv in vlist]))
+
+    flist = self.get_blocklist('functions', module)
+    if flist:
+        decs.append(':Routines: ' +
+                    ', '.join([':f:func:`~%s/%s`' %
+                               (module, ff['name']) for ff in flist]))
+
+    if decs:
+        return self.format_lines(title + '\n'.join(decs)) + '\n\n'
+    return ''
+
+
+F90toRst.format_quickaccess = _format_quickaccess
 
 _re_comment = re.compile(r'^\s*!(.*)')
 _re_fence   = re.compile(r'^\s*!-{3,}')

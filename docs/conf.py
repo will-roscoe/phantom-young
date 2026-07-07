@@ -78,7 +78,7 @@ epub_exclude_files = ['search.html']                                            
 
 # -- add preamble to mathjax & other math configs.
 import re as _re
-_PREAMBLE_FP = "/win/e/Notebooks/General Notes/preamble.md"
+_PREAMBLE_FP = os.path.join(os.path.dirname(__file__), '_static', 'preamble.md')
 with open(_PREAMBLE_FP,"r") as f:
     pre_lines = f.readlines()
     pre = " ".join(pre_lines)

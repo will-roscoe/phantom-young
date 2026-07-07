@@ -6,3 +6,8 @@ repos:
         entry: scripts/bots.sh --apply --files
         language: script
         require_serial: true
+    -   id: sync-preamble
+        name: Sync docs preamble macros
+        entry: docs/scripts/sync-preamble.sh
+        language: script
+        pass_filenames: false
