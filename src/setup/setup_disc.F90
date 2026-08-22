@@ -251,7 +251,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real,              intent(out)   :: gamma
  real,              intent(out)   :: hfact
  real,              intent(inout) :: time
- character(len=20), intent(in)    :: fileprefix
+ character(len=*),  intent(in)    :: fileprefix
 
  write(*,"(/,65('-'),/,/,5x,a,/,/,65('-'))") 'Welcome to the New Disc Setup'
 
@@ -532,7 +532,7 @@ end subroutine set_default_options
 !--------------------------------------------------------------------------
 subroutine get_setup_parameters(id,fileprefix)
  integer,           intent(in) :: id
- character(len=20), intent(in) :: fileprefix
+ character(len=*),  intent(in) :: fileprefix
  logical :: iexist,seq_exists
  integer :: j,ierr
 
