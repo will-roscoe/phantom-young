@@ -38,7 +38,7 @@ module eos_stamatellos
 
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
  public :: get_k_fld
- public :: get_T_profile
+ public :: get_T_profile,get_T0_from_lum
  public :: write_headeropts_flooredprof,read_headeropts_flooredprof
 
 contains
@@ -325,6 +325,30 @@ real function get_T_profile(r)
    get_T_profile = ( T0_prof**n_prof * (Rau**2 + R0_prof**2)**(-n_prof*q_eff) &
                      + T_bg_prof**n_prof )**(1./n_prof)
 end function get_T_profile
+
+!
+! Irradiation temperature at 1 AU from the stellar luminosity, for lumdisc=3.
+!
+!   sigma_SB T0^4 = L / (4 pi (1 AU)^2)
+!
+! The 4pi normalisation is the flux temperature of a flat absorbing surface and
+! matches get_cs_from_lum / get_T_from_lum / get_u_stamatellos in set_disc.f90,
+! which set the legacy lumdisc=1 initial conditions.  Note cooling_radapprox.f90
+! uses 16pi (the spherical-grain equilibrium) for its lumdisc=1 floor; the two
+! differ by 4**0.25 = 1.414 in T.  That inconsistency does not reach lumdisc=3,
+! because there both the IC and the runtime floor come from get_T_profile.
+!
+! Anchored on au rather than udist because T0_prof is by definition the value at
+! 1 AU, and get_T_profile converts its argument to AU regardless of dist_unit.
+!
+! At MS20's 0.2 Msun host this gives 108.1 K against the 100 K they adopt.
+!
+real function get_T0_from_lum(L_star)
+ use physcon, only:steboltz,solarl,fourpi,au
+ real, intent(in) :: L_star
+
+ get_T0_from_lum = ( L_star*solarl/(fourpi*steboltz*au*au) )**0.25
+end function get_T0_from_lum
 
 !-----------------------------------------------------------------------
 !+
