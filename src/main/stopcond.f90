@@ -61,7 +61,7 @@ contains
       if (max_created_sinks < 0) return     ! feature off
       if (nptmass0 < 0) return              ! baseline not yet captured
 
-      if ((nptmass - nptmass0) > max_created_sinks) then
+      if ((nptmass - nptmass0) >= max_created_sinks) then
          if (.not.stopcond_triggered .and. id==master) then
             write(iprint,"(1x,a,i0,a)") &
                '>> STOP CONDITION REACHED: MAX CREATED SINKS (',nptmass-nptmass0, &
