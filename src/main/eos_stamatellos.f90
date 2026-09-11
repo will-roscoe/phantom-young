@@ -37,11 +37,46 @@ module eos_stamatellos
  real,    public :: T_bg_prof = 10.   ! K,  background floor T_inf (set = T_bg/Tfloor)
 
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
+ public :: alloc_coolra_stores
  public :: get_k_fld
  public :: get_T_profile
  public :: write_headeropts_flooredprof,read_headeropts_flooredprof
 
 contains
+
+!----------------------------------------------------------------
+!+
+!  Allocate the four per-particle cooling stores, and zero them ONLY
+!  when this call is what created them.
+!
+!  They are the state of the exponential relaxation in radcool_evolve_ui,
+!  they are written to every full dump, and on a restart they are read back
+!  before init_coolra runs. Zeroing them unconditionally here discarded that
+!  read, and because ttherm_store = 0 fails the guard that decides whether to
+!  cool at all, every particle then skipped one cooling step per restart.
+!+
+!----------------------------------------------------------------
+subroutine alloc_coolra_stores()
+ use dim, only:maxp,maxp_alloc
+ use allocutils, only:allocate_array
+ integer :: np
+
+ if (allocated(ttherm_store)) return
+ if (maxp == 0) then
+    np = int(maxp_alloc)
+ else
+    np = maxp
+ endif
+ call allocate_array('ttherm_store',ttherm_store,np)
+ call allocate_array('ueqi_store',ueqi_store,np)
+ call allocate_array('tau_store',tau_store,np)
+ call allocate_array('du_store',du_store,np)
+ ueqi_store(:)   = 0d0
+ ttherm_store(:) = 0d0
+ tau_store(:)    = 0d0
+ du_store(:)     = 0d0
+
+end subroutine alloc_coolra_stores
 
 subroutine init_coolra()
  use dim, only:maxp,maxp_alloc
@@ -59,18 +94,10 @@ subroutine init_coolra()
  call allocate_array('duFLD',duFLD,np)
  call allocate_array('lambda_fld',lambda_fld,np)
  call allocate_array('urad_FLD',urad_FLD,np)
- if (.not. allocated(ttherm_store)) then
-    call allocate_array('ttherm_store',ttherm_store,np)
-    call allocate_array('ueqi_store',ueqi_store,np)
-    call allocate_array('tau_store',tau_store,np)
-    call allocate_array('du_store',du_store,np)
- endif
+ ! allocates and zeroes only if nothing has already populated them
+ call alloc_coolra_stores()
 
  gradP_cool(:) = 0d0
- ueqi_store(:) = 0d0
- ttherm_store(:) = 0d0
- tau_store(:) = 0d0
- du_store(:) = 0d0
  duSPH(:) = 0d0
  Gpot_cool(:) = 0d0
  urad_FLD(:) = 0d0

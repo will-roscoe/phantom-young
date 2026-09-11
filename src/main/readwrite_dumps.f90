@@ -967,7 +967,8 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
                         rad,rad_label,radprop,radprop_label,do_radiation,maxirad,maxradprop,ifluxx,ifluxy,ifluxz, &
                         nucleation,nucleation_label,n_nucleation,ikappa,tau,itau_alloc,tau_lucy,itauL_alloc,&
                         ithick,ilambda,iorig,dt_in,krome_nmols,T_gas_cool,apr_level
- use eos_stamatellos, only:ttherm_store,ueqi_store,tau_store,du_store
+ use eos_stamatellos, only:ttherm_store,ueqi_store,tau_store,du_store,alloc_coolra_stores
+ use eos,        only:ieos
  use sphNGutils, only:mass_sphng,got_mass,set_gas_particle_mass
  use options,    only:use_porosity
  integer, intent(in)   :: i1,i2,noffset,narraylengths,nums(:,:),npartread,npartoftype(:),idisk1,iprint
@@ -1090,7 +1091,12 @@ subroutine read_phantom_arrays(i1,i2,noffset,narraylengths,nums,npartread,nparto
                 call read_array(dust_temp,'Tdust',got_Tdust,ik,i1,i2,noffset,idisk1,tag,match,ierr)
              endif
              call read_array(eos_vars,eos_vars_label,got_eosvars,ik,i1,i2,noffset,idisk1,tag,match,ierr)
-             if (allocated(ttherm_store)) then
+             ! nothing has allocated these yet on a restart -- init_eos, which
+             ! is what normally allocates them, does not run until after the
+             ! dump has been read, so guarding on allocated() silently skipped
+             ! the read and the state in the dump was thrown away
+             if (ieos == 24) then
+                call alloc_coolra_stores()
                 call read_array(ttherm_store,'ttherm',got_ttherm,ik,i1,i2,noffset,idisk1,tag,match,ierr)
                 call read_array(ueqi_store,'ueqi',got_ueqi,ik,i1,i2,noffset,idisk1,tag,match,ierr)
                 call read_array(tau_store,'taumean',got_taumean,ik,i1,i2,noffset,idisk1,tag,match,ierr)
