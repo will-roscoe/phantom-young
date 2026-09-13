@@ -225,7 +225,10 @@ subroutine check_dtmax_for_decrease(iprint,time,dtmax,twallperdump,rhomaxold,rho
     elseif (ipower > 0) then
        ! increase dtmax
        ifactor = min(ifactor,ifactor_max_up)
-       if (dtmax_user*ifactor <= dtmax_max .and. ifactor*twallperdump < dtwallmax) then
+       ! no wall-time constraint must mean no wall-time objection here either,
+       ! otherwise dtwallmax = 0 also freezes the density-driven increase
+       if (dtmax_user*ifactor <= dtmax_max .and. &
+           (dtwallmax <= 0.0 .or. ifactor*twallperdump < dtwallmax)) then
           dtmax_ifactor = -ifactor
           if (iverbose > 0) then
              write(iprint,'(1x,a,2(es10.3,a),a,2es10.3,2I6)') &
@@ -249,8 +252,20 @@ subroutine check_dtmax_for_decrease(iprint,time,dtmax,twallperdump,rhomaxold,rho
 
 !--Modify dtmax based upon wall time constraint, if requested
 !  we will not try this is dtmax has just been modified due to density
- if ( dtwallmax > 0.0 .and. dtmax_ifactor==0) then
-    if (twallperdump > dtwallmax) then
+ if (dtmax_ifactor==0) then
+    if (dtwallmax <= 0.0) then
+       ! dtwallmax = 0 documents itself as "ignore", but the branch below is
+       ! the only thing that ever lowers idtmax_n, so leaving it unreachable
+       ! froze an existing subdivision permanently -- idtmax_n lives in the
+       ! dump header, so not even a restart cleared it. Walk it back the same
+       ! way the wall-time path does, a factor of two per dump, which keeps
+       ! idtmax_frac consistent; jumping straight to 1 would not.
+       if (idtmax_n > 1 .and. (idtmax_frac==0 .or. idtmax_frac*2==idtmax_n)) then
+          dtmax_ifactor = -2
+          write(iprint,'(1x,a,I4,a)') &
+             "modifying dtmax: dtwallmax disabled, restoring to ",-idtmax_n/dtmax_ifactor," sub-dumps"
+       endif
+    elseif (twallperdump > dtwallmax) then
        dtmax_ifactor = int(2**(int(log(real(twallperdump/dtwallmax))/log(2.0))+1))
        write(iprint,'(1x,a,I4,a)') &
           "modifying dtmax internally due to wall time constraint.  Increasing to ",idtmax_n*dtmax_ifactor," sub-dumps"
