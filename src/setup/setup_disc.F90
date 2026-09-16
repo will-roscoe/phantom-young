@@ -251,7 +251,7 @@ subroutine setpart(id,npart,npartoftype,xyzh,massoftype,vxyzu,polyk,gamma,hfact,
  real,              intent(out)   :: gamma
  real,              intent(out)   :: hfact
  real,              intent(inout) :: time
- character(len=20), intent(in)    :: fileprefix
+ character(len=*),  intent(in)    :: fileprefix
 
  write(*,"(/,65('-'),/,/,5x,a,/,/,65('-'))") 'Welcome to the New Disc Setup'
 
@@ -532,7 +532,7 @@ end subroutine set_default_options
 !--------------------------------------------------------------------------
 subroutine get_setup_parameters(id,fileprefix)
  integer,           intent(in) :: id
- character(len=20), intent(in) :: fileprefix
+ character(len=*),  intent(in) :: fileprefix
  logical :: iexist,seq_exists
  integer :: j,ierr
 
@@ -617,7 +617,8 @@ subroutine equation_of_state(gamma)
  use io_control,      only:nfulldump
  use shock_capturing, only:alphau
  use eos_stamatellos, only:init_coolra,read_optab,eos_file,&
-                           iprofile,T0_prof,n_prof,R0_prof,T_bg_prof,get_T_profile
+                           iprofile,T0_prof,n_prof,R0_prof,T_bg_prof,get_T_profile,&
+                           get_T0_from_lum
  use physcon, only:rpiontwo,mass_proton_cgs,kboltz,kb_on_mh
  use units,   only:unit_velocity
  use sethier_utils,   only:findloc_local
@@ -725,9 +726,13 @@ subroutine equation_of_state(gamma)
        lumdisc_logi = .True.
        ieos = 24
        icooling = 9
-       if (lumdisc == 2) then
+       if (lumdisc >= 2) then
           iprofile  = 2
           T_bg_prof = T_bg     ! reuse background as T_inf
+          ! lumdisc=3: same floored power law, but T0 comes from the star rather
+          ! than the .setup, so a grid that sweeps m1 sweeps the disc temperature
+          ! with it instead of irradiating every host identically.
+          if (lumdisc == 3) T0_prof = get_T0_from_lum(L_star(1))
        else
           iprofile  = 1
        endif
@@ -2987,13 +2992,14 @@ subroutine write_setupfile(filename)
 
        end select
        call write_inopt(lumdisc,'lumdisc', &
-          'Set qindex from stellar luminosity (ieos=24) (0=no, 1=luminosity radiative, 2=floored power-law)',iunit)
+          'Set qindex from stellar luminosity (ieos=24) '// &
+          '(0=no, 1=luminosity radiative, 2=floored power-law, 3=floored power-law with T0 from L_star)',iunit)
        if (lumdisc > 0) then
           call write_inopt(L_star(i),'L_star'//trim(disclabel),'Stellar luminosity (Lsun)',iunit)
           call write_inopt(T_bg,'T_bg'//trim(disclabel),'background Temperature (K)',iunit)
           call write_inopt(qprofile,'qprofile','q index override: 0=default qindex=0.25, otherwise use specified qindex',iunit)
-          if (lumdisc == 2) then
-             call write_inopt(T0_prof,'T0','normalization temperature at 1 AU (K)',iunit)
+          if (lumdisc >= 2) then
+             call write_inopt(T0_prof,'T0','normalization temperature at 1 AU (K); derived from L_star when lumdisc=3',iunit)
              call write_inopt(n_prof, 'nprof','combination index (2=MS20 T^2, 4=T^4)',iunit)
              call write_inopt(R0_prof,'R0','inner smoothing radius (AU)',iunit)
           endif
