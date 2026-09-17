@@ -251,7 +251,7 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
                                 nout,noutput,noutput_dtmax,ncount_fulldumps,&
                                 dumpfile,infile,evfile,logfile,abortrun)
  use dim,              only:ind_timesteps,inject_parts,driving,idumpfile,use_apr
- use io,               only:iprint,iwritein,id,master,flush_warnings
+ use io,               only:iprint,iwritein,id,master,flush_warnings,error
  use io_control,       only:at_simulation_end,check_for_full_dump
  use fileutils,        only:getnextfilename
  use forcing,          only:write_forcingdump
@@ -281,6 +281,9 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
  logical :: fulldump,writedump
  character(len=120) :: dumpfile_orig
  real(kind=4) :: t1,t2,tcpu1,tcpu2
+ integer :: iunderscore
+ logical :: dump_written
+ integer(kind=8) :: dump_size
 
  dumpfile_orig = trim(dumpfile)
 !
@@ -301,7 +304,17 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
        dumpfile = getnextfilename(dumpfile,idumpfile)
        dumpfile_orig = trim(dumpfile)
     else
-       write(dumpfile,'(2a)') dumpfile(:index(dumpfile,'_')-1),'.restart'
+       ! a plain assignment, not an internal WRITE: dumpfile was both the
+       ! internal file and an item in the output list, which is undefined
+       ! and which ifx resolves to a blank string. And the LAST underscore,
+       ! not the first -- for a run named <a>_<b>_<c> the old form truncated
+       ! to <a> rather than stripping the five-digit dump number.
+       iunderscore = index(dumpfile,'_',back=.true.)
+       if (iunderscore > 1) then
+          dumpfile = dumpfile(:iunderscore-1)//'.restart'
+       else
+          dumpfile = trim(dumpfile)//'.restart'
+       endif
     endif
  endif
 
@@ -334,7 +347,16 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
     if (fulldump) then
        call write_fulldump(time,dumpfile)
        if (id==master) then
-          call write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
+          ! write_fulldump reports failure only to the log, so confirm the
+          ! file is actually there before recording it as the restart point.
+          ! Writing it blind means a failed dump leaves the .in naming a file
+          ! that does not exist, and the next run of that .in dies at startup.
+          inquire(file=trim(dumpfile),exist=dump_written,size=dump_size)
+          if (dump_written .and. dump_size > 0) then
+             call write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
+          else
+             call error('evolve','dump write failed; .in left pointing at the previous dump')
+          endif
           if (driving) call write_forcingdump(time,dumpfile)
        endif
        ncount_fulldumps = ncount_fulldumps + 1
