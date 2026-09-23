@@ -71,6 +71,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
  use shock_capturing,  only:write_options_shock_capturing
  use io_control,       only:write_options_iocontrol
  use stopcond,         only:write_options_stopcond
+ use radial_stability, only:write_options_qbeta
  use options,          only:write_options_output
  character(len=*), intent(in) :: infile,logfile,evfile,dumpfile
  integer,          intent(in) :: iwritein,iprint
@@ -103,6 +104,7 @@ subroutine write_infile(infile,logfile,evfile,dumpfile,iwritein,iprint)
 
  call write_options_iocontrol(iwritein)
  call write_options_stopcond(iwritein)
+ call write_options_qbeta(iwritein)
 
  write(iwritein,"(/,a)") '# options controlling accuracy'
  call write_options_timestep(iwritein)
@@ -309,6 +311,7 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  use shock_capturing,  only:read_options_shock_capturing
  use io_control,       only:read_options_iocontrol
  use stopcond,         only:read_options_stopcond
+ use radial_stability, only:read_options_qbeta
  use options,          only:read_options_output
  use timestep,         only:read_options_timestep
  type(inopts),     intent(inout) :: db(:)
@@ -329,6 +332,7 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  ! parse options internal to other code modules
  call read_options_iocontrol(db,nerr)
  call read_options_stopcond(db,nerr)
+ call read_options_qbeta(db,nerr)
  call read_options_timestep(db,nerr)
 
  call read_options_shock_capturing(db,nerr)

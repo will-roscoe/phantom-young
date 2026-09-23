@@ -263,6 +263,7 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
  use readwrite_infile, only:write_infile
  use readwrite_dumps,  only:write_fulldump,write_smalldump
  use stopcond,         only:check_stopcond
+ use radial_stability, only:write_qbeta_profile
  use dynamic_dtmax,    only:check_for_restart_dump,idtmax_frac
  use timing,           only:timers,itimer_io,itimer_lastdump,itimer_fromstart,increment_timer,get_timings
 #ifdef LIVE_ANALYSIS
@@ -344,6 +345,7 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
  call get_timings(t1,tcpu1)
  if (writedump .and. write_files) then
     call check_stopcond(nptmass, fulldump)   ! may promote to a full dump + request stop
+    call write_qbeta_profile(time)            ! Q/beta by radius to the log (if nbins_qbeta > 0)
     if (fulldump) then
        call write_fulldump(time,dumpfile)
        if (id==master) then

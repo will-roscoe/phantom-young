@@ -504,7 +504,7 @@ SOURCES= physcon.f90 ${CONFIG} ${SRCKERNEL} io.F90 units.f90 \
          setup_params.f90 dynamic_dtmax.f90 timestep.f90 utils_dumpfiles.f90 utils_indtimesteps.f90 \
          utils_sort.f90 utils_tables.f90 utils_gravwave.f90 \
          utils_sphNG.f90 utils_vectors.f90 utils_orbits.f90 utils_subgroup.f90 utils_datafiles.f90 datafiles.f90 \
-         gitinfo.f90 random.f90 ${SRCEOS} ${SRCNIMHD} ${SRCGR} checkoptions.F90 io_control.f90 stopcond.f90 \
+         gitinfo.f90 random.f90 ${SRCEOS} ${SRCNIMHD} ${SRCGR} checkoptions.F90 io_control.f90 stopcond.f90 radial_stability.f90 \
          viscosity.f90 damping.f90 shock_capturing.f90 mcfost_utils.f90 radiation_utils.f90 options.f90 \
          cons2primsolver.f90 cons2prim.f90 \
          centreofmass.f90 ${SRCPOT} evolve_massloading.f90 checkconserved.f90 \
@@ -599,7 +599,7 @@ SRCDUMP= physcon.f90 ${CONFIG} ${SRCKERNEL} utils_omp.f90 io.F90 units.f90 mpi_u
          timestep.f90 ${SRCEOS} dust_formation.f90 \
          ${SRCGR} ${SRCPOT} \
          memory.f90 utils_sphNG.f90 \
-         setup_params.f90 checkoptions.F90 io_control.f90 stopcond.f90 \
+         setup_params.f90 checkoptions.F90 io_control.f90 stopcond.f90 radial_stability.f90 \
          viscosity.f90 damping.f90 shock_capturing.f90\
          mcfost_utils.f90 radiation_utils.f90 options.f90 \
          checkconserved.f90 prompting.f90 dust.f90 \
@@ -671,7 +671,7 @@ SRCTESTS=utils_testsuite.f90 test_kernel.f90 \
          test_nonidealmhd.f90 directsum.f90 test_gravity.f90 \
          test_derivs.f90 test_cooling.f90 test_eos_stratified.f90 \
          test_eos_stam.f90 test_flooredprof.f90 test_eos.f90 test_externf.f90 test_rwdump.f90 \
-         test_step.F90 test_indtstep.f90 test_massloading.f90 test_stopcond.f90 ${SRCSETSTAR} utils_filenames.f90 utils_tables.f90 \
+         test_step.F90 test_indtstep.f90 test_massloading.f90 test_stopcond.f90 test_qbeta.f90 ${SRCSETSTAR} utils_filenames.f90 utils_tables.f90 \
          grids_for_setup.f90 set_disc.f90 set_orbit.f90 test_setdisc.f90 test_setstar.f90 \
          test_hierarchical.f90 test_damping.f90 test_wind.f90 test_iorig.f90 \
          test_neigh.f90 test_kdtree.F90 test_orbits.f90 test_part.f90 test_ptmass.f90 test_luminosity.f90\

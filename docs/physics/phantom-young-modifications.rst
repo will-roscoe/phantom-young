@@ -360,9 +360,83 @@ T_bg=10``.
 For the full governing-equation derivation, hydrodynamics coupling, usage
 examples, and test coverage, see :doc:`floored-power-law-profile`.
 
+Feature 5 — Radial Toomre Q and cooling beta in the log (``radial_stability``)
+------------------------------------------------------------------------------
+
+Purpose
+^^^^^^^
+
+Writes a radially binned profile of Toomre Q and the cooling parameter
+:math:`\beta = t_{\rm cool}\Omega` to the log at every dump, so a running disc can
+be read for why it is or is not fragmenting without opening a dump.
+
+Parameters
+^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 12 66
+
+   * - ``.in`` key
+     - Default
+     - Meaning
+   * - ``nbins_qbeta``
+     - ``0``
+     - number of logarithmic radial bins; ``0`` turns the profile off
+   * - ``rmin_qbeta``, ``rmax_qbeta``
+     - ``-1``
+     - inner and outer radius of the profile (code units); written only when
+       ``nbins_qbeta > 0``, and both must be set for a profile to be written
+
+Equations
+^^^^^^^^^
+
+Per annulus, with R cylindrical about the central sink (the one nearest the
+origin) or the origin if there is none, and G = 1:
+
+.. math::
+
+   \Sigma = \frac{N m}{\pi (R_{\rm out}^2 - R_{\rm in}^2)}, \quad
+   \Omega = \sqrt{\frac{M_{\rm enc}}{R_{\rm mid}^3}}, \quad
+   c_s = \sqrt{\gamma\,P/\rho}, \quad
+   Q = \frac{c_s \Omega}{\pi \Sigma},
+
+where :math:`M_{\rm enc}` is the gas mass in earlier annuli plus that at
+:math:`R \le R_{\rm mid}` in this one, plus :math:`M_\star`;
+:math:`P/\rho = (k_B/m_H)\langle T\rangle/\langle\mu\rangle` and
+:math:`\gamma = 1 + (P/\rho)/\langle u\rangle`. With ``icooling = 9``,
+:math:`\beta = \langle t_{\rm therm}\sqrt{M_\star/R^3}\rangle`. These are the
+definitions of the sph-dev analysis (``toomreQsimple``,
+``ratio_cooling_orbital_time``); on the same dump the two agree to the printed
+precision. Particles outside the profile range are ignored, including in
+:math:`M_{\rm enc}`.
+
+Output
+^^^^^^
+
+One block per dump, every line tagged so a parser can match it exactly::
+
+   >> QBETA begin  t =   2.000000E+00  nbins =   10  mstar =   3.0000E-01  (code units)
+   >> QBETA        R_mid        Sigma          c_s        Omega            Q         beta          N
+   >> QBETA    6.1818E+00   1.2619E-05   1.7886E-02   3.5664E-02   1.6090E+01   2.5126E-01        448
+   ...
+   >> QBETA end
+
+An empty annulus reports Q = -1 and c_s = 0; beta is -1 wherever it is
+unavailable.
+
+Files
+^^^^^
+
+- ``src/main/radial_stability.f90``: accumulation, profile, ``.in`` options.
+- ``src/main/evolve_utils.F90``: called at each dump, beside the stop condition.
+- ``src/tests/test_qbeta.f90``: ``phantomtest qbeta``.
+
 References
 ----------
 
 - Mercer, A. & Stamatellos, D. 2020, A&A, 633, A116.
 - Stamatellos, D., Whitworth, A. P., Bisbas, T. & Goodwin, S. 2007, A&A, 475, 37.
 - Lombardi, J. C., McInally, W. G. & Faber, J. A. 2015, MNRAS, 447, 25.
+- Toomre, A. 1964, ApJ, 139, 1217.
+- Gammie, C. F. 2001, ApJ, 553, 174.
