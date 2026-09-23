@@ -214,8 +214,14 @@ contains
       call extract('wall_in_window',rval,hdr,ierr,default=0.)
       if (ierr == 0) wall_in_window = rval
 
-      ! Job-local: force the next check to re-establish it from this job's clock.
-      wall_mark = -1.
+      ! getused() counts from the start of this job. Restarting inside the window,
+      ! all of this job's wall time belongs to it, so mark from zero; otherwise
+      ! the stretch up to the first dump would be dropped on every link.
+      if (t_trip >= 0.) then
+         wall_mark = 0.
+      else
+         wall_mark = -1.
+      endif
    end subroutine read_headeropts_stopcond
 
 end module stopcond
