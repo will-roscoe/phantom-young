@@ -1,7 +1,11 @@
 name: mcfost
 
+# The other macOS job this repo runs (runs-on: macos-latest, no matrix). Not
+# called from on_pr.yml or on_push.yml -- it never has been -- so it only runs
+# on a version tag (via release.yml) or manually.
 on:
   workflow_call:
+  workflow_dispatch:
 
 env:
   PREFIX: /opt/homebrew

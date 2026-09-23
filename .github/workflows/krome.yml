@@ -1,7 +1,13 @@
 name: krome
 
+# Includes the only macOS job this repo runs (matrix excludes macos-latest x
+# intel-classic). Not called from on_pr.yml or on_push.yml -- it never has
+# been (nothing referenced this file before this change either; see the CI
+# slimming issue) -- so it only runs on a version tag (via release.yml) or
+# manually.
 on:
   workflow_call:
+  workflow_dispatch:
 
 env:
   PREFIX: /usr/local/

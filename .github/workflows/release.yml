@@ -106,3 +106,13 @@ jobs:
 #        --sha256=${{ steps.shasum.outputs.sha }} \
 #        --url="https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.version }}/${{ steps.get_version.outputs.tarfile }}" \
 #        $brewtap/$formula
+
+  # Exercised only here (a version tag), or manually via workflow_dispatch, not
+  # on every PR/push -- CI slimming. Independent of the `release` job above:
+  # neither needs the other, so a krome/mcfost failure never blocks cutting the
+  # release, and the release never blocks on the macOS runner queue.
+  krome:
+    uses: ./.github/workflows/krome.yml
+
+  mcfost:
+    uses: ./.github/workflows/mcfost.yml
