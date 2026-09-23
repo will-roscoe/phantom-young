@@ -356,25 +356,26 @@ end function get_T_profile
 !
 ! Irradiation temperature at 1 AU from the stellar luminosity, for lumdisc=3.
 !
-!   sigma_SB T0^4 = L / (4 pi (1 AU)^2)
+!   sigma_SB T0^4 = L / (16 pi (1 AU)^2)
 !
-! The 4pi normalisation is the flux temperature of a flat absorbing surface and
-! matches get_cs_from_lum / get_T_from_lum / get_u_stamatellos in set_disc.f90,
-! which set the legacy lumdisc=1 initial conditions.  Note cooling_radapprox.f90
-! uses 16pi (the spherical-grain equilibrium) for its lumdisc=1 floor; the two
-! differ by 4**0.25 = 1.414 in T.  That inconsistency does not reach lumdisc=3,
-! because there both the IC and the runtime floor come from get_T_profile.
+! The 16pi normalisation is the equilibrium temperature of an isothermal grain,
+! T = 279 K (L/Lsun)^(1/4) (R/AU)^(-1/2), and matches the lumdisc=1 runtime
+! floor in cooling_radapprox.f90.  get_cs_from_lum / get_T_from_lum /
+! get_u_stamatellos in set_disc.f90, which set the legacy lumdisc=1 initial
+! conditions, use 4pi (a flat absorbing surface) and are 4**0.25 = 1.414 hotter.
+! That inconsistency does not reach lumdisc=3, because there both the IC and
+! the runtime floor come from get_T_profile.
 !
 ! Anchored on au rather than udist because T0_prof is by definition the value at
 ! 1 AU, and get_T_profile converts its argument to AU regardless of dist_unit.
 !
-! At MS20's 0.2 Msun host this gives 108.1 K against the 100 K they adopt.
+! L = 0.035 Lsun (a young brown dwarf) gives 121 K.
 !
 real function get_T0_from_lum(L_star)
- use physcon, only:steboltz,solarl,fourpi,au
+ use physcon, only:steboltz,solarl,pi,au
  real, intent(in) :: L_star
 
- get_T0_from_lum = ( L_star*solarl/(fourpi*steboltz*au*au) )**0.25
+ get_T0_from_lum = ( L_star*solarl/(16.*pi*steboltz*au*au) )**0.25
 end function get_T0_from_lum
 
 !-----------------------------------------------------------------------
