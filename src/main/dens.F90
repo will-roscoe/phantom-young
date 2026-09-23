@@ -29,6 +29,7 @@ module densityforce
  implicit none
 
  public :: densityiterate,get_neighbour_stats,get_density_at_pos
+ public :: fld_limiter,fld_gradh
 
  !--indexing for xpartveci array
  integer, parameter :: &
@@ -335,9 +336,6 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
     endif
 
     call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
-    if (icooling==9 .and. doFLD .and. icall==1) then
-       call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
-    endif
     if (do_export) then
        call write_cell(stack_waiting,cell)
     else
@@ -370,9 +368,6 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
              endif
 
              call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
-             if (icooling==9 .and. doFLD) then
-                call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
-             endif
 
              if (do_export) then
                 call write_cell(stack_waiting,cell)
@@ -385,6 +380,10 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
           call store_results(icall,cell,getdv,getdB,realviscosity,stressmax,xyzh,gradh,divcurlv, &
                divcurlB,alphaind,dvdx,vxyzu,&
                dustfrac,rhomax,nneightry,nneighact,maxneightry,maxneighact,np,ncalc,radprop)
+          ! lambda needs this pass's gradh, so only once the cell has converged and stored it
+          if (icooling==9 .and. doFLD .and. icall==1) then
+             call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
+          endif
           nlocal = nlocal + 1
        endif
     endif
@@ -506,14 +505,14 @@ subroutine densityiterate(icall,npart,nactive,xyzh,vxyzu,divcurlv,divcurlB,Bevol
              call send_cell(cell,remote_export,irequestsend,xsendbuf,cell_counters,mpitype) ! send the cell to remote
 
              call compute_cell(cell,listneigh,nneigh,getdv,getdB,Bevol,xyzh,vxyzu,fxyzu,fext,xyzcache,rad,apr_level)
-             if (icooling==9 .and. doFLD) then
-                call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
-             endif
              call write_cell(stack_redo,cell)
           else
              call store_results(icall,cell,getdv,getdB,realviscosity,stressmax,xyzh,gradh,divcurlv, &
                   divcurlB,alphaind,dvdx,vxyzu, &
                   dustfrac,rhomax,nneightry,nneighact,maxneightry,maxneighact,np,ncalc,radprop)
+             if (icooling==9 .and. doFLD .and. icall==1) then
+                call calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda_FLD,urad_FLD)
+             endif
           endif
 
        enddo over_waiting
@@ -1824,6 +1823,7 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
     u_cgs = vxyzu(4,i)*unit_ergg
     rho_cgs = rhoi*unit_density
     call getopac_opdep(u_cgs,rho_cgs,kappabari,kappaparti,Ti,gmwi)
+    gradhi = fld_gradh(gradh(1,i),ngradh_err)
 
     loop_over_neighbours: do n=1,nneigh
        j = abs(listneigh(n))
@@ -1863,19 +1863,9 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
           if (.not. iamgasj) cycle loop_over_neighbours
           if (.not. iactivej) cycle loop_over_neighbours
           ! get kernel quantities
-          if (gradh(1,i) > 0.) then
-             gradhi = gradh(1,i)
-          elseif (ngradh_err < 20) then
-             call error('force','stored gradh is zero, resetting to 1')
-             gradhi = 1.
-             ngradh_err = ngradh_err + 1
-          else
-             gradhi = 1.
-             ngradh_err = ngradh_err + 1
-          endif
           call get_kernel(q2i,qi,wabi,grkerni)
           wkerni = wabi*cnormk*hi21*hi1
-          dwkerni = grkerni*cnormk*hi21*hi21*gradh(1,i)
+          dwkerni = grkerni*cnormk*hi21*hi21*gradhi
           pmassj = massoftype(iamtypej)
           call rhoanddhdrho(hj,hj1,rhoj,rho1j,dhdrhoj,pmassj)
           u_cgs = vxyzu(4,j)*unit_ergg
@@ -1916,7 +1906,7 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
        R_rad = dradi/(uradi*rhoi*kappaParti/unit_opacity)
     endif
 !$omp critical
-    lambda(i) = (2.0d0+R_rad)/(6.0d0+3.0d0*R_rad+R_rad*R_rad)
+    lambda(i) = fld_limiter(R_rad)
 !$omp end critical
 
     if (isnan(lambda(i))) then
@@ -1925,7 +1915,41 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
     endif
 
  enddo over_parts
- ! if (ngradh_err > 0) print *, "ngradh_errors = ", ngradh_err
+ if (ngradh_err > 0) call error('calc_lambda_cell','gradh <= 0 (Omega <= 0): FLD gradient used gradh = 1', &
+                                var='particles',ival=ngradh_err)
 end subroutine calc_lambda_cell
+
+!-----------------------------------------------------------------------
+!+
+!  flux limiter lambda(R) = (2 + R)/(6 + 3R + R^2), Levermore & Pomraning
+!  form as used by Forgan et al. (2009): 1/3 when optically thick (R -> 0),
+!  -> 1/R when free streaming
+!+
+!-----------------------------------------------------------------------
+pure real function fld_limiter(R_rad)
+ real, intent(in) :: R_rad
+
+ fld_limiter = (2.0d0+R_rad)/(6.0d0+3.0d0*R_rad+R_rad*R_rad)
+
+end function fld_limiter
+
+!-----------------------------------------------------------------------
+!+
+!  gradh (= 1/Omega) for the FLD gradient: the stored value, or 1 when it
+!  is not positive (Omega <= 0), counting the replacements in nbad
+!+
+!-----------------------------------------------------------------------
+real function fld_gradh(stored,nbad)
+ real(kind=4), intent(in)    :: stored
+ integer,      intent(inout) :: nbad
+
+ if (stored > 0.) then
+    fld_gradh = stored
+ else
+    fld_gradh = 1.
+    nbad = nbad + 1
+ endif
+
+end function fld_gradh
 
 end module densityforce
