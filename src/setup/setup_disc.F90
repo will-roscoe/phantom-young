@@ -619,6 +619,7 @@ subroutine equation_of_state(gamma)
  use eos_stamatellos, only:init_coolra,read_optab,eos_file,&
                            iprofile,T0_prof,n_prof,R0_prof,T_bg_prof,get_T_profile,&
                            get_T0_from_lum
+ use cooling_radapprox, only:Lstar
  use physcon, only:rpiontwo,mass_proton_cgs,kboltz,kb_on_mh
  use units,   only:unit_velocity
  use sethier_utils,   only:findloc_local
@@ -726,6 +727,8 @@ subroutine equation_of_state(gamma)
        lumdisc_logi = .True.
        ieos = 24
        icooling = 9
+       ! otherwise the .in keeps whatever Lstar an earlier .in held
+       Lstar = L_star(1)
        if (lumdisc >= 2) then
           iprofile  = 2
           T_bg_prof = T_bg     ! reuse background as T_inf
@@ -2498,15 +2501,7 @@ subroutine setup_interactive(id)
              "luminosity? (0=no 1=yes",lumdisc)
           endif
           if (lumdisc > 0) then
-             !get luminosity ...
-             select case(trim(mass_unit))
-             case('jupiterm')
-                L_star(1) = get_Lstar_from_mass(m1 * jupiterm/solarm)
-             case('earthm')
-                L_star(1) = get_Lstar_from_mass(m1 * earthm/solarm)
-             case default  ! 'solarm' or unrecognised
-                L_star(1) = get_Lstar_from_mass(m1)
-             end select
+             L_star(1) = get_Lstar_from_m1()
              call prompt("Enter the luminosity of star",L_star(1))
              call prompt("Enter the background temperature e.g. 10 (K)", T_bg)
              if (qprofile > 0.) then
@@ -3167,7 +3162,7 @@ subroutine read_setupfile(filename,ierr)
  use sethierarchical,  only:read_hierarchical_setupfile,hs
  use setorbit,         only:read_options_orbit
  use setunits,         only:read_options_and_set_units
- use eos_stamatellos,  only:qprofile,T0_prof,n_prof,R0_prof
+ use eos_stamatellos,  only:qprofile,T0_prof,n_prof,R0_prof,get_T0_from_lum
  character(len=*), intent(in)  :: filename
  integer,          intent(out) :: ierr
 
@@ -3545,8 +3540,16 @@ subroutine read_setupfile(filename,ierr)
  if (do_radiation) call read_inopt(iradkappa,'radkappa',db,err=ierr)
 
  if (lumdisc > 0) then
-    call read_inopt(L_star(1),'L_star',db,min=0.,errcount=nerr)
+    call read_inopt(L_star(1),'L_star',db,min=0.,err=ierr)
+    if (ierr /= 0) then
+       L_star(1) = get_Lstar_from_m1()
+       call warning('setup_disc','L_star not in .setup: using the main-sequence '// &
+                    'mass-luminosity estimate, which is far too low for young brown dwarfs', &
+                    var='L_star',val=L_star(1))
+    endif
     call read_inopt(T_bg,'T_bg',db,min=0.,errcount=nerr)
+    ! so the rewritten .setup records the T0 the disc is built with
+    if (lumdisc == 3) T0_prof = get_T0_from_lum(L_star(1))
  endif
 
  call close_db(db)
@@ -3853,5 +3856,22 @@ real function get_Lstar_from_mass(mass_solar)
  endif
 
 end function get_Lstar_from_mass
+
+!--------------------------------------------------------------------
+! get_Lstar_from_mass applied to m1, whatever mass_unit it is in
+!--------------------------------------------------------------------
+real function get_Lstar_from_m1()
+ use setunits, only:mass_unit
+
+ select case(trim(mass_unit))
+ case('jupiterm')
+    get_Lstar_from_m1 = get_Lstar_from_mass(m1 * jupiterm/solarm)
+ case('earthm')
+    get_Lstar_from_m1 = get_Lstar_from_mass(m1 * earthm/solarm)
+ case default  ! 'solarm' or unrecognised
+    get_Lstar_from_m1 = get_Lstar_from_mass(m1)
+ end select
+
+end function get_Lstar_from_m1
 
 end module setup

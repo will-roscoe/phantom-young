@@ -88,11 +88,16 @@ Parameters
    * - ``lumdisc``
      - —
      - ``0``
-     - ``0`` = off, ``1`` = luminosity radiative (legacy), ``2`` = floored power-law
+     - ``0`` = off, ``1`` = luminosity radiative (legacy), ``2`` = floored power-law,
+       ``3`` = floored power-law with ``T0`` from ``L_star``
    * - ``T0``
      - ``T0_prof``
      - ``100.``
-     - normalisation temperature at 1 AU (K)
+     - normalisation temperature at 1 AU (K); ignored and overwritten when ``lumdisc=3``
+   * - ``L_star``
+     - ``L_star(1)``
+     - M–L estimate
+     - stellar luminosity (L\ :sub:`☉`); if absent, estimated from ``m1`` with a warning
    * - ``nprof``
      - ``n_prof``
      - ``2.``
@@ -112,9 +117,30 @@ Parameters
    * - —
      - ``iprofile``
      - ``1``
-     - internal mode (``2`` when ``lumdisc=2``)
+     - internal mode (``2`` when ``lumdisc`` is ``2`` or ``3``)
 
-In mode 2, ``L_star`` is not used for temperature.
+With ``lumdisc=2``, ``L_star`` is not used for temperature.
+
+``lumdisc=3`` uses the same profile, but sets ``T0`` from the luminosity by
+``get_T0_from_lum``, the equilibrium temperature of an isothermal grain at 1 AU:
+
+.. math::
+
+   \sigma_{\rm SB} T_0^4 = \frac{L_\star}{16\pi\,(1\,\mathrm{AU})^2},
+   \qquad T_0 \approx 279\,\mathrm{K}\,(L_\star/L_\odot)^{1/4}.
+
+``L_star = 0.035`` gives :math:`T_0 = 121` K; ``L_star = 0`` gives a flat
+:math:`T = T_\infty`. A grid that sweeps ``m1`` at fixed ``L_star`` therefore keeps
+the disc temperature fixed.
+
+The main-sequence mass–luminosity relation used for the default
+(``get_Lstar_from_mass``) gives :math:`5\times10^{-6}`–:math:`5\times10^{-4}\,L_\odot`
+for 10–70 M\ :sub:`J`, about 100 times below the luminosity of a young brown dwarf,
+so set ``L_star`` explicitly for substellar hosts.
+
+For every ``lumdisc > 0``, setup also writes ``L_star`` into the ``.in`` as the
+cooling option ``Lstar``, replacing any value an existing ``.in`` held. Only
+``lumdisc=1`` uses it at run time; modes 2 and 3 take the floor from the profile.
 
 Restart safety (dump-header propagation)
 ----------------------------------------
