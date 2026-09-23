@@ -141,12 +141,20 @@ so set ``L_star`` explicitly for substellar hosts.
 Each key is written to the ``.setup`` only in the modes that read it, so a file
 never carries a value that has no effect. ``T0`` appears only with
 ``lumdisc=2``; with ``lumdisc=3`` the derived value is in the dump header as
-``T0_prof``.
+``T0_prof``, beside the ``L_star`` it came from.
 
-For ``lumdisc`` 1 and 3, setup also writes ``L_star`` into the ``.in`` as the
-cooling option ``Lstar``, replacing any value an existing ``.in`` held. In modes 2
-and 3 the ``.in`` carries neither ``Lstar`` nor ``qprofile``: the run takes its
-floor and slope from the dump header, so values there would be ignored.
+Setup writes ``L_star`` into the ``.in`` as the cooling option ``Lstar``,
+replacing any value an existing ``.in`` held:
+
+- ``lumdisc=1``: the run-time irradiation floor reads it.
+- ``lumdisc=3``: a record only. The run takes T0 from the dump header, never
+  re-derives it, so a restart is exact even if ``get_T0_from_lum`` changes. If
+  the ``.in`` value is edited, the run warns that the edit has no effect and
+  restores the header value.
+- ``lumdisc=2``: not written.
+
+``qprofile`` is left out of the ``.in`` in modes 2 and 3, since the run takes the
+slope from the dump header.
 
 Restart safety (dump-header propagation)
 ----------------------------------------

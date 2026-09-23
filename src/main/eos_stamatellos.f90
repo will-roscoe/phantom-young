@@ -35,6 +35,7 @@ module eos_stamatellos
  real,    public :: n_prof    = 2.    ! combination index: 2 = MS20 (T^2), 4 = flux-add (T^4)
  real,    public :: R0_prof   = 0.01  ! AU, inner smoothing radius
  real,    public :: T_bg_prof = 10.   ! K,  background floor T_inf (set = T_bg/Tfloor)
+ real,    public :: L_star_prof = -1. ! Lsun, luminosity T0_prof was derived from (lumdisc=3); <0 = none
 
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
  public :: alloc_coolra_stores
@@ -398,6 +399,7 @@ subroutine write_headeropts_flooredprof(hdr,ierr)
  call add_to_rheader(R0_prof,   'R0_prof',  hdr, ierr)
  call add_to_rheader(T_bg_prof, 'Tinf',     hdr, ierr)
  call add_to_rheader(qprofile,  'qprofile', hdr, ierr)
+ if (L_star_prof >= 0.) call add_to_rheader(L_star_prof, 'L_star', hdr, ierr)
 end subroutine write_headeropts_flooredprof
 
 !-----------------------------------------------------------------------
@@ -412,6 +414,7 @@ subroutine read_headeropts_flooredprof(hdr)
  use dump_utils, only:dump_h,extract
  type(dump_h), intent(in) :: hdr
  integer :: ierr
+ real    :: rval
 
  ierr = 0
  call extract('iprofile', iprofile, hdr, ierr, default=iprofile)
@@ -421,6 +424,8 @@ subroutine read_headeropts_flooredprof(hdr)
     ierr = 0;  call extract('R0_prof',  R0_prof,   hdr, ierr)
     ierr = 0;  call extract('Tinf',     T_bg_prof, hdr, ierr)
     ierr = 0;  call extract('qprofile', qprofile,  hdr, ierr)
+    ierr = 0;  call extract('L_star',   rval,      hdr, ierr, default=-1.)
+    L_star_prof = rval
  endif
 end subroutine read_headeropts_flooredprof
 

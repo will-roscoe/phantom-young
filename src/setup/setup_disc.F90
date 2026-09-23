@@ -618,7 +618,7 @@ subroutine equation_of_state(gamma)
  use shock_capturing, only:alphau
  use eos_stamatellos, only:init_coolra,read_optab,eos_file,&
                            iprofile,T0_prof,n_prof,R0_prof,T_bg_prof,get_T_profile,&
-                           get_T0_from_lum
+                           get_T0_from_lum,L_star_prof
  use cooling_radapprox, only:Lstar
  use physcon, only:rpiontwo,mass_proton_cgs,kboltz,kb_on_mh
  use units,   only:unit_velocity
@@ -728,14 +728,21 @@ subroutine equation_of_state(gamma)
        ieos = 24
        icooling = 9
        ! otherwise the .in keeps whatever Lstar an earlier .in held
-       if (lumdisc /= 2) Lstar = L_star(1)
+       if (lumdisc == 2) then
+          Lstar = 0.
+       else
+          Lstar = L_star(1)
+       endif
        if (lumdisc >= 2) then
           iprofile  = 2
           T_bg_prof = T_bg     ! reuse background as T_inf
           ! lumdisc=3: same floored power law, but T0 comes from the star rather
           ! than the .setup, so a grid that sweeps m1 sweeps the disc temperature
           ! with it instead of irradiating every host identically.
-          if (lumdisc == 3) T0_prof = get_T0_from_lum(L_star(1))
+          if (lumdisc == 3) then
+             T0_prof     = get_T0_from_lum(L_star(1))
+             L_star_prof = L_star(1)
+          endif
        else
           iprofile  = 1
        endif
