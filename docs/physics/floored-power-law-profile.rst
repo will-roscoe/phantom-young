@@ -93,11 +93,11 @@ Parameters
    * - ``T0``
      - ``T0_prof``
      - ``100.``
-     - normalisation temperature at 1 AU (K); ignored and overwritten when ``lumdisc=3``
+     - normalisation temperature at 1 AU (K); ``lumdisc=2`` only
    * - ``L_star``
      - ``L_star(1)``
      - M–L estimate
-     - stellar luminosity (L\ :sub:`☉`); if absent, estimated from ``m1`` with a warning
+     - stellar luminosity (L\ :sub:`☉`); ``lumdisc`` 1 and 3 only; if absent, estimated from ``m1`` with a warning
    * - ``nprof``
      - ``n_prof``
      - ``2.``
@@ -138,9 +138,15 @@ The main-sequence mass–luminosity relation used for the default
 for 10–70 M\ :sub:`J`, about 100 times below the luminosity of a young brown dwarf,
 so set ``L_star`` explicitly for substellar hosts.
 
-For every ``lumdisc > 0``, setup also writes ``L_star`` into the ``.in`` as the
-cooling option ``Lstar``, replacing any value an existing ``.in`` held. Only
-``lumdisc=1`` uses it at run time; modes 2 and 3 take the floor from the profile.
+Each key is written to the ``.setup`` only in the modes that read it, so a file
+never carries a value that has no effect. ``T0`` appears only with
+``lumdisc=2``; with ``lumdisc=3`` the derived value is in the dump header as
+``T0_prof``.
+
+For ``lumdisc`` 1 and 3, setup also writes ``L_star`` into the ``.in`` as the
+cooling option ``Lstar``, replacing any value an existing ``.in`` held. In modes 2
+and 3 the ``.in`` carries neither ``Lstar`` nor ``qprofile``: the run takes its
+floor and slope from the dump header, so values there would be ignored.
 
 Restart safety (dump-header propagation)
 ----------------------------------------

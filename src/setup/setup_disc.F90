@@ -728,7 +728,7 @@ subroutine equation_of_state(gamma)
        ieos = 24
        icooling = 9
        ! otherwise the .in keeps whatever Lstar an earlier .in held
-       Lstar = L_star(1)
+       if (lumdisc /= 2) Lstar = L_star(1)
        if (lumdisc >= 2) then
           iprofile  = 2
           T_bg_prof = T_bg     ! reuse background as T_inf
@@ -2990,11 +2990,11 @@ subroutine write_setupfile(filename)
           'Set qindex from stellar luminosity (ieos=24) '// &
           '(0=no, 1=luminosity radiative, 2=floored power-law, 3=floored power-law with T0 from L_star)',iunit)
        if (lumdisc > 0) then
-          call write_inopt(L_star(i),'L_star'//trim(disclabel),'Stellar luminosity (Lsun)',iunit)
+          if (lumdisc /= 2) call write_inopt(L_star(i),'L_star'//trim(disclabel),'Stellar luminosity (Lsun)',iunit)
           call write_inopt(T_bg,'T_bg'//trim(disclabel),'background Temperature (K)',iunit)
           call write_inopt(qprofile,'qprofile','q index override: 0=default qindex=0.25, otherwise use specified qindex',iunit)
+          if (lumdisc == 2) call write_inopt(T0_prof,'T0','normalization temperature at 1 AU (K)',iunit)
           if (lumdisc >= 2) then
-             call write_inopt(T0_prof,'T0','normalization temperature at 1 AU (K); derived from L_star when lumdisc=3',iunit)
              call write_inopt(n_prof, 'nprof','combination index (2=MS20 T^2, 4=T^4)',iunit)
              call write_inopt(R0_prof,'R0','inner smoothing radius (AU)',iunit)
           endif
@@ -3162,7 +3162,7 @@ subroutine read_setupfile(filename,ierr)
  use sethierarchical,  only:read_hierarchical_setupfile,hs
  use setorbit,         only:read_options_orbit
  use setunits,         only:read_options_and_set_units
- use eos_stamatellos,  only:qprofile,T0_prof,n_prof,R0_prof,get_T0_from_lum
+ use eos_stamatellos,  only:qprofile,T0_prof,n_prof,R0_prof
  character(len=*), intent(in)  :: filename
  integer,          intent(out) :: ierr
 
@@ -3540,16 +3540,14 @@ subroutine read_setupfile(filename,ierr)
  if (do_radiation) call read_inopt(iradkappa,'radkappa',db,err=ierr)
 
  if (lumdisc > 0) then
-    call read_inopt(L_star(1),'L_star',db,min=0.,err=ierr)
-    if (ierr /= 0) then
+    if (lumdisc /= 2) call read_inopt(L_star(1),'L_star',db,min=0.,err=ierr)
+    if (lumdisc /= 2 .and. ierr /= 0) then
        L_star(1) = get_Lstar_from_m1()
        call warning('setup_disc','L_star not in .setup: using the main-sequence '// &
                     'mass-luminosity estimate, which is far too low for young brown dwarfs', &
                     var='L_star',val=L_star(1))
     endif
     call read_inopt(T_bg,'T_bg',db,min=0.,errcount=nerr)
-    ! so the rewritten .setup records the T0 the disc is built with
-    if (lumdisc == 3) T0_prof = get_T0_from_lum(L_star(1))
  endif
 
  call close_db(db)

@@ -243,16 +243,17 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file,qprofile
+ use eos_stamatellos, only:eos_file,qprofile,iprofile
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
  call write_inopt(eos_file,'EOS_file','File containing tabulated EOS values',iunit)
- call write_inopt(Lstar,'Lstar','Luminosity of host star for calculating Tmin (Lsun)',iunit)
+ ! the floored profile (lumdisc=2,3) takes its floor and slope from the dump header
+ if (iprofile /= 2) call write_inopt(Lstar,'Lstar','Luminosity of host star for calculating Tmin (Lsun)',iunit)
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
  call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
- call write_inopt(qprofile,'qprofile',&
+ if (iprofile /= 2) call write_inopt(qprofile,'qprofile',&
       'q index for T profile (lumdisc=1): 0=standard qindex=0.25, otherwise use specified qindex',iunit)
 end subroutine write_options_cooling_radapprox
 
@@ -264,7 +265,7 @@ subroutine read_options_cooling_radapprox(db,nerr)
  integer,      intent(inout) :: nerr
  integer :: ieosread
 
- call read_inopt(Lstar,'Lstar',db,errcount=nerr,min=0.)
+ call read_inopt(Lstar,'Lstar',db,errcount=nerr,min=0.,default=0.)
  call read_inopt(eos_file,'EOS_file',db,errcount=nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
