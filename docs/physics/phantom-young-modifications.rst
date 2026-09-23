@@ -134,9 +134,10 @@ Feature 2 — Sink-count stop condition (``stopcond``)
 Purpose
 ^^^^^^^
 
-Stops the run once more than ``max_created_sinks`` new sink particles have
-formed since :math:`t=0`. On the dump that trips the condition, that dump is
-promoted to a full dump and the run exits cleanly.
+Stops the run once ``max_created_sinks`` new sink particles have formed since
+:math:`t=0`. On the dump that trips the condition, that dump is promoted to a
+full dump; the run then exits cleanly, or, if an extra window is configured,
+continues for that window (every dump in it full) and exits when it ends.
 
 Parameters
 ^^^^^^^^^^
@@ -151,10 +152,21 @@ Parameters
    * - ``max_created_sinks`` (``.in``)
      - ``-1``
      - Stop after this many sinks have formed since :math:`t=0`; ``-1`` = off
+   * - ``stop_extra_wall`` (``.in``)
+     - ``-1``
+     - Wall hours to continue after the condition trips; ``<0`` = no window
+   * - ``stop_extra_time`` (``.in``)
+     - ``-1``
+     - Ceiling on the same window in code time; ``<0`` = none. Whichever bound
+       is reached first ends the run
    * - ``nptmass0`` (dump header)
      - —
      - Baseline sink count captured at :math:`t=0`, so the "since
        :math:`t=0`" count survives restarts
+   * - ``t_trip``, ``wall_in_window`` (dump header)
+     - —
+     - When the condition tripped, and the wall seconds already spent in the
+       window, so a restart resumes the window instead of starting it again
 
 A runtime flag ``stopcond_triggered`` is read by ``evolve``.
 
@@ -163,7 +175,7 @@ Equation
 
 .. math::
 
-   n_{\mathrm{ptmass}} - n_{\mathrm{ptmass,0}} > \texttt{max\_created\_sinks}
+   n_{\mathrm{ptmass}} - n_{\mathrm{ptmass,0}} \ge \texttt{max\_created\_sinks}
 
 Logic
 ^^^^^
@@ -171,9 +183,10 @@ Logic
 - ``init_stopcond(nptmass)`` captures ``nptmass0`` once — only when its
   stored value is negative — so restarts keep the header value rather than
   re-capturing it.
-- ``check_stopcond(nptmass, fulldump)`` is evaluated at every dump-write;
-  when the condition above holds it sets ``fulldump = .true.`` and
-  ``stopcond_triggered = .true.``.
+- ``check_stopcond(nptmass, time, fulldump)`` is evaluated at every dump-write;
+  when the condition above holds it sets ``fulldump = .true.``, and sets
+  ``stopcond_triggered = .true.`` at once if no window is configured, or when
+  the window's wall or code-time bound is reached.
 - No-op when disabled (``max_created_sinks < 0``) or before the baseline has
   been captured.
 

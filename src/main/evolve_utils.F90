@@ -343,7 +343,7 @@ subroutine check_and_write_dump(time,tstart,tcpustart,rhomaxnow,nsteps,&
 !
  call get_timings(t1,tcpu1)
  if (writedump .and. write_files) then
-    call check_stopcond(nptmass, fulldump)   ! may promote to a full dump + request stop
+    call check_stopcond(nptmass, time, fulldump)  ! may promote to a full dump + request stop
     if (fulldump) then
        call write_fulldump(time,dumpfile)
        if (id==master) then
