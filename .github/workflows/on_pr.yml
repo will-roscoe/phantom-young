@@ -22,6 +22,9 @@ jobs:
     coolingra:
         uses: ./.github/workflows/coolingra.yml
 
+    mpi:
+        uses: ./.github/workflows/mpi.yml
+
     summary:
 
         # This name matches the branch protection requirement
@@ -51,6 +54,13 @@ jobs:
               echo "Rad cooling approx jobs succeeded"
             else
               echo "At least one rad cooling approx test failed"
+              exit 1
+            fi
+
+            if [[ "${{ needs.mpi.result }}" == "success" ]]; then
+              echo "MPI jobs succeeded"
+            else
+              echo "At least one MPI job failed"
               exit 1
             fi
 
