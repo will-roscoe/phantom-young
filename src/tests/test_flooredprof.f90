@@ -50,13 +50,13 @@ subroutine run_test_flooredprof(ntests,npass)
 
  !
  ! lumdisc=3: T0 derived from the stellar luminosity rather than read.
- ! sigma_SB T0^4 = L/(4 pi AU^2), the same normalisation get_cs_from_lum uses.
+ ! sigma_SB T0^4 = L/(16 pi AU^2), the grain equilibrium cooling_radapprox uses.
  !
  L_02 = 0.23d0*0.2d0**2.3d0          ! Eker relation at 0.2 Msun, as phantom applies it
- call checkval(get_T0_from_lum(L_02), 108.547d0, tol, nfail(5), 'T0(L* of 0.2 Msun)')
- call checkval(get_T0_from_lum(0.23d0*0.01d0**2.3d0), 19.388d0, tol, nfail(6), &
+ call checkval(get_T0_from_lum(L_02), 76.754d0, tol, nfail(5), 'T0(L* of 0.2 Msun)')
+ call checkval(get_T0_from_lum(0.23d0*0.01d0**2.3d0), 13.709d0, tol, nfail(6), &
                'T0(L* of 0.01 Msun)')
- call checkval(get_T0_from_lum(1.d0), 395.451d0, tol, nfail(7), 'T0(1 Lsun)')
+ call checkval(get_T0_from_lum(1.d0), 279.626d0, tol, nfail(7), 'T0(1 Lsun)')
 
  ! T0 scales as L^(1/4), so 16x the luminosity is exactly 2x the temperature
  call checkval(get_T0_from_lum(16.d0*L_02)/get_T0_from_lum(L_02), 2.d0, tol, nfail(8), &

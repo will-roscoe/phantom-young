@@ -88,11 +88,16 @@ Parameters
    * - ``lumdisc``
      - —
      - ``0``
-     - ``0`` = off, ``1`` = luminosity radiative (legacy), ``2`` = floored power-law
+     - ``0`` = off, ``1`` = luminosity radiative (legacy), ``2`` = floored power-law,
+       ``3`` = floored power-law with ``T0`` from ``L_star``
    * - ``T0``
      - ``T0_prof``
      - ``100.``
-     - normalisation temperature at 1 AU (K)
+     - normalisation temperature at 1 AU (K); ``lumdisc=2`` only
+   * - ``L_star``
+     - ``L_star(1)``
+     - M–L estimate
+     - stellar luminosity (L\ :sub:`☉`); ``lumdisc`` 1 and 3 only; if absent, estimated from ``m1`` with a warning
    * - ``nprof``
      - ``n_prof``
      - ``2.``
@@ -112,9 +117,44 @@ Parameters
    * - —
      - ``iprofile``
      - ``1``
-     - internal mode (``2`` when ``lumdisc=2``)
+     - internal mode (``2`` when ``lumdisc`` is ``2`` or ``3``)
 
-In mode 2, ``L_star`` is not used for temperature.
+With ``lumdisc=2``, ``L_star`` is not used for temperature.
+
+``lumdisc=3`` uses the same profile, but sets ``T0`` from the luminosity by
+``get_T0_from_lum``, the equilibrium temperature of an isothermal grain at 1 AU:
+
+.. math::
+
+   \sigma_{\rm SB} T_0^4 = \frac{L_\star}{16\pi\,(1\,\mathrm{AU})^2},
+   \qquad T_0 \approx 279\,\mathrm{K}\,(L_\star/L_\odot)^{1/4}.
+
+``L_star = 0.035`` gives :math:`T_0 = 121` K; ``L_star = 0`` gives a flat
+:math:`T = T_\infty`. A grid that sweeps ``m1`` at fixed ``L_star`` therefore keeps
+the disc temperature fixed.
+
+The main-sequence mass–luminosity relation used for the default
+(``get_Lstar_from_mass``) gives :math:`5\times10^{-6}`–:math:`5\times10^{-4}\,L_\odot`
+for 10–70 M\ :sub:`J`, about 100 times below the luminosity of a young brown dwarf,
+so set ``L_star`` explicitly for substellar hosts.
+
+Each key is written to the ``.setup`` only in the modes that read it, so a file
+never carries a value that has no effect. ``T0`` appears only with
+``lumdisc=2``; with ``lumdisc=3`` the derived value is in the dump header as
+``T0_prof``, beside the ``L_star`` it came from.
+
+Setup writes ``L_star`` into the ``.in`` as the cooling option ``Lstar``,
+replacing any value an existing ``.in`` held:
+
+- ``lumdisc=1``: the run-time irradiation floor reads it.
+- ``lumdisc=3``: a record only. The run takes T0 from the dump header, never
+  re-derives it, so a restart is exact even if ``get_T0_from_lum`` changes. If
+  the ``.in`` value is edited, the run warns that the edit has no effect and
+  restores the header value.
+- ``lumdisc=2``: not written.
+
+``qprofile`` is left out of the ``.in`` in modes 2 and 3, since the run takes the
+slope from the dump header.
 
 Restart safety (dump-header propagation)
 ----------------------------------------
