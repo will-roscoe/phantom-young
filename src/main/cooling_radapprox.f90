@@ -31,9 +31,21 @@ contains
 
 subroutine init_star()
  use part,    only:nptmass,xyzmh_ptmass
- use io,      only:fatal
+ use io,      only:fatal,warning
+ use eos_stamatellos, only:iprofile,L_star_prof
  integer :: i,imin=0
  real :: rsink2,rsink2min
+
+ ! lumdisc=3: Lstar in the .in is a record of the luminosity T0 was derived from.
+ ! An edit there has no effect, so say so and put the record back.
+ if (iprofile == 2 .and. L_star_prof >= 0.) then
+    if (abs(Lstar - L_star_prof) > 1.e-3*max(L_star_prof,tiny(0.))) then
+       call warning('cooling_radapprox','Lstar in the .in differs from the L_star this disc was '// &
+                    'built with, and has no effect: T0 comes from the dump header. Restoring it', &
+                    var='L_star',val=L_star_prof)
+    endif
+    Lstar = L_star_prof
+ endif
 
  rsink2min = 0.
 
@@ -243,16 +255,22 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file,qprofile
+ use eos_stamatellos, only:eos_file,qprofile,iprofile,L_star_prof
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
  call write_inopt(eos_file,'EOS_file','File containing tabulated EOS values',iunit)
- call write_inopt(Lstar,'Lstar','Luminosity of host star for calculating Tmin (Lsun)',iunit)
+ ! the floored profile (lumdisc=2,3) takes its floor and slope from the dump header
+ if (iprofile /= 2) then
+    call write_inopt(Lstar,'Lstar','Luminosity of host star for calculating Tmin (Lsun)',iunit)
+ elseif (L_star_prof >= 0.) then
+    call write_inopt(Lstar,'Lstar','Luminosity of host star (Lsun); lumdisc=3: record only, '// &
+                     'T0 is taken from the dump header',iunit)
+ endif
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
  call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
- call write_inopt(qprofile,'qprofile',&
+ if (iprofile /= 2) call write_inopt(qprofile,'qprofile',&
       'q index for T profile (lumdisc=1): 0=standard qindex=0.25, otherwise use specified qindex',iunit)
 end subroutine write_options_cooling_radapprox
 
@@ -264,7 +282,7 @@ subroutine read_options_cooling_radapprox(db,nerr)
  integer,      intent(inout) :: nerr
  integer :: ieosread
 
- call read_inopt(Lstar,'Lstar',db,errcount=nerr,min=0.)
+ call read_inopt(Lstar,'Lstar',db,errcount=nerr,min=0.,default=0.)
  call read_inopt(eos_file,'EOS_file',db,errcount=nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
