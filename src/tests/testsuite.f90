@@ -55,6 +55,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  use testindtstep, only:test_indtstep
  use testmassloading, only:test_massloading
  use teststopcond, only:test_stopcond
+ use testqbeta,    only:test_qbeta
  use testrwdump,   only:test_rwdump
  use testsetdisc,  only:test_setdisc
  use testsetstar,  only:test_setstar
@@ -86,7 +87,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  logical :: dosetdisc,dosetstar,doeos,doflooredprof,dofld,docooling,dodust,donimhd,docorotate,doany,dogrowth
  logical :: dogr,doradiation,dopart,dopoly,dompi,dohier,dodamp,dowind
  logical :: doiorig,doapr,dounits,dolum,dosinktree,doorbits,dolinalg
- logical :: domassloading,dostopcond
+ logical :: domassloading,dostopcond,doqbeta
  real(kind=4) :: twall1,tcpu1,twall2,tcpu2
 
  call summary_initialise
@@ -150,6 +151,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  dolinalg    = .false.
  domassloading = .false.
  dostopcond  = .false.
+ doqbeta     = .false.
 
  if (index(string,'deriv')     /= 0) doderivs    = .true.
  if (index(string,'grav')      /= 0) dogravity   = .true.
@@ -207,6 +209,8 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     domassloading = .true.
  case('stopcond','stop')
     dostopcond = .true.
+ case('qbeta','toomre')
+    doqbeta = .true.
  case('gravity','grav','plummer','hernquist','fmm','taylorseries','directsum','plotplummer')
     dogravity = .true.
  case('dump','rwdump','dumprw')
@@ -382,6 +386,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
 !
 !--test of stop-condition module
 !
+ if (doqbeta.or.testall) call test_qbeta(ntests,npass)
  if (dostopcond.or.testall) then
     call test_stopcond(ntests,npass)
     call set_default_options_testsuite(iverbose) ! restore defaults
