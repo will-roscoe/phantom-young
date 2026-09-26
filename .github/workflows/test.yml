@@ -2,6 +2,15 @@ name: test
 
 on:
   workflow_call:
+    inputs:
+      full_matrix:
+        description: >-
+          Also run DEBUG=yes (doubles the job count). PRs run DEBUG=no only,
+          to keep the common iterate-on-a-PR loop cheap; push to master runs
+          both, so every SETUP still gets a DEBUG=yes pass before/at release,
+          just not on every PR push.
+        type: boolean
+        default: false
 
 env:
   OMP_STACKSIZE: 512M
@@ -16,9 +25,7 @@ jobs:
           # - gfortran
           # - ifort
           - ifx
-        debug:
-          - no
-          - yes
+        debug: ${{ inputs.full_matrix && fromJson('["no","yes"]') || fromJson('["no"]') }}
         input: # [SETUP, phantom_tests]
           - ['test', '']
           - ['testkd', '']
