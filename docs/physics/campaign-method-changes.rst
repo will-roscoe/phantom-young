@@ -617,8 +617,10 @@ property of the initial condition, so it belongs in the setup dump.
 **Comparing before and after.** Checked for ``mload006e``: the particle count
 stayed at 2x10\ :sup:`6` (1\ 999\ 999 for r060), and :math:`m_p` is continuous
 across every link, so the :math:`n_{p,0}` fault did not act. The :math:`T`
-re-rating did act, by :math:`\sqrt{M_\star(t)/M_{\star,0}}` at the time of
-fragmentation. For ``mload007a`` r060L35 it reached 1.23. Runs on the fixed
+re-rating did act, by :math:`\sqrt{M_\star(t)/M_{\star,0}}`. By the end of
+``mload006e`` the host had grown 6.4%, 2.8% and 2.3% (r060, r090, r120), so
+those runs loaded 3.2%, 1.4% and 1.2% more than the nominal rate. For
+``mload007a`` r060L35, whose host grew 51%, it reached 23%. Runs on the fixed
 code load slightly less than the same runs before it.
 
 **Physical basis.** The model is a constant infall onto the disc. A rate that
