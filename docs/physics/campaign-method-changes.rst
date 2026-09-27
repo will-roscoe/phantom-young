@@ -330,12 +330,15 @@ solved for. At :math:`R_{\rm in}` = 5 au and :math:`p = 1`, the tapered disc's
 :math:`R_{\rm out}` = 60, 90 and 120 au. So a mass solved for one profile and
 used with the other misses the intended :math:`Q` by a radius-dependent fraction.
 
-**Reason.** The recorded reason is consistency: "untapered, as ``mload006e``".
+**Reason.** It is the reference profile. MS20 Eq. 7 is
+:math:`\Sigma = \Sigma_0\,[R_0^2/(R^2+R_0^2)]^{1/2}` with :math:`R_0 = 0.01` au,
+i.e. :math:`\Sigma\propto R^{-1}` everywhere in the disc, with a sharp inner
+edge at 5 au. phantom's taper is not part of it.
 
-**Why this choice.** *Not forced.* The disc-mass solver (entry 9) takes the
-surface-density profile from the run's own configuration, taper included, so
-either choice gives the intended :math:`Q`. Untapered was kept so that
-``mload005e``, ``mload006e`` and ``mload007a`` share one profile.
+**Why this choice.** Required to match MS20, not by the solver. The disc-mass
+solver (entry 9) takes the surface-density profile from the run's own
+configuration, taper included, so either choice would give the intended
+:math:`Q`.
 
 **Comparing before and after.** The pre-005e blocks used the taper. They are
 superseded for other reasons (entry 3). ``mload005e`` onward are mutually
@@ -346,9 +349,9 @@ consistent.
 the host in the first orbits. In ``mload007a`` r060L35, ~3% of the particles
 were gone within 0.3 outer orbits. That is about the mass of the first 2 au of
 an untapered :math:`\Sigma\propto R^{-1}` disc (3.6%). A tapered edge, which
-the solver already supports, would be the physically better choice. By the test
-of this page, this should be revisited, at the cost of comparability with
-``mload005e``-``mload007a``.
+the solver already supports, would be the physically better choice. It is kept
+off because it is what MS20 used. By the test of this page it is a
+comparability choice, not a physical one.
 
 
 9. Initial disc mass: MS20 Table 1, then solved for :math:`Q(R_{\rm out}) = 2`
