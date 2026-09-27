@@ -611,7 +611,13 @@ restart, so it can be changed between links. phantom rewrites the ``.in`` at eve
 full dump, so it must not be edited while a link runs. In the ``mload007d``
 comparison at 2.5 orbits, the control and the rkill-off run have the same host
 mass (0.050499 against 0.050498 M\ :sub:`sun`). ``rkill`` removes gas from the
-outside only, and does not change what the host accretes.
+outside only, and does not change what the host accretes. It also removes angular
+momentum that phantom does not account for. Runs with mass loading skip the
+energy, momentum and angular-momentum checks (``checkconserved.f90``), so the loss
+is silent there. The one run with loading off and ``rkill`` on (``mload007d``
+r060nl) stopped at 8.7 orbits with a 10% angular-momentum error, from the outer
+gas ``rkill`` had removed (angular momentum per unit mass grows as
+:math:`\sqrt{r}`).
 
 
 15. Mass-loading state fixed at setup and carried across restarts (being implemented)
