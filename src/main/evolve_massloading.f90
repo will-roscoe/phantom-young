@@ -62,8 +62,14 @@ module mass_loading
    !   mode 2: mloadfactor = iload (user beta), dm_load = 0.
    !
    ! .in parameters (3 only): iload_factor, iload, iload_dt
-   ! Dump header:              dm_load, r_orb, R_load, m_p0, t_init (restart safety)
-   ! Runtime-derived:          n_p0, m_p0 from part; t_orb from r_orb + M_star
+   ! Dump header:              dm_load, r_orb, R_load, m_p0, t_init, n_p0, M_star0 (restart safety)
+   ! Runtime-derived:          t_orb from r_orb + M_star0 (or the current M_star, see torb_mstar0)
+   !
+   ! n_p0, m_p0 and M_star0 are fixed when the setup dump is written and carried
+   ! in every dump header, so each link of a chained run loads at the same rate.
+   ! Two internal switches reproduce the behaviour before that fix:
+   !   torb_mstar0 = .false. : T from the current host mass (T shrinks as it accretes)
+   !   np0_initial = .false. : n_p0 recounted from the dump at each (re)start
    !
    ! Compile-time isolation: wrap `use mass_loading` and call site in evolve.f90
    ! with #ifdef MASS_LOADING / #endif.
@@ -102,9 +108,13 @@ module mass_loading
    real,               public   :: t_orb          = 0.        ! current effective loading interval (updated at each sync point)
    real,               public   :: t_init         = -1.       ! simulation time of first loading step; -1 = not yet set (fresh start sentinel), persisted in dump header; also settable from tests or setup code
    real,               public   :: R_load         = -1.       ! explicit loading-radius override; <0 = use R_ref
+   ! internal switches, never in .in
+   logical,            public   :: torb_mstar0    = .true.    ! .true.: T from the host mass at the start; .false.: from the current host mass
+   logical,            public   :: np0_initial    = .true.    ! .true.: n_p0 from the header (setup count); .false.: recounted at each (re)start
    ! private state — set once at init, never in .in
    integer(kind=8),    private  :: n_p0           = 0         ! initial gas particle count
    real,               private  :: m_p0           = 0.        ! initial per-particle mass (M_disc0 / n_p0)
+   real,               private  :: mstar0         = 0.        ! host mass at the start of loading
    integer,            private  :: id_mstar       = 1         ! sink index for host star (defaults to first sink)
    logical,            private  :: dofrac_load    = .false.   ! .true. for beta/exponential mode (iload_factor=2)
    logical,            private  :: calc_torb      = .false.   ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
@@ -126,7 +136,9 @@ contains
       use io,   only: iprint, id, master
       real :: m_disc0
 
-      n_p0 = npartoftypetot(igas)
+      if (  n_p0 <= 0 .or. .not. np0_initial  ) then
+         n_p0 = npartoftypetot(igas)
+      endif
       if (  n_p0 <= 0  ) then
          return
       endif
@@ -147,9 +159,9 @@ contains
          calc_torb   = (  iload_dt <= 0.  )
          initialised = .true.
          if (  id == master  ) then
-            write(iprint,"(1x,a,i0,a,es12.4,a,es12.4)") &
+            write(iprint,"(1x,a,i0,a,es12.4,a,es12.4,a,i0,a,es12.4)") &
                '[mass_loading] restart: type=', iload_factor, &
-               '  dm_load=', dm_load, '  r_orb=', r_orb
+               '  dm_load=', dm_load, '  r_orb=', r_orb, '  n_p0=', n_p0, '  M_star0=', mstar0
          endif
          return
       endif
@@ -228,7 +240,13 @@ contains
       if (  calc_torb  ) then
          M_primary = 0.
          if (  id == master .and. nptmass > 0  ) then
+            if (  mstar0 <= 0.  ) then
+               mstar0 = xyzmh_ptmass(4, id_mstar)
+            endif
             M_primary = xyzmh_ptmass(4, id_mstar)
+            if (  torb_mstar0  ) then
+               M_primary = mstar0
+            endif
          endif
          call bcast_mpi(M_primary)
          if (  M_primary > 0.  ) then
@@ -256,8 +274,9 @@ contains
    !       m_p(t) = m_p0 + dm_load * (t - t_init) / (T * n_p0)
    !   Computed directly from m_p0 and elapsed time to avoid accumulating
    !   floating-point error over many binsteps.  t_init is set on first call.
-   !   For varying T uses the current t_orb for the full elapsed time (a
-   !   reasonable approximation when T changes slowly).
+   !   Exact when T is constant (torb_mstar0 or a fixed iload_dt). With
+   !   torb_mstar0 = .false. the current T is applied to the whole elapsed
+   !   time, so the loaded mass is re-rated whenever the host mass changes.
    !+
    !-----------------------------------------------------------------------
    subroutine apply_partmass_const(dt, time)
@@ -292,8 +311,9 @@ contains
    !       m_p(t) = m_p0 * exp( ln(1+beta) * (t - t_init) / T )
    !   Computed directly from m_p0 and elapsed time to avoid accumulating
    !   floating-point error over many binsteps.  t_init is set on first call.
-   !   For varying T uses the current t_orb for the full elapsed time (a
-   !   reasonable approximation when T changes slowly).
+   !   Exact when T is constant (torb_mstar0 or a fixed iload_dt). With
+   !   torb_mstar0 = .false. the current T is applied to the whole elapsed
+   !   time, so the loaded mass is re-rated whenever the host mass changes.
    !+
    !-----------------------------------------------------------------------
    subroutine apply_partmass_exp(dt, time)
@@ -360,30 +380,47 @@ contains
    !-----------------------------------------------------------------------
    !+
    !   Print a one-line summary of disc mass evolution at each dump point.
-   !   M_disc_now = massoftype(igas) * npartoftypetot(igas)
+   !   M_disc_now = massoftype(igas) * n_alive   (gas not accreted or killed)
    !   M_disc_0   = m_p0 * n_p0
+   !   f_alive    = n_alive / n_p0, the fraction of the nominal loading the
+   !                disc still receives
    !   No-op when iload_factor < 0 (mass loading off) or not yet initialised.
    !+
    !-----------------------------------------------------------------------
    subroutine log_massloading(time)
-      use part, only: massoftype, npartoftypetot
-      use io,   only: iprint, id, master
+      use part,     only: massoftype, npart, xyzh, iphase, iamtype, isdead_or_accreted
+      use dim,      only: maxphase, maxp
+      use io,       only: iprint, id, master
+      use mpiutils, only: reduceall_mpi
       real, intent(in) :: time
-      real             :: m_disc_now, m_disc_0, dm_p, ratio
+      real             :: m_disc_now, m_disc_0, dm_p, ratio, f_alive
+      integer(kind=8)  :: n_alive
+      integer          :: i
 
-      if (  iload_factor < 0 .or. n_p0 <= 0 .or. m_p0 <= 0.  ) then 
+      if (  iload_factor < 0 .or. n_p0 <= 0 .or. m_p0 <= 0.  ) then
          return
       endif
 
-      m_disc_now = massoftype(igas) * real(npartoftypetot(igas))
+      n_alive = 0
+      do i = 1, npart
+         if (  isdead_or_accreted(xyzh(4,i))  ) cycle
+         if (  maxphase == maxp  ) then
+            if (  iamtype(iphase(i)) /= igas  ) cycle
+         endif
+         n_alive = n_alive + 1
+      enddo
+      n_alive = reduceall_mpi('+', n_alive)
+
+      m_disc_now = massoftype(igas) * real(n_alive)
       m_disc_0   = m_p0 * real(n_p0)
       ratio      = m_disc_now / m_disc_0
+      f_alive    = real(n_alive) / real(n_p0)
       dm_p       = massoftype(igas) - m_p0
 
-      if (  id == master  ) then 
+      if (  id == master  ) then
          write(iprint, &
-         "('[mass_loading] dump: t=',es10.3,'  M_disc/M_disc0=',es10.3,'  dm_p=',es10.3)") &
-         time, ratio, dm_p
+         "('[mass_loading] dump: t=',es10.3,'  M_disc/M_disc0=',es10.3,'  dm_p=',es10.3,'  f_alive=',f8.5)") &
+         time, ratio, dm_p, f_alive
       endif
 
    end subroutine log_massloading
@@ -496,28 +533,59 @@ contains
       endif
    end subroutine read_options_massloading_setup
 
+   !-----------------------------------------------------------------------
+   !+
+   !   n_p0, m_p0 and M_star0 are written from the current particles when
+   !   loading has not initialised yet, so the setup dump already fixes them.
+   !+
+   !-----------------------------------------------------------------------
    subroutine write_headeropts_massloading(hdr, ierr)
       use dump_utils, only: dump_h, add_to_rheader
+      use part,       only: massoftype, npartoftypetot, nptmass, xyzmh_ptmass
       type(dump_h), intent(inout) :: hdr
       integer,      intent(inout) :: ierr
+      real :: np0_hdr, mp0_hdr, mstar0_hdr
 
-      call add_to_rheader(dm_load, 'dm_load',      hdr, ierr)
-      call add_to_rheader(r_orb,   'r_orb',        hdr, ierr)
-      call add_to_rheader(R_load,  'R_load',       hdr, ierr)
-      call add_to_rheader(m_p0,    'mload_mp0',    hdr, ierr)
-      call add_to_rheader(t_init,  'mload_tinit',  hdr, ierr)
+      np0_hdr = real(n_p0)
+      if (  n_p0 <= 0  ) np0_hdr = real(npartoftypetot(igas))
+      mp0_hdr = m_p0
+      if (  m_p0 <= 0.  ) mp0_hdr = massoftype(igas)
+      mstar0_hdr = mstar0
+      if (  mstar0 <= 0. .and. nptmass > 0  ) mstar0_hdr = xyzmh_ptmass(4, id_mstar)
+
+      call add_to_rheader(dm_load,    'dm_load',      hdr, ierr)
+      call add_to_rheader(r_orb,      'r_orb',        hdr, ierr)
+      call add_to_rheader(R_load,     'R_load',       hdr, ierr)
+      call add_to_rheader(mp0_hdr,    'mload_mp0',    hdr, ierr)
+      call add_to_rheader(t_init,     'mload_tinit',  hdr, ierr)
+      call add_to_rheader(np0_hdr,    'mload_np0',    hdr, ierr)
+      call add_to_rheader(mstar0_hdr, 'mload_mstar0', hdr, ierr)
    end subroutine write_headeropts_massloading
 
    subroutine read_headeropts_massloading(hdr)
       use dump_utils, only: dump_h, extract
       type(dump_h), intent(in) :: hdr
       integer :: ierr
+      real    :: np0_hdr
 
       if (iload_factor < 0) return
       ierr = 0;  call extract('dm_load',     dm_load, hdr, ierr)
       ierr = 0;  call extract('r_orb',       r_orb,   hdr, ierr)
       ierr = 0;  call extract('mload_mp0',   m_p0,    hdr, ierr)
       ierr = 0;  call extract('mload_tinit', t_init,  hdr, ierr)
+      ! dumps written before n_p0/M_star0 were persisted lack these keys; both
+      ! then stay unset and are taken from the particles at (re)start
+      ierr = 0;  call extract('mload_np0',    np0_hdr, hdr, ierr)
+      if (  ierr == 0 .and. np0_hdr > 0.  ) then
+         n_p0 = nint(np0_hdr, kind=8)
+      else
+         call warn_legacy_header('mload_np0')
+      endif
+      ierr = 0;  call extract('mload_mstar0', mstar0,  hdr, ierr)
+      if (  ierr /= 0 .or. mstar0 <= 0.  ) then
+         mstar0 = 0.
+         call warn_legacy_header('mload_mstar0')
+      endif
       ! R_load is written to the header for provenance only and is NOT read
       ! back here: the resolved radius lives in the header 'r_orb' (restored
       ! above), which keeps legacy dumps (no 'R_load' key) safe from extract's
@@ -529,6 +597,16 @@ contains
          r_orb = R_load
       endif
    end subroutine read_headeropts_massloading
+
+   subroutine warn_legacy_header(tag)
+      use io, only: iprint, id, master
+      character(len=*), intent(in) :: tag
+
+      if (  id == master  ) then
+         write(iprint,"(1x,a)") '[mass_loading] WARNING: no '//tag// &
+            ' in the dump header; taking it from the particles at this (re)start'
+      endif
+   end subroutine warn_legacy_header
 
    subroutine set_massloading_r_ref(r)
       real, intent(in) :: r
@@ -546,6 +624,7 @@ contains
    subroutine reset_massloading()
       n_p0        = 0
       m_p0        = 0.
+      mstar0      = 0.
       dofrac_load = .false.
       calc_torb   = .false.
       initialised = .false.
