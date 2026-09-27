@@ -665,7 +665,7 @@ counterpart.
 
 
 16. Host accretion radius 3 au to 1 au (being implemented)
----------------------------------------------------------
+----------------------------------------------------------
 
 **Change.** ``mload007a2``: ``accr1`` (the host sink's accretion radius) from 3 au,
 used since the pre-005e blocks, to 1 au. The inner disc edge stays at
