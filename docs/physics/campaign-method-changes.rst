@@ -315,6 +315,32 @@ Smaller radii move towards that, but the specific values are sized by a
 resolution argument whose inputs were corrected late. They should be re-derived
 per campaign from the current sizing script.
 
+**mload007a2 (being implemented): h_acc 0.1667 to 0.5 au, r_crit kept at 1.0 au.**
+Checked against the three scales that bound a sink radius, for the 50 M\ :sub:`J`
+host:
+
+- *Resolution.* The disc's smoothing length is 0.22-0.29 au at :math:`R_{\rm in}`
+  and 1.4-3.0 au at :math:`R_{\rm out}` = 60-120 au (loading-invariant, because
+  loading raises :math:`m_p` and :math:`\rho` together). ``h_acc`` = 0.1667 au was
+  below the resolution floor, i.e. the sink's accretion zone was smaller than the
+  gas's own smoothing length. 0.5 au is above it.
+- *Fragment.* At :math:`Q \approx 1` the Toomre mass is
+  :math:`M_T \approx \pi^2 c_s^3/(G\Omega) = \pi^2 (H/R)^3 M_\star`. With
+  :math:`H/R \approx 0.3` that is ~0.27 :math:`M_\star` ~ 13 M\ :sub:`J`, whose
+  Hill radius :math:`R(M_T/3M_\star)^{1/3}` is ~20-27 au at 60 au. Any radius
+  of 0.5-1 au is far inside it, so the sink does not accrete gas that is not
+  the fragment's.
+- *Code constraint.* phantom warns when ``r_crit`` < 2 ``h_acc``, and the
+  unconditional merge radius < 2 ``h_acc``. ``r_crit`` = ``r_merge_uncond`` = 1.0 au
+  = 2 ``h_acc``.
+
+The values sit inside the range agreed on 27 September (0.5-1 au for both).
+*The choice within that range is a convention*, not derived. Comparing: runs stop
+at the first sink, so ``r_crit`` and the merge radii (which act between created
+sinks) do not affect the measured fragmentation mass. ``h_acc`` sets how much gas
+the new sink holds at creation, so first-sink masses from 0.1667 au and 0.5 au
+runs can differ by the gas between those radii.
+
 
 8. Untapered inner edge (``ismoothgas``)
 ----------------------------------------
@@ -576,9 +602,16 @@ the light host would have turned back.
 Removing bound gas removes mass and angular momentum that would have returned to
 the disc. Around a 50 M\ :sub:`J` host at these temperatures the outer disc is
 marginally bound (:math:`c_s/v_K > 0.44` beyond ~120 au). By the test of this
-page, a fixed 500 au is not correct for light hosts. Whether to keep it, raise it
-or switch it off (with the option of switching it on mid-run if escaped particles
-stall a run) is under test in ``mload007d``, and is not decided.
+page, a fixed 500 au is not correct for light hosts.
+
+**mload007a2 (being implemented): rkill off.** It is switched on only if a run
+stalls on escaped particles as ``mload006e`` r090 did, and then at a radius
+beyond which the gas is unbound. ``rkill`` is read from the ``.in`` at each
+restart, so it can be changed between links. phantom rewrites the ``.in`` at every
+full dump, so it must not be edited while a link runs. In the ``mload007d``
+comparison at 2.5 orbits, the control and the rkill-off run have the same host
+mass (0.050499 against 0.050498 M\ :sub:`sun`). ``rkill`` removes gas from the
+outside only, and does not change what the host accretes.
 
 
 15. Mass-loading state fixed at setup and carried across restarts (being implemented)
@@ -629,6 +662,44 @@ code load slightly less than the same runs before it.
 **Physical basis.** The model is a constant infall onto the disc. A rate that
 jumps at restarts or rises retroactively with host accretion has no physical
 counterpart.
+
+
+16. Host accretion radius 3 au to 1 au (being implemented)
+---------------------------------------------------------
+
+**Change.** ``mload007a2``: ``accr1`` (the host sink's accretion radius) from 3 au,
+used since the pre-005e blocks, to 1 au. The inner disc edge stays at
+:math:`R_{\rm in}` = 5 au.
+
+**Problem.** Gas inside ``accr1`` is removed onto the host. With an untapered edge
+(entry 8), the densest disc gas starts at 5 au, 2 au from a 3 au boundary. The
+inner edge spreads inwards on its own pressure and viscous timescale, and whatever
+crosses the boundary is lost to the disc. In ``mload007a`` r060L35, 3.0% of the
+particles were accreted within 0.3 outer orbits. The same disc with ``accr1`` = 1 au
+(``mload007e`` r060a1) lost 0.9% over the same time, and 4.3% by 1.2 orbits
+against ~11% for the 3 au control.
+
+**Reason.** Recommended by D. Stamatellos, and the measured early loss is
+dominated by how close the boundary sits to the disc edge.
+
+**Why this choice.** The boundary must stay inside :math:`R_{\rm in}` and resolve
+the inner orbits affordably. The orbital period at 1 au around 0.0477
+M\ :sub:`sun` is 5.2x shorter than at 3 au, and the 1 au run advances at about
+half the speed of the 3 au runs. *1 au is the recommended value, not an
+optimum derived here.*
+
+**Comparing before and after.** ``mload005e``, ``mload006e`` and ``mload007a`` used
+3 au. Around the heavier hosts of 005e/006e the inner disc is thinner
+(:math:`H/R_{\rm in}` = 0.06 against 0.19), so its edge spreads less, and the
+effect of the change there is expected to be smaller. It has not been measured.
+Disc masses at fragmentation from 1 au runs include gas that 3 au runs would
+already have lost to the host.
+
+**Physical basis.** A real disc extends inwards to the stellar magnetosphere, far
+inside 1 au. The accretion radius is a numerical inner boundary, and moving it
+further from the disc's edge removes less gas that the disc itself would still
+hold. It remains an absorbing boundary, so inflow through the inner disc still
+ends on the host, which is physical.
 
 
 Operational changes with no effect on the physics
