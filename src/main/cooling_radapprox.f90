@@ -122,7 +122,9 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  use eos_stamatellos, only:getopac_opdep,getintenerg_opdep,gradP_cool,&
       ttherm_store,ueqi_store,tau_store,du_store
  use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,qprofile,get_T_profile,iprofile
- use part,       only:xyzmh_ptmass,igas,eos_vars,iTemp
+ use eos_stamatellos, only:fld_A,fld_AT,fld_Tmax,fld_ndiag,lambda_FLD
+ use part,       only:xyzmh_ptmass,igas,eos_vars,iTemp,ibin
+ use timestep,   only:dtmax,time
  integer, intent(in) :: i
  real, intent(in) :: xi,yi,zi,rhoi
  real, intent(in) :: ui,duhydro,Tfloor
@@ -131,6 +133,8 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  real            :: opaci,ueqi,umini,tthermi,presi,Hcomb
  real            :: cs2,Om2,Hmod2,rhoi_cgs,ui_cgs
  real            :: Hstam,poti,du_FLDi,q_eff
+ real            :: Tbari,Teq0,dti,tdi
+ integer         :: ndiag,ibini
 
  coldensi = huge(coldensi)
  poti = Gpot_cool(i)
@@ -246,6 +250,30 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  endif
 
  ttherm_store(i) = tthermi
+
+ ! diagnostic only (branch test/fld-overshoot-diag): runaway particles, and a sample of
+ ! particles whose T_eq exceeds both their hottest FLD neighbour and their no-FLD T_eq
+ if (doFLD .and. fld_A(i) > 0.) then
+    Tbari = fld_AT(i)/fld_A(i)
+    Teq0  = max(Tmini4 + duhydro*opaci*unit_ergg/utime/(4.*steboltz), Tmini4)**0.25
+    if (Ti > 3000. .or. (Teqi > 1.01*max(fld_Tmax(i),Teq0) .and. mod(i,2000)==0)) then
+       !$omp atomic capture
+       fld_ndiag = fld_ndiag + 1
+       ndiag = fld_ndiag
+       !$omp end atomic
+       if (ndiag <= 20000) then
+          ibini = -1
+          dti = -1.
+          if (allocated(ibin)) then
+             ibini = ibin(i)
+             dti = dtmax/2.**ibin(i)
+          endif
+          tdi = (ui/Ti)/fld_A(i)
+          write(*,'(a,i9,1x,i3,15(1x,es11.4))') ' FLDDIAG ',i,ibini,time,sqrt(ri2),rhoi_cgs,Ti,Tbari, &
+               fld_Tmax(i),Teq0,Teqi,tthermi,dti,tdi,du_FLDi,duhydro,lambda_FLD(i),opaci
+       endif
+    endif
+ endif
 
  if (isnan(tthermi) .or. isnan(ueqi)) then
     call warning("In Stamatellos cooling","energ=NaN or 0. ui=",val=ui)

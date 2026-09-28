@@ -924,7 +924,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  use nicil,       only:nimhd_get_jcbcb,nimhd_get_dBdt
  use eos,         only:ieos,eos_is_non_ideal,icooling
  use eos_stamatellos, only:gradP_cool,getopac_opdep
- use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,get_k_fld
+ use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,get_k_fld,fld_A,fld_AT,fld_Tmax
 #ifdef GRAVITY
  use kernel,      only:kernel_softening
  use ptmass,      only:use_regnbody
@@ -1044,7 +1044,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  real    :: bigv2j,alphagrj,enthi,enthj
  real    :: dlorentzv,lorentzj,lorentzi_star,lorentzj_star,projbigvi,projbigvj
  real    :: bigvj(1:3),velj(3),metricj(0:3,0:3,2),projbigvstari,projbigvstarj
- real    :: radPj,fgravxi,fgravyi,fgravzi,kfldi,kfldj,Ti,Tj,diffterm
+ real    :: radPj,fgravxi,fgravyi,fgravzi,kfldi,kfldj,Ti,Tj,diffterm,fldcoef
  real    :: gradpx,gradpy,gradpz,gradP_cooli=0d0,gradP_coolj=0d0
 
  ! unpack
@@ -1222,6 +1222,9 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
     Gpot_cool(i) = 0.
     if (doFLD) then
        duFLD(i) = 0.
+       fld_A(i) = 0.
+       fld_AT(i) = 0.
+       fld_Tmax(i) = 0.
        kfldi = 0.
        kfldj = 0.
     endif
@@ -1622,6 +1625,12 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                       diffterm = diffterm * kfldi * kfldj / (kfldi+kfldj)
                       diffterm = diffterm * (Ti - Tj) / rij2
                       diffterm = diffterm*cnormk*grkerni*(runix*dx + runiy*dy + runiz*dz)
+                      ! diagnostic: diffterm = fldcoef*(Tj - Ti), fldcoef >= 0
+                      fldcoef = -4.*pmassj/rhoi/rhoj*kfldi*kfldj/(kfldi+kfldj)/rij2 &
+                                *cnormk*grkerni*(runix*dx + runiy*dy + runiz*dz)
+                      fld_A(i) = fld_A(i) + fldcoef
+                      fld_AT(i) = fld_AT(i) + fldcoef*Tj
+                      fld_Tmax(i) = max(fld_Tmax(i),Tj)
                    endif
                    duFLD(i) = duFLD(i) + diffterm
                    if (isnan(duFLD(i))) then

@@ -22,6 +22,9 @@ module eos_stamatellos
  real, allocatable, public :: gradP_cool(:)!gradP_cool=gradP/rho
  real, allocatable, public :: ttherm_store(:),ueqi_store(:),tau_store(:),du_store(:),duSPH(:)
  real, allocatable, public :: Gpot_cool(:),duFLD(:),lambda_FLD(:),urad_FLD(:)
+ ! diagnostic only (branch test/fld-overshoot-diag): FLD conductance sums per particle
+ real, allocatable, public :: fld_A(:),fld_AT(:),fld_Tmax(:)
+ integer, public :: fld_ndiag = 0
  character(len=25), public :: eos_file= 'eos_lom.dat' !default name of tabulated EOS file
  logical, public :: doFLD = .True.
  logical, public :: floor_energy = .False.
@@ -95,6 +98,9 @@ subroutine init_coolra()
  call allocate_array('duFLD',duFLD,np)
  call allocate_array('lambda_fld',lambda_fld,np)
  call allocate_array('urad_FLD',urad_FLD,np)
+ call allocate_array('fld_A',fld_A,np)
+ call allocate_array('fld_AT',fld_AT,np)
+ call allocate_array('fld_Tmax',fld_Tmax,np)
  ! allocates and zeroes only if nothing has already populated them
  call alloc_coolra_stores()
 
@@ -103,6 +109,9 @@ subroutine init_coolra()
  Gpot_cool(:) = 0d0
  urad_FLD(:) = 0d0
  duFLD(:) = 0d0
+ fld_A(:) = 0d0
+ fld_AT(:) = 0d0
+ fld_Tmax(:) = 0d0
  if (doFLD) then
     print *, "Using Forgan+ 2009 hybrid cooling method (FLD)"
  else
@@ -122,6 +131,9 @@ subroutine finish_coolra()
  if (allocated(duFLD)) deallocate(duFLD)
  if (allocated(lambda_fld)) deallocate(lambda_fld)
  if (allocated(urad_FLD)) deallocate(urad_FLD)
+ if (allocated(fld_A)) deallocate(fld_A)
+ if (allocated(fld_AT)) deallocate(fld_AT)
+ if (allocated(fld_Tmax)) deallocate(fld_Tmax)
 ! close(iunitst)
 end subroutine finish_coolra
 
