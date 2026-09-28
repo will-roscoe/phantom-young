@@ -1,12 +1,20 @@
-name: push 
+name: push
 
+# The DEBUG=yes half of test.yml/mpi.yml's matrix runs here instead of on every
+# PR push (CI slimming, issue "slim phantom-young's CI") -- so a push to master
+# carries a heavier check than a PR push does by design, not by accident. This
+# also gives mpi.yml its only push-triggered (as opposed to PR-triggered) run.
 on:
-    workflow_call: 
-    # push:
-    #   branches: [ master ]
-    #   paths-ignore:
-    #     - 'docs/**'
-    #     - 'README.md'
+    workflow_call:
+    push:
+      branches: [ master ]
+      paths-ignore:
+        - 'docs/**'
+        - 'README.md'
+
+concurrency:
+    group: push-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
 
@@ -15,6 +23,13 @@ jobs:
 
     test:
         uses: ./.github/workflows/test.yml
+        with:
+          full_matrix: true
+
+    mpi:
+        uses: ./.github/workflows/mpi.yml
+        with:
+          full_matrix: true
 
     coolingra:
         uses: ./.github/workflows/coolingra.yml

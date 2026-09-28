@@ -2,15 +2,22 @@ name: mpi
 
 on:
   workflow_call:
+    inputs:
+      full_matrix:
+        description: >-
+          Also run DEBUG=yes (doubles the job count). Same rationale as
+          test.yml's full_matrix input: PRs run DEBUG=no only; push to master
+          runs both, since this matrix (2 debug x 2 openmp x 2 ntasks x 9
+          setups = 72 jobs at full_matrix) is the single largest CI cost.
+        type: boolean
+        default: false
 
 jobs:
   test:
     strategy:
       fail-fast: false
       matrix:
-        debug:
-          - no
-          - yes
+        debug: ${{ inputs.full_matrix && fromJson('["no","yes"]') || fromJson('["no"]') }}
         openmp:
           - no
           - yes

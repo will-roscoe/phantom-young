@@ -16,14 +16,23 @@ jobs:
     build:
         uses: ./.github/workflows/build.yml
 
+    # PRs run DEBUG=no only (full_matrix: false, the default -- spelled out here
+    # for anyone reading this file without also opening test.yml/mpi.yml). The
+    # DEBUG=yes pass runs on push to master instead (on_push.yml), where it
+    # covers every SETUP/MPI combination once per merge rather than once per PR
+    # push.
     test:
         uses: ./.github/workflows/test.yml
+        with:
+          full_matrix: false
 
     coolingra:
         uses: ./.github/workflows/coolingra.yml
 
     mpi:
         uses: ./.github/workflows/mpi.yml
+        with:
+          full_matrix: false
 
     summary:
 
