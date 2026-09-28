@@ -103,7 +103,7 @@ subroutine test_first_pass(ntests,npass)
  use unifdis,         only:set_unifdis
  use units,           only:set_units,unit_density,unit_ergg
  integer, intent(inout) :: ntests,npass
- integer :: nfail(4),ierr,i,ninner,nsteep,ieos_old,icooling_old
+ integer :: nfail(5),ierr,i,ninner,nsteep,ieos_old,icooling_old
  real    :: gamma_old,psep,rho_cgs,totmass,T,u_cgs,x,diffmax,lammax_steep,lammin,lam_uniform_err
  real, allocatable :: lam1(:)
  logical :: doFLD_old
@@ -181,12 +181,40 @@ subroutine test_first_pass(ntests,npass)
  enddo
  call checkval(lam_uniform_err,0.,1.e-6,nfail(3),'uniform T: lambda = 1/3')
 
+ ! conductivity: k = 16 sigma lambda T^3/(kappa rho) = 4 a c lambda T^3/(kappa rho), in code units
+ do i=1,npart
+    if (inner(xyzh(:,i))) exit
+ enddo
+ call check_conductivity(i,nfail(5))
+
  call update_test_scores(ntests,nfail,npass)
  deallocate(lam1)
  call finish_eos(ieos,ierr)
  ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
 
 contains
+
+!-----------------------------------------------------------------------
+! the FLD conductivity of particle i against 4 a c lambda T^3/(kappa rho)
+! from the same opacity lookup; guards against mixing CGS and code units
+!-----------------------------------------------------------------------
+subroutine check_conductivity(i,nfail)
+ use eos_stamatellos, only:get_k_fld,getopac_opdep,lambda_FLD
+ use units,           only:unit_opacity,unit_density,unit_ergg,get_radconst_code,get_c_code
+ use part,            only:rhoh,xyzh,vxyzu,massoftype,igas
+ use testutils,       only:checkval
+ integer, intent(in)    :: i
+ integer, intent(inout) :: nfail
+ real :: rhoi,ki,Ti,kbar,kpart,T2,gmw,k_expected
+
+ rhoi = rhoh(xyzh(4,i),massoftype(igas))
+ call get_k_fld(rhoi,vxyzu(4,i),i,ki,Ti)
+ call getopac_opdep(vxyzu(4,i)*unit_ergg,rhoi*unit_density,kbar,kpart,T2,gmw)
+ k_expected = 4.*get_radconst_code()*get_c_code()*lambda_FLD(i)*Ti**3/((kpart/unit_opacity)*rhoi)
+ call checkval(ki/k_expected,1.,1.e-6,nfail,'FLD conductivity = 4 a c lambda T^3/(kappa rho)')
+
+end subroutine check_conductivity
+
 
  ! away from the edges, so a non-periodic build tests full kernels only
  logical function inner(xyzhi)
