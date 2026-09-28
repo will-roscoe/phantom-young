@@ -233,6 +233,7 @@ end subroutine test_first_pass
 !-----------------------------------------------------------------------
 subroutine test_diffusion_rate(ntests,npass)
  use boundary,        only:set_boundary,xmin,xmax,ymin,ymax,zmin,zmax,dxbound,dybound,dzbound
+ use cooling,         only:cooling_in_step
  use deriv,           only:get_derivs_global
  use dim,             only:maxp,maxphase,periodic
  use datafiles,       only:find_phantom_datafile
@@ -248,7 +249,7 @@ subroutine test_diffusion_rate(ntests,npass)
  integer, intent(inout) :: ntests,npass
  integer :: nfail(1),ierr,i,n,ieos_old,icooling_old
  real    :: gamma_old,psep,rho_cgs,totmass,T,T0,eps,u_cgs,rhoi,ki,Ti,expected,ratio,rsum,rmin,rmax,wk2
- logical :: doFLD_old
+ logical :: doFLD_old,cooling_in_step_old
  character(len=120) :: pdir
 
  call get_environment_variable('PHANTOM_DIR',pdir)
@@ -259,10 +260,13 @@ subroutine test_diffusion_rate(ntests,npass)
  if (id==master) write(*,"(/,a)") '--> FLD diffusion rate against (1/rho) div(k grad T)'
  ieos_old = ieos; icooling_old = icooling; doFLD_old = doFLD; gamma_old = gamma
  ieos = 24; icooling = 9; doFLD = .true.; gamma = 5./3.
+ ! as init_cooling sets for icooling = 9: the radiative update is called with the particle index
+ cooling_in_step_old = cooling_in_step; cooling_in_step = .true.
  call set_units(mass=solarm,dist=au,G=1.d0)
  call init_eos(ieos,ierr)
  if (ierr /= 0) then
     ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
+    cooling_in_step = cooling_in_step_old
     return
  endif
  call init_part()
@@ -305,6 +309,7 @@ subroutine test_diffusion_rate(ntests,npass)
  call update_test_scores(ntests,nfail,npass)
  call finish_eos(ieos,ierr)
  ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
+ cooling_in_step = cooling_in_step_old
 
 end subroutine test_diffusion_rate
 
