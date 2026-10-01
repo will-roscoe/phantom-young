@@ -614,6 +614,8 @@ subroutine set_disc_positions(npart_tot,npart_start_count,do_mixture,R_ref,R_in,
  real    :: xcentreofmass(3)
  real    :: dR,dphi,f_val,sigmamixt,HHdust,HHsqrt2dust,rhozmixt,csdust
  real    :: R_ecc,Rin,Rout,Rindust,Routdust,phi_perirad
+ character(len=32) :: envval
+ integer :: envstat,iseed_env
  !--seed for random number generator
  iseed = -34598 + (itype - igas)
  honH = 0.
@@ -624,6 +626,16 @@ subroutine set_disc_positions(npart_tot,npart_start_count,do_mixture,R_ref,R_in,
  if (abs(e_0)>tiny(e_0) .or. ecc_profile  /=  0) then
     n_to_place=1
  endif
+ !--diagnostic overrides (branch diag/set-disc-seed, never merged):
+ !  PHANTOM_DISC_SEED=<n> replaces the seed, PHANTOM_DISC_PAIRS=0 places particles individually
+ call get_environment_variable('PHANTOM_DISC_SEED',envval,status=envstat)
+ if (envstat == 0) then
+    read(envval,*,iostat=envstat) iseed_env
+    if (envstat == 0) iseed = -abs(iseed_env) + (itype - igas)
+ endif
+ call get_environment_variable('PHANTOM_DISC_PAIRS',envval,status=envstat)
+ if (envstat == 0 .and. trim(envval) == '0') n_to_place = 1
+ print "(a,i0,a,i0)",' set_disc_positions: iseed = ',iseed,', n_to_place = ',n_to_place
 
  !--converting phi_peri to radians
  phi_perirad=phi_peri*3.1415/180.
