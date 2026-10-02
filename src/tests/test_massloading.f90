@@ -50,6 +50,11 @@ subroutine test_massloading(ntests, npass)
  call test_torb_mstar0(ntests, npass)
  call test_legacy_restart_state(ntests, npass)
  call test_total_mode(ntests, npass)
+
+ ! leave loading off: later suites call check_setup, which read this module's state
+ call reset_massloading()
+ iload_factor = -1;  iload = 0.;  iload_dt = -1.
+ dm_load = 0.;  mloadfactor = 0.
 end subroutine test_massloading
 
 !---------------------------------------------------------------------------
