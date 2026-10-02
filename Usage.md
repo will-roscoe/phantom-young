@@ -51,7 +51,7 @@ R_load       = 50.     ! code units
 
 ### Parameters
 
-`.in` keys (3, plus `R_load`):
+`.in` keys (3, plus `R_load` and `iload_total`):
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -59,6 +59,7 @@ R_load       = 50.     ! code units
 | `iload` | `0.` | the factor value, interpreted per `iload_factor` as chi / xi / beta |
 | `iload_dt` | `-1.` | loading interval `T` [code units]; `<=0` ⇒ computed as the Keplerian orbital period at `R_load`/`r_orb` |
 | `R_load` | `-1.` | loading radius [code units]; `<0` ⇒ use the disc's `R_ref` |
+| `iload_total` | `0` | modes 0/1 only: `0` = fixed rate per particle, so the total delivered falls as `n_alive/n_p0` while gas is accreted or killed; `1` = fixed total rate `dm_load/T` shared over the live gas (no closed form; `t_last` is carried in the dump header). A run started with `1` cannot restart with `0`. |
 
 Derived/internal (not `.in` keys, set from the above): `mloadfactor` (chi or
 beta), `dm_load` (xi), `r_orb` (reference radius used to compute `t_orb`).
@@ -112,10 +113,11 @@ instead of adding it.
 - `src/main/readwrite_dumps_common.f90` — dump-header read/write.
 - `src/main/config.F90`/`dim` — `use_mass_loading` compile-time flag.
 
-**`.in` vs dump header:** only `iload_factor`, `iload`, `iload_dt`, `R_load`
-are user-editable `.in` options. Everything needed to resume mass loading
+**`.in` vs dump header:** only `iload_factor`, `iload`, `iload_dt`, `R_load`,
+`iload_total` are user-editable `.in` options. Everything needed to resume mass loading
 exactly across a restart — `dm_load` (ξ), `r_orb`, `R_load`, `mload_mp0`
-(`m_p0`), `mload_tinit` (`t_init`) — is persisted in the **dump header**,
+(`m_p0`), `mload_tinit` (`t_init`), `mload_np0`, `mload_mstar0`, `mload_tlast`
+(`t_last`), `mload_total` (`iload_total`) — is persisted in the **dump header**,
 so it survives independent of what a user later edits in the `.in`.
 
 ---

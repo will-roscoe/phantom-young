@@ -11,7 +11,7 @@ module testmassloading
 ! :Dependencies: dump_utils, infile_utils, io, mass_loading, part, testutils
 ! :Owner: will-roscoe
 !
- use mass_loading, only: iload_factor, iload, iload_dt,                  &
+ use mass_loading, only: iload_factor, iload, iload_dt, iload_total, t_last, &
                          dm_load, mloadfactor, r_orb, t_orb,             &
                          t_init, R_load, torb_mstar0, np0_initial,         &
                          init_massloading, step_mass_loading,             &
@@ -49,6 +49,7 @@ subroutine test_massloading(ntests, npass)
  call test_restart_np0(ntests, npass)
  call test_torb_mstar0(ntests, npass)
  call test_legacy_restart_state(ntests, npass)
+ call test_total_mode(ntests, npass)
 end subroutine test_massloading
 
 !---------------------------------------------------------------------------
@@ -1080,5 +1081,90 @@ subroutine test_legacy_restart_state(ntests, npass)
  call free_header(hdr)
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_legacy_restart_state
+
+!---------------------------------------------------------------------------
+! test_total_mode
+!   iload_total = 1 delivers a fixed TOTAL rate (dm_load per T) shared over
+!   the live gas particles; iload_total = 0 (default) a fixed rate per
+!   particle, so the total falls as particles are accreted. The header must
+!   carry the time of the last update so a restart continues exactly.
+!   Not exercised: the fatal on switching iload_total 1 -> 0 at a restart
+!   (io::fatal ends the test binary).
+!---------------------------------------------------------------------------
+subroutine test_total_mode(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header
+ use part,       only: massoftype, npartoftypetot, igas, npart, xyzh, iphase, isetphase, maxphase
+ use dim,        only: maxp
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(7), ierr
+ real    :: m_a, m_b, m_link1
+ integer, parameter :: n0 = 1000, nacc = 400
+ real, parameter :: tol = 1.e-6, m0 = 1.e-4, chi = 0.1, torb = 2.0
+
+ if (id == master) write(*,"(a)") '  --> fixed-total loading (iload_total = 1)'
+ nfailed(:) = 0
+ npart = n0
+ xyzh(:,1:n0) = 0.
+ xyzh(4,1:n0) = 0.1
+ if (maxphase == maxp) iphase(1:n0) = isetphase(igas, iactive=.true.)
+
+ ! nothing accreted: the two conventions load identically
+ call load_two_steps(0, m_a)
+ call load_two_steps(1, m_b)
+ call checkval(m_b, m_a, tol, nfailed(1), 'all live: total mode = per-particle mode')
+
+ ! 400 of 1000 accreted: per particle over n_p0, total over the 600 live
+ xyzh(4,1:nacc) = -0.1
+ call load_two_steps(0, m_a)
+ call checkval(m_a, m0 + chi*m0*real(n0)/(torb*real(n0)), tol, nfailed(2), &
+               'per-particle mode: increment over n_p0')
+ call load_two_steps(1, m_b)
+ call checkval(m_b, m0 + chi*m0*real(n0)/(torb*real(n0-nacc)), tol, nfailed(3), &
+               'total mode: increment over the live particles')
+ call checkval((m_b - m0)*real(n0-nacc), chi*m0*real(n0)/torb, tol, nfailed(4), &
+               'total mode: delivered mass = nominal rate x time')
+
+ ! restart: the header carries t_last; the next link continues from the dump's particle mass
+ call load_two_steps(1, m_link1)
+ hdr  = allocate_header(nreal=12)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+ call checkval(ierr, 0, 0, nfailed(5), 'total mode: header write')
+ call reset_massloading()
+ iload_factor = 0;  iload = chi;  iload_dt = torb;  iload_total = 1
+ massoftype(igas)     = m_link1
+ npartoftypetot(igas) = n0 - nacc
+ dm_load = 0.;  t_last = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(t_last, 1.0, tol, nfailed(6), 'total mode: header round-trip of t_last')
+ call step_mass_loading(2.0, 0.1, torb, 1, 0_1)
+ call checkval(massoftype(igas), m_link1 + chi*m0*real(n0)*1.0/(torb*real(n0-nacc)), tol, nfailed(7), &
+               'total mode: restart continues from the dump particle mass')
+ call free_header(hdr)
+
+ npart = 0
+ xyzh(4,1:n0) = 0.
+ iload_total = 0
+ call update_test_scores(ntests, nfailed, npass)
+
+contains
+
+ subroutine load_two_steps(mode, m_end)
+  integer, intent(in) :: mode
+  real,    intent(out) :: m_end
+  call reset_massloading()
+  massoftype(igas)     = m0
+  npartoftypetot(igas) = n0
+  iload_factor = 0;  iload = chi;  iload_dt = torb;  iload_total = mode
+  dm_load = 0.;  mloadfactor = 0.
+  call step_mass_loading(0.,  0.1, torb, 1, 0_1)
+  call step_mass_loading(1.0, 0.1, torb, 1, 0_1)
+  m_end = massoftype(igas)
+ end subroutine load_two_steps
+
+end subroutine test_total_mode
 
 end module testmassloading
