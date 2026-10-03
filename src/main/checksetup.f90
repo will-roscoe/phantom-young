@@ -1115,7 +1115,7 @@ end subroutine check_HIIRegion
 !+
 !--------------------------------------------------------------------
 subroutine check_setup_massloading(nerror,nwarn)
- use mass_loading, only:iload_factor,mloadfactor,iload_dt,r_orb
+ use mass_loading, only:iload_factor,mloadfactor,iload_dt,r_orb,iload_total
  use part,         only:npartoftype,igas
  use io,           only:id,master
  integer, intent(inout) :: nerror,nwarn
@@ -1134,6 +1134,11 @@ subroutine check_setup_massloading(nerror,nwarn)
 
  if (iload_dt < 0. .and. r_orb <= 0.) then
     print*,'ERROR: orbital-period mass loading (iload_dt<0) requires r_orb > 0'
+    nerror = nerror + 1
+ endif
+
+ if (iload_total == 1 .and. iload_factor == 2) then
+    print*,'ERROR: iload_total = 1 (fixed total rate) applies to the constant modes (iload_factor 0/1) only'
     nerror = nerror + 1
  endif
 
