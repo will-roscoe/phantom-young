@@ -1347,7 +1347,7 @@ end subroutine test_createsink
 !+
 !-----------------------------------------------------------------------
 subroutine test_createsink_record(ntests,npass)
- use dim,          only:gravity,maxp,maxphase,maxvxyzu
+ use dim,          only:gravity,maxp,maxphase,maxvxyzu,gr
  use boundary,     only:set_boundary
  use deriv,        only:get_derivs_global
  use eos,          only:ieos,polyk,gamma
@@ -1356,7 +1356,7 @@ subroutine test_createsink_record(ntests,npass)
  use part,         only:init_part,npart,npartoftype,igas,xyzh,massoftype,hfact,&
                         iphase,isetphase,fext,divcurlv,vxyzu,fxyzu,poten, &
                         nptmass,xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,dptmass,&
-                        fxyz_ptmass_sinksink,pxyzu_ptmass
+                        fxyz_ptmass_sinksink,pxyzu_ptmass,metrics_ptmass,rhoh
  use ptmass,       only:icreate_sinks,ptmass_create,finish_ptmass,h_acc,rho_crit,rho_crit_cgs,&
                         f_crit_override,set_record_created
  use mpiutils,     only:reduceall_mpi
@@ -1365,6 +1365,7 @@ subroutine test_createsink_record(ntests,npass)
  use physcon,      only:solarm
  use setup_params, only:npart_total
  use testutils,    only:checkval,update_test_scores
+ use metric_tools, only:init_metric
  integer, intent(inout) :: ntests,npass
  integer :: iscen,nfailed(8),nsink(2,4)
  real    :: msink(2,4),xsink(2,4),pos_fac,vel_fac
@@ -1380,14 +1381,20 @@ subroutine test_createsink_record(ntests,npass)
  ! override on, so is force-created
  !
  hacc_scen  = (/0.15,0.01,0.01,0.15/)
- fcrit_scen = (/0.,1.e-10,0.,1.e-10/)
+ fcrit_scen = (/0.,1.,0.,1./) ! 1: density override on, threshold set below the test particle's density
  u_scen = (/0.,0.,0.,1.e3/)
  nexpect    = (/1,0,0,1/)
  if (.not.gravity) nexpect(4) = 1
 
  call set_units_for_tests(pos_fac,vel_fac)
- ieos  = 1
- gamma = 5./3.
+ if (gr) then
+    ieos    = 2
+    gamma   = 1.01
+    pos_fac = 1e4*pos_fac ! as test_createsink: avoid too small a density for GR
+ else
+    ieos  = 1
+    gamma = 5./3.
+ endif
  iverbose = 0
  do iscen=1,4
     call run_one(iscen,.false.)
@@ -1424,6 +1431,10 @@ subroutine run_one(iscen,rec)
  fext(:,:)  = 0.
  xyzmh_ptmass(:,:) = 0.
  vxyz_ptmass(:,:)  = 0.
+ if (gr) then
+    call init_metric(nptmass,xyzmh_ptmass,metrics_ptmass)
+    pxyzu_ptmass(:,:) = 0.
+ endif
  call set_boundary(-1.*pos_fac,1.*pos_fac,-1.*pos_fac,1.*pos_fac,-1.*pos_fac,1.*pos_fac)
  psep = 0.05*pos_fac
  rad  = 0.2*pos_fac
@@ -1443,7 +1454,6 @@ subroutine run_one(iscen,rec)
  polyk         = 0.
  if (maxvxyzu >= 4) vxyzu(4,1:npart) = u_scen(iscen)
  h_acc         = hacc_scen(iscen)*pos_fac
- f_crit_override = fcrit_scen(iscen)
  call get_derivs_global()
  r2min  = huge(r2min)
  itestp = npart
@@ -1454,6 +1464,8 @@ subroutine run_one(iscen,rec)
        r2min  = r2
     endif
  enddo
+ f_crit_override = 0.
+ if (fcrit_scen(iscen) > 0.) f_crit_override = 0.5*rhoh(xyzh(4,itestp),massoftype(igas))/rho_crit
  nptmass = 0
  call set_record_created(rec)
  call ptmass_create(nptmass,npart,itestp,xyzh,vxyzu,fxyzu,fext,divcurlv,poten,&
