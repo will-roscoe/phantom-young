@@ -65,6 +65,7 @@ module ptmass
  public :: get_pressure_on_sinks
  public :: ptmass_check_acc
  public :: ptmass_create_all
+ public :: set_record_created
 
  ! settings affecting routines in module (read from/written to input file)
  integer, public :: icreate_sinks = 0 ! 1-standard sink creation scheme 2-Star formation scheme using core prescription
@@ -122,7 +123,7 @@ module ptmass
  real :: dtfacphi2 = dtfacphi2fsi
 
  ! parameters to control output regarding sink particles
- logical, private, parameter :: record_created   = .false. ! verbose tracking of why sinks are not created
+ logical, private            :: record_created   = .false. ! verbose tracking of why sinks are not created (observation only)
  logical, private            :: write_one_ptfile = .true.  ! default logical to determine if we are writing one or nptmass data files
  logical, private            :: l_crit_override  = .false. ! logical to determine the printing of f_crit_override to the .in file
  character(len=50), private  :: pt_prefix = 'Sink'
@@ -1152,10 +1153,11 @@ subroutine ptmass_create(nptmass,npart,itest,xyzh,pxyzu,fxyzu,fext,divcurlv,pote
  real    :: hcheck,hcheck2,f_acc_local
  real(4) :: divvi,potenj_min,poteni
  integer :: ifail,nacc,j,k,n,nk,itype,itypej,itypek,ifail_array(inosink_max),id_rhomax,nneigh_act,new_nptmass
- logical :: accreted,iactivej,isgasj,isdustj,calc_exact_epot,ForceCreation
+ logical :: accreted,iactivej,isgasj,isdustj,calc_exact_epot,ForceCreation,hard_fail,isopen
 
  ifail       = 0
  ifail_array = 0
+ hard_fail   = .false.  ! set by checks that no override may bypass (not gas, 2h > h_acc)
  poteni      = 0._4
  potenj_min  = huge(poteni)
 !
@@ -1237,10 +1239,15 @@ subroutine ptmass_create(nptmass,npart,itest,xyzh,pxyzu,fxyzu,fext,divcurlv,pote
     write(iprint,"(a,i10,a,i2,a)",advance='no') &
      ' ptmass_create: Testing particle i=',itest,' on thread ',id,' for ptmass creation...'
 
+ ! record_created only decides whether a failed candidate carries on so that its
+ ! diagnostics can be recorded; it never changes whether a sink is created.
+ ! CHECKs 0 and 2 set hard_fail, which forbids creation (including the ForceCreation override).
+ !
  ! CHECK 0: make sure particle is a gas particle (sanity check, should be unnecessary)
  if (.not. is_accretable(itype)) then
     if (iverbose >= 1) write(iprint,"(/,1x,a)") 'ptmass_create: FAILED because not a gas particle'
     call summary_ptmass_fail(inosink_notgas)
+    hard_fail = .true.
     if (.not. record_created) return
     ifail_array(inosink_notgas) = 1
  endif
@@ -1257,6 +1264,7 @@ subroutine ptmass_create(nptmass,npart,itest,xyzh,pxyzu,fxyzu,fext,divcurlv,pote
  if (hi > 0.5*h_acc) then
     if (iverbose >= 1) write(iprint,"(/,1x,2(a,es10.3),a)") 'ptmass_create: FAILED because 2h > h_acc (',2*hi,' > ',h_acc,')'
     call summary_ptmass_fail(inosink_h)
+    hard_fail = .true.
     if (.not. record_created) return
     ifail_array(inosink_h) = 1
  endif
@@ -1558,7 +1566,7 @@ subroutine ptmass_create(nptmass,npart,itest,xyzh,pxyzu,fxyzu,fext,divcurlv,pote
 
  ! override failure if the candidate particle is too dense! (some critera still apply)
  if (ForceCreation) then
-    if (ifail > 0 .and. is_accretable(itype) .and. hi < 0.5*h_acc) then
+    if (ifail > 0 .and. .not.hard_fail .and. is_accretable(itype) .and. hi < 0.5*h_acc) then
        if (id==id_rhomax) then
           write(iprint,"(/,1x,a)")'ptmass_create: OVERRIDING sink failure creation given high density'
           ! list all failure modes that are overridden
@@ -1694,12 +1702,28 @@ subroutine ptmass_create(nptmass,npart,itest,xyzh,pxyzu,fxyzu,fext,divcurlv,pote
  endif
  ! print details to file, if requested
  if (record_created) then
-    write(iscfile,'(es18.10,1x,3(i18,1x),8(es18.9,1x),8(i18,1x))') &
-       time,nptmass+1,itest,nneigh_act,rhoh(hi,pmassi),divvi,alpha_grav,alphabeta_grav,etot,epot,ekin,etherm,ifail_array
-    call flush(iscfile)
+    inquire(unit=iscfile,opened=isopen)
+    if (isopen) then
+       write(iscfile,'(es18.10,1x,3(i18,1x),8(es18.9,1x),8(i18,1x))') &
+          time,nptmass+1,itest,nneigh_act,rhoh(hi,pmassi),divvi,alpha_grav,alphabeta_grav,etot,epot,ekin,etherm,ifail_array
+       call flush(iscfile)
+    endif
  endif
 
 end subroutine ptmass_create
+
+!-----------------------------------------------------------------------
+!+
+!  Switch the per-candidate diagnostic recording in ptmass_create on or off.
+!  Observation only: it does not change which candidates become sinks.
+!+
+!-----------------------------------------------------------------------
+subroutine set_record_created(flag)
+ logical, intent(in) :: flag
+
+ record_created = flag
+
+end subroutine set_record_created
 
 !-------------------------------------------------------------------------
 !+

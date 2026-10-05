@@ -55,6 +55,12 @@ Parameters
      - —
      - Loading radius [code units]; ``< 0`` uses the disc reference radius
        ``R_ref``
+   * - ``iload_total``
+     - ``0``
+     - Modes 0/1 only. ``0``: fixed rate per particle, so the total
+       delivered falls as :math:`n_\mathrm{alive}/n_{p,0}` while gas is
+       accreted or killed. ``1``: fixed total rate :math:`\xi/T` shared over
+       the live gas
 
 Dump-header (restart safety):
 

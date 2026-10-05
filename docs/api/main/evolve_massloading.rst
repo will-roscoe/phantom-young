@@ -72,6 +72,10 @@ parameterisations can be directly compared.
      - real
      - ``-1.``
      - Loading interval [code units].  ``<= 0`` computes the Keplerian orbital period at ``r_orb``.
+   * - ``iload_total``
+     - integer
+     - ``0``
+     - Modes 0/1: ``0`` = fixed rate per particle (total falls as gas is accreted), ``1`` = fixed total rate over live gas.
 
 **Dump-header persistence** — four values are written to every dump header
 so that restarts continue exactly from where the previous run left off:
