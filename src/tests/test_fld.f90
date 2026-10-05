@@ -34,6 +34,7 @@ subroutine test_fld(ntests,npass)
  call test_gradh_fallback(ntests,npass)
  call test_first_pass(ntests,npass)
  call test_fld_switch(ntests,npass)
+ call test_diffusion_rate(ntests,npass)
 
 end subroutine test_fld
 
@@ -230,5 +231,100 @@ subroutine test_fld_switch(ntests,npass)
  call update_test_scores(ntests,nfail,npass)
 
 end subroutine test_fld_switch
+
+!-----------------------------------------------------------------------
+! the SPH diffusion term against the continuum (1/rho) div(k grad T):
+! T = T0 (1 + eps sin 2 pi x/L) at uniform density, so with k ~ const
+! du/dt = -(k/rho) (2 pi/L)^2 (T - T0) (Forgan et al. 2009 eq. 18 in this
+! limit). Uses the code's own k, so it holds whatever value k has.
+!-----------------------------------------------------------------------
+subroutine test_diffusion_rate(ntests,npass)
+ use boundary,        only:set_boundary,xmin,xmax,ymin,ymax,zmin,zmax,dxbound,dybound,dzbound
+ use cooling,         only:cooling_in_step
+ use deriv,           only:get_derivs_global
+ use dim,             only:maxp,maxphase,periodic,mhd
+ use datafiles,       only:find_phantom_datafile
+ use eos,             only:ieos,icooling,init_eos,finish_eos,gamma
+ use io,              only:id,master
+ use physcon,         only:solarm,au,pi
+ use testutils,       only:checkval,update_test_scores
+ use unifdis,         only:set_unifdis
+ use units,           only:set_units,unit_density,unit_ergg
+ use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,get_k_fld,duFLD
+ use part,            only:init_part,npart,npartoftype,massoftype,xyzh,vxyzu,hfact, &
+                           iphase,isetphase,igas,rhoh
+ integer, intent(inout) :: ntests,npass
+ integer :: ierr,i,ieos_old,icooling_old
+ real    :: gamma_old,psep,rho_cgs,totmass,T,u_cgs
+ logical :: doFLD_old,cooling_in_step_old
+ character(len=120) :: pdir
+ integer :: nfail(1),n
+ real    :: T0,eps,rhoi,ki,Ti,expected,ratio,rsum,rmin,rmax,wk2
+
+ if (id==master) write(*,"(/,a)") '--> FLD diffusion rate against (1/rho) div(k grad T)'
+ if (mhd) then   ! force.F90 runs the radiative pair terms only when .not. mhd
+    if (id==master) write(*,"(a)") '  --> skipping diffusion-rate test (MHD build: no FLD pair term)'
+    return
+ endif
+ call get_environment_variable('PHANTOM_DIR',pdir)
+ if (len_trim(pdir) == 0 .or. len_trim(find_phantom_datafile(eos_file,'eos/lombardi')) == 0) then
+    if (id==master) write(*,"(a)") '  --> skipping diffusion-rate test (no opacity table)'
+    return
+ endif
+ ieos_old = ieos; icooling_old = icooling; doFLD_old = doFLD; gamma_old = gamma
+ ieos = 24; icooling = 9; doFLD = .true.; gamma = 5./3.
+ ! as init_cooling sets for icooling = 9: the radiative update is called with the particle index
+ cooling_in_step_old = cooling_in_step; cooling_in_step = .true.
+ call set_units(mass=solarm,dist=au,G=1.d0)
+ call init_eos(ieos,ierr)
+ if (ierr /= 0) then
+    if (id==master) write(*,"(a)") '  --> skipping diffusion-rate test (init_eos failed)'
+    ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
+    cooling_in_step = cooling_in_step_old
+    return
+ endif
+ call init_part()
+ call set_boundary(-0.5,0.5,-0.5,0.5,-0.5,0.5)
+ psep = dxbound/24.
+ npart = 0
+ call set_unifdis('cubic',id,master,xmin,xmax,ymin,ymax,zmin,zmax,psep,hfact,npart,xyzh,periodic)
+ npartoftype(:) = 0
+ npartoftype(igas) = npart
+ rho_cgs = 1.e-12
+ totmass = rho_cgs/unit_density*dxbound*dybound*dzbound
+ massoftype(igas) = totmass/npart
+ if (maxphase==maxp) iphase(1:npart) = isetphase(igas,iactive=.true.)
+
+ T0 = 30.; eps = 0.01
+ do i=1,npart
+    T = T0*(1. + eps*sin(2.*pi*xyzh(1,i)/dxbound))
+    call getintenerg_opdep(T,rho_cgs,u_cgs)
+    vxyzu(4,i) = u_cgs/unit_ergg
+ enddo
+ call get_derivs_global()            ! lambda from a converged density pass
+ call get_derivs_global(dt=1.)       ! the FLD pair sum runs only when dt > 0
+
+ wk2 = (2.*pi/dxbound)**2
+ n = 0; rsum = 0.; rmin = huge(0.); rmax = -huge(0.)
+ do i=1,npart
+    if (.not.(periodic .or. all(abs(xyzh(1:3,i)) < 0.25))) cycle
+    if (abs(sin(2.*pi*xyzh(1,i)/dxbound)) < 0.5) cycle
+    rhoi = rhoh(xyzh(4,i),massoftype(igas))
+    call get_k_fld(rhoi,vxyzu(4,i),i,ki,Ti)
+    expected = -(ki/rhoi)*wk2*(Ti - T0)
+    ratio = duFLD(i)/expected
+    n = n + 1; rsum = rsum + ratio
+    rmin = min(rmin,ratio); rmax = max(rmax,ratio)
+ enddo
+ if (id==master) write(*,"(a,i6,a,3(1x,es12.5))") '  particles ',n, &
+      '  du_FLD/continuum mean min max:',rsum/max(n,1),rmin,rmax
+ nfail(:) = 0
+ call checkval(rsum/max(n,1),1.,0.05,nfail(1),'du_FLD matches (1/rho) div(k grad T)')
+ call update_test_scores(ntests,nfail,npass)
+ call finish_eos(ieos,ierr)
+ ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
+ cooling_in_step = cooling_in_step_old
+
+end subroutine test_diffusion_rate
 
 end module testfld
