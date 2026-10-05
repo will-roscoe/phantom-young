@@ -1861,7 +1861,6 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
              iamgasj  = .true.
           endif
           if (.not. iamgasj) cycle loop_over_neighbours
-          if (.not. iactivej) cycle loop_over_neighbours
           ! get kernel quantities
           call get_kernel(q2i,qi,wabi,grkerni)
           wkerni = wabi*cnormk*hi21*hi1
