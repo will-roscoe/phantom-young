@@ -1615,14 +1615,16 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
                    if (rhoj==0.) then
                       diffterm = 0.
                       print *, "setting diffterm = 0", i, j, rhoj
-                   elseif ((kfldj + kfldi) < tiny(0.)) then
+                   elseif ((kfldj + kfldi) < tiny(0.) .or. q2i >= radkern2 .or. q2j >= radkern2) then
+                      ! both kernels must reach the pair, as in j's own loop (usej alone does not
+                      ! say so: it is forced true in mhd, dust and non-gravity builds)
                       diffterm = 0.
                    else
                       diffterm = 4.*pmassj/rhoi/rhoj
                       diffterm = diffterm * kfldi * kfldj / (kfldi+kfldj)
                       diffterm = diffterm * (Ti - Tj) / rij2
-                      ! grkerni already carries cnormk (hfacgrkern)
-                      diffterm = diffterm*grkerni*(runix*dx + runiy*dy + runiz*dz)
+                      ! grkerni and grkernj already carry cnormk; their mean keeps the exchange antisymmetric
+                      diffterm = diffterm*0.5*(grkerni + grkernj)*(runix*dx + runiy*dy + runiz*dz)
                    endif
                    duFLD(i) = duFLD(i) + diffterm
                    if (isnan(duFLD(i))) then

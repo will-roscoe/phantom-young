@@ -35,6 +35,7 @@ subroutine test_fld(ntests,npass)
  call test_first_pass(ntests,npass)
  call test_fld_switch(ntests,npass)
  call test_diffusion_rate(ntests,npass)
+ call test_fld_conservation(ntests,npass)
 
 end subroutine test_fld
 
@@ -326,5 +327,93 @@ subroutine test_diffusion_rate(ntests,npass)
  cooling_in_step = cooling_in_step_old
 
 end subroutine test_diffusion_rate
+
+!-----------------------------------------------------------------------
+! the FLD exchange within a pair must be antisymmetric, so the total
+! sum_i m_i du_FLD,i vanishes: both sides need the same kernel gradient
+! when h_i /= h_j. A density wave along x makes the smoothing lengths differ.
+!-----------------------------------------------------------------------
+subroutine test_fld_conservation(ntests,npass)
+ use boundary,        only:set_boundary,xmin,xmax,ymin,ymax,zmin,zmax,dxbound,dybound,dzbound
+ use cooling,         only:cooling_in_step
+ use deriv,           only:get_derivs_global
+ use dim,             only:maxp,maxphase,periodic,mhd
+ use datafiles,       only:find_phantom_datafile
+ use eos,             only:ieos,icooling,init_eos,finish_eos,gamma
+ use io,              only:id,master
+ use physcon,         only:solarm,au,pi
+ use testutils,       only:checkval,update_test_scores
+ use unifdis,         only:set_unifdis
+ use units,           only:set_units,unit_density,unit_ergg
+ use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,duFLD
+ use part,            only:init_part,npart,npartoftype,massoftype,xyzh,vxyzu,hfact, &
+                           iphase,isetphase,igas
+ integer, intent(inout) :: ntests,npass
+ integer :: ierr,i,ieos_old,icooling_old
+ real    :: gamma_old,psep,rho_cgs,totmass,T,u_cgs
+ logical :: doFLD_old,cooling_in_step_old
+ character(len=120) :: pdir
+ integer :: nfail(2)
+ real    :: esum,eabs
+
+ if (id==master) write(*,"(/,a)") '--> FLD exchange conserves energy when h varies'
+ if (mhd) then   ! force.F90 runs the radiative pair terms only when .not. mhd
+    if (id==master) write(*,"(a)") '  --> skipping FLD conservation test (MHD build: no FLD pair term)'
+    return
+ endif
+ call get_environment_variable('PHANTOM_DIR',pdir)
+ if (len_trim(pdir) == 0 .or. len_trim(find_phantom_datafile(eos_file,'eos/lombardi')) == 0) then
+    if (id==master) write(*,"(a)") '  --> skipping FLD conservation test (no opacity table)'
+    return
+ endif
+ ieos_old = ieos; icooling_old = icooling; doFLD_old = doFLD; gamma_old = gamma
+ ieos = 24; icooling = 9; doFLD = .true.; gamma = 5./3.
+ ! as init_cooling sets for icooling = 9: the radiative update is called with the particle index
+ cooling_in_step_old = cooling_in_step; cooling_in_step = .true.
+ call set_units(mass=solarm,dist=au,G=1.d0)
+ call init_eos(ieos,ierr)
+ if (ierr /= 0) then
+    if (id==master) write(*,"(a)") '  --> skipping FLD conservation test (init_eos failed)'
+    ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
+    cooling_in_step = cooling_in_step_old
+    return
+ endif
+ call init_part()
+ call set_boundary(-0.5,0.5,-0.5,0.5,-0.5,0.5)
+ psep = dxbound/16.
+ npart = 0
+ call set_unifdis('cubic',id,master,xmin,xmax,ymin,ymax,zmin,zmax,psep,hfact,npart,xyzh,periodic)
+ npartoftype(:) = 0
+ npartoftype(igas) = npart
+ rho_cgs = 1.e-12
+ totmass = rho_cgs/unit_density*dxbound*dybound*dzbound
+ massoftype(igas) = totmass/npart
+ if (maxphase==maxp) iphase(1:npart) = isetphase(igas,iactive=.true.)
+
+ ! density wave along x (smoothing lengths vary by ~10%); T peaks a quarter-wave away
+ do i=1,npart
+    xyzh(1,i) = xyzh(1,i) + 0.05*dxbound*sin(2.*pi*xyzh(1,i)/dxbound)
+ enddo
+ do i=1,npart
+    T = 30.*(1. + 0.5*cos(2.*pi*xyzh(1,i)/dxbound))
+    call getintenerg_opdep(T,rho_cgs,u_cgs)
+    vxyzu(4,i) = u_cgs/unit_ergg
+ enddo
+ call get_derivs_global()
+ call get_derivs_global(dt=1.)
+
+ ! equal particle masses, so sum_i m_i du_i is proportional to sum_i du_i
+ esum = sum(duFLD(1:npart))
+ eabs = sum(abs(duFLD(1:npart)))
+ if (id==master) write(*,"(a,es12.5)") '  sum du_FLD / sum |du_FLD| = ',esum/max(eabs,tiny(0.))
+ nfail(:) = 0
+ call checkval(eabs > 0.,.true.,nfail(1),'FLD pair term ran (du_FLD not all zero)')
+ call checkval(abs(esum)/max(eabs,tiny(0.)),0.,1.e-10,nfail(2),'sum_i m_i du_FLD,i = 0')
+ call update_test_scores(ntests,nfail,npass)
+ call finish_eos(ieos,ierr)
+ ieos = ieos_old; icooling = icooling_old; doFLD = doFLD_old; gamma = gamma_old
+ cooling_in_step = cooling_in_step_old
+
+end subroutine test_fld_conservation
 
 end module testfld
