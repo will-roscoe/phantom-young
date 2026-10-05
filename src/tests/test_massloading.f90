@@ -11,9 +11,9 @@ module testmassloading
 ! :Dependencies: dump_utils, infile_utils, io, mass_loading, part, testutils
 ! :Owner: will-roscoe
 !
- use mass_loading, only: iload_factor, iload, iload_dt,                  &
+ use mass_loading, only: iload_factor, iload, iload_dt, iload_total, t_last, &
                          dm_load, mloadfactor, r_orb, t_orb,             &
-                         t_init, R_load,                                  &
+                         t_init, R_load, torb_mstar0, np0_initial,         &
                          init_massloading, step_mass_loading,             &
                          log_massloading,                                 &
                          write_options_massloading, read_options_massloading,       &
@@ -45,6 +45,16 @@ subroutine test_massloading(ntests, npass)
  call test_headeropts_legacy(ntests, npass)
  call test_set_r_ref(ntests, npass)
  call test_first_substep_init(ntests, npass)
+ call test_setup_header_state(ntests, npass)
+ call test_restart_np0(ntests, npass)
+ call test_torb_mstar0(ntests, npass)
+ call test_legacy_restart_state(ntests, npass)
+ call test_total_mode(ntests, npass)
+
+ ! leave loading off: later suites call check_setup, which read this module's state
+ call reset_massloading()
+ iload_factor = -1;  iload = 0.;  iload_dt = -1.
+ dm_load = 0.;  mloadfactor = 0.
 end subroutine test_massloading
 
 !---------------------------------------------------------------------------
@@ -885,5 +895,281 @@ subroutine test_first_substep_init(ntests, npass)
 
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_first_substep_init
+
+!---------------------------------------------------------------------------
+! test_setup_header_state
+!   Before loading initialises (the setup dump), the header carries n_p0,
+!   m_p0 and M_star0 taken from the particles.
+!---------------------------------------------------------------------------
+subroutine test_setup_header_state(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header, extract
+ use part,       only: massoftype, npartoftypetot, igas, nptmass, xyzmh_ptmass
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(3), ierr
+ real    :: val
+ real, parameter :: tol = 1.e-6
+
+ if (id == master) write(*,"(a)") '  --> setup dump header fixes n_p0, m_p0, M_star0'
+ nfailed(:) = 0
+ call reset_massloading()
+ massoftype(igas)     = 1.e-4
+ npartoftypetot(igas) = 1000
+ nptmass = 1;  xyzmh_ptmass(:,:) = 0.;  xyzmh_ptmass(4,1) = 4.0
+ iload_factor = 0;  iload = 0.1;  iload_dt = -1.
+ hdr  = allocate_header(nreal=10)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+ ierr = 0;  call extract('mload_np0',    val, hdr, ierr)
+ call checkval(val, 1000., tol, nfailed(1), 'setup header: n_p0 = particle count')
+ ierr = 0;  call extract('mload_mp0',    val, hdr, ierr)
+ call checkval(val, 1.e-4, tol, nfailed(2), 'setup header: m_p0 = particle mass')
+ ierr = 0;  call extract('mload_mstar0', val, hdr, ierr)
+ call checkval(val, 4.0,   tol, nfailed(3), 'setup header: M_star0 = host mass')
+ call free_header(hdr)
+ nptmass = 0
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_setup_header_state
+
+!---------------------------------------------------------------------------
+! test_restart_np0
+!   A chained restart from a dump in which particles were removed must keep
+!   dividing the load over the n_p0 fixed at the start (np0_initial), not
+!   over the count in the restart dump. np0_initial=.false. reproduces the
+!   recount.
+!---------------------------------------------------------------------------
+subroutine test_restart_np0(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header
+ use part,       only: massoftype, npartoftypetot, igas, nptmass, xyzmh_ptmass
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(2), ierr
+ real    :: m_expected, torb
+ real, parameter :: tol = 1.e-6, m0 = 1.e-4, chi = 0.1
+
+ if (id == master) write(*,"(a)") '  --> restart keeps n_p0 when particles were removed'
+ nfailed(:) = 0
+ torb = 2. * acos(-1.)            ! r_orb = 1, M_star = 1
+
+ ! link 1: load for a while, then write the restart dump
+ call reset_massloading()
+ np0_initial = .true.
+ massoftype(igas)     = m0
+ npartoftypetot(igas) = 1000
+ nptmass = 1;  xyzmh_ptmass(:,:) = 0.;  xyzmh_ptmass(4,1) = 1.0
+ r_orb = 1.0
+ iload_factor = 0;  iload = chi;  iload_dt = -1.
+ dm_load = 0.;  mloadfactor = 0.
+ call step_mass_loading(0., 0.1, 1.0, 1, 0_1)
+ call step_mass_loading(1.0, 0.1, 1.0, 1, 0_1)
+ hdr  = allocate_header(nreal=10)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+
+ ! link 2: 200 of the particles were removed before the restart dump
+ call reset_massloading()
+ npartoftypetot(igas) = 800
+ dm_load = 0.;  r_orb = 0.
+ call read_headeropts_massloading(hdr)
+ call step_mass_loading(2.0, 0.1, 1.0, 1, 0_1)
+ m_expected = m0 + chi*m0*1000. * 2.0 / (torb * 1000.)
+ call checkval(massoftype(igas), m_expected, tol, nfailed(1), 'restart: n_p0 from header, not the 800 left')
+
+ ! the old behaviour, kept behind np0_initial
+ call reset_massloading()
+ np0_initial = .false.
+ npartoftypetot(igas) = 800
+ dm_load = 0.;  r_orb = 0.
+ call read_headeropts_massloading(hdr)
+ call step_mass_loading(2.0, 0.1, 1.0, 1, 0_1)
+ m_expected = m0 + chi*m0*1000. * 2.0 / (torb * 800.)
+ call checkval(massoftype(igas), m_expected, tol, nfailed(2), 'np0_initial=.false.: recount at restart')
+
+ np0_initial = .true.
+ nptmass = 0
+ call free_header(hdr)
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_restart_np0
+
+!---------------------------------------------------------------------------
+! test_torb_mstar0
+!   With torb_mstar0 the loading interval stays at the host mass when loading
+!   began, so host accretion neither speeds up loading nor re-rates the mass
+!   already loaded. torb_mstar0=.false. reproduces the current-mass period.
+!---------------------------------------------------------------------------
+subroutine test_torb_mstar0(ntests, npass)
+ use part,      only: massoftype, npartoftypetot, igas, nptmass, xyzmh_ptmass
+ use io,        only: id, master
+ use testutils, only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ integer :: nfailed(4)
+ real    :: torb0, torb1, m_expected
+ real, parameter :: tol = 1.e-6, m0 = 1.e-4, chi = 0.1
+
+ if (id == master) write(*,"(a)") '  --> t_orb from the initial host mass (torb_mstar0)'
+ nfailed(:) = 0
+ torb0 = 2. * acos(-1.) / sqrt(4.0)
+ torb1 = 2. * acos(-1.) / sqrt(9.0)
+
+ call reset_massloading()
+ torb_mstar0 = .true.
+ massoftype(igas)     = m0
+ npartoftypetot(igas) = 1000
+ nptmass = 1;  xyzmh_ptmass(:,:) = 0.;  xyzmh_ptmass(4,1) = 4.0
+ r_orb = 1.0
+ iload_factor = 0;  iload = chi;  iload_dt = -1.
+ dm_load = 0.;  mloadfactor = 0.
+ call step_mass_loading(0., 0.1, 1.0, 1, 0_1)
+ xyzmh_ptmass(4,1) = 9.0            ! the host accretes
+ call step_mass_loading(3.0, 0.1, 1.0, 1, 0_1)
+ call checkval(t_orb, torb0, tol, nfailed(1), 'torb_mstar0: interval keeps the initial host mass')
+ m_expected = m0 + chi*m0*1000. * 3.0 / (torb0 * 1000.)
+ call checkval(massoftype(igas), m_expected, tol, nfailed(2), 'torb_mstar0: loaded mass not re-rated')
+
+ call reset_massloading()
+ torb_mstar0 = .false.
+ massoftype(igas) = m0
+ xyzmh_ptmass(4,1) = 4.0
+ dm_load = 0.;  mloadfactor = 0.
+ call step_mass_loading(0., 0.1, 1.0, 1, 0_1)
+ xyzmh_ptmass(4,1) = 9.0
+ call step_mass_loading(3.0, 0.1, 1.0, 1, 0_1)
+ call checkval(t_orb, torb1, tol, nfailed(3), 'torb_mstar0=.false.: interval follows the host')
+ m_expected = m0 + chi*m0*1000. * 3.0 / (torb1 * 1000.)
+ call checkval(massoftype(igas), m_expected, tol, nfailed(4), 'torb_mstar0=.false.: whole history re-rated')
+
+ torb_mstar0 = .true.
+ nptmass = 0
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_torb_mstar0
+
+!---------------------------------------------------------------------------
+! test_legacy_restart_state
+!   A dump written before n_p0/M_star0 were persisted: both are taken from
+!   the particles at the restart.
+!---------------------------------------------------------------------------
+subroutine test_legacy_restart_state(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header, add_to_rheader
+ use part,       only: massoftype, npartoftypetot, igas, nptmass, xyzmh_ptmass
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(2), ierr
+ real    :: m_expected, torb
+ real, parameter :: tol = 1.e-6, m0 = 1.e-4, chi = 0.1
+
+ if (id == master) write(*,"(a)") '  --> legacy header without n_p0/M_star0'
+ nfailed(:) = 0
+ call reset_massloading()
+ iload_factor = 0;  iload = chi;  iload_dt = -1.
+ hdr  = allocate_header(nreal=10)
+ ierr = 0
+ call add_to_rheader(chi*m0*1000., 'dm_load',     hdr, ierr)
+ call add_to_rheader(1.0,          'r_orb',       hdr, ierr)
+ call add_to_rheader(m0,           'mload_mp0',   hdr, ierr)
+ call add_to_rheader(0.,           'mload_tinit', hdr, ierr)
+ massoftype(igas)     = m0
+ npartoftypetot(igas) = 800
+ nptmass = 1;  xyzmh_ptmass(:,:) = 0.;  xyzmh_ptmass(4,1) = 4.0
+ call read_headeropts_massloading(hdr)
+ call step_mass_loading(2.0, 0.1, 1.0, 1, 0_1)
+ torb = 2. * acos(-1.) / sqrt(4.0)
+ call checkval(t_orb, torb, tol, nfailed(1), 'legacy: M_star0 from the host at restart')
+ m_expected = m0 + chi*m0*1000. * 2.0 / (torb * 800.)
+ call checkval(massoftype(igas), m_expected, tol, nfailed(2), 'legacy: n_p0 recounted at restart')
+ nptmass = 0
+ call free_header(hdr)
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_legacy_restart_state
+
+!---------------------------------------------------------------------------
+! test_total_mode
+!   iload_total = 1 delivers a fixed TOTAL rate (dm_load per T) shared over
+!   the live gas particles; iload_total = 0 (default) a fixed rate per
+!   particle, so the total falls as particles are accreted. The header must
+!   carry the time of the last update so a restart continues exactly.
+!   Not exercised: the fatal on switching iload_total 1 -> 0 at a restart
+!   (io::fatal ends the test binary).
+!---------------------------------------------------------------------------
+subroutine test_total_mode(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header
+ use part,       only: massoftype, npartoftypetot, igas, npart, xyzh, iphase, isetphase, maxphase
+ use dim,        only: maxp
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(7), ierr
+ real    :: m_a, m_b, m_link1
+ integer, parameter :: n0 = 1000, nacc = 400
+ real, parameter :: tol = 1.e-6, m0 = 1.e-4, chi = 0.1, torb = 2.0
+
+ if (id == master) write(*,"(a)") '  --> fixed-total loading (iload_total = 1)'
+ nfailed(:) = 0
+ npart = n0
+ xyzh(:,1:n0) = 0.
+ xyzh(4,1:n0) = 0.1
+ if (maxphase == maxp) iphase(1:n0) = isetphase(igas, iactive=.true.)
+
+ ! nothing accreted: the two conventions load identically
+ call load_two_steps(0, m_a)
+ call load_two_steps(1, m_b)
+ call checkval(m_b, m_a, tol, nfailed(1), 'all live: total mode = per-particle mode')
+
+ ! 400 of 1000 accreted: per particle over n_p0, total over the 600 live
+ xyzh(4,1:nacc) = -0.1
+ call load_two_steps(0, m_a)
+ call checkval(m_a, m0 + chi*m0*real(n0)/(torb*real(n0)), tol, nfailed(2), &
+               'per-particle mode: increment over n_p0')
+ call load_two_steps(1, m_b)
+ call checkval(m_b, m0 + chi*m0*real(n0)/(torb*real(n0-nacc)), tol, nfailed(3), &
+               'total mode: increment over the live particles')
+ call checkval((m_b - m0)*real(n0-nacc), chi*m0*real(n0)/torb, tol, nfailed(4), &
+               'total mode: delivered mass = nominal rate x time')
+
+ ! restart: the header carries t_last; the next link continues from the dump's particle mass
+ call load_two_steps(1, m_link1)
+ hdr  = allocate_header(nreal=12)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+ call checkval(ierr, 0, 0, nfailed(5), 'total mode: header write')
+ call reset_massloading()
+ iload_factor = 0;  iload = chi;  iload_dt = torb;  iload_total = 1
+ massoftype(igas)     = m_link1
+ npartoftypetot(igas) = n0 - nacc
+ dm_load = 0.;  t_last = -1.
+ call read_headeropts_massloading(hdr)
+ call checkval(t_last, 1.0, tol, nfailed(6), 'total mode: header round-trip of t_last')
+ call step_mass_loading(2.0, 0.1, torb, 1, 0_1)
+ call checkval(massoftype(igas), m_link1 + chi*m0*real(n0)*1.0/(torb*real(n0-nacc)), tol, nfailed(7), &
+               'total mode: restart continues from the dump particle mass')
+ call free_header(hdr)
+
+ npart = 0
+ xyzh(4,1:n0) = 0.
+ iload_total = 0
+ call update_test_scores(ntests, nfailed, npass)
+
+contains
+
+ subroutine load_two_steps(mode, m_end)
+  integer, intent(in) :: mode
+  real,    intent(out) :: m_end
+  call reset_massloading()
+  massoftype(igas)     = m0
+  npartoftypetot(igas) = n0
+  iload_factor = 0;  iload = chi;  iload_dt = torb;  iload_total = mode
+  dm_load = 0.;  mloadfactor = 0.
+  call step_mass_loading(0.,  0.1, torb, 1, 0_1)
+  call step_mass_loading(1.0, 0.1, torb, 1, 0_1)
+  m_end = massoftype(igas)
+ end subroutine load_two_steps
+
+end subroutine test_total_mode
 
 end module testmassloading

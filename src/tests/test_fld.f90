@@ -33,6 +33,7 @@ subroutine test_fld(ntests,npass)
  call test_limiter(ntests,npass)
  call test_gradh_fallback(ntests,npass)
  call test_first_pass(ntests,npass)
+ call test_fld_switch(ntests,npass)
 
 end subroutine test_fld
 
@@ -195,5 +196,39 @@ contains
  end function inner
 
 end subroutine test_first_pass
+
+!-----------------------------------------------------------------------
+! 'do FLD' in the .in must switch FLD (doFLD) on and off. It was read
+! into fld_opt and never copied, so FLD ran whatever the .in said.
+!-----------------------------------------------------------------------
+subroutine test_fld_switch(ntests,npass)
+ use cooling_radapprox, only:read_options_cooling_radapprox
+ use eos_stamatellos,   only:doFLD
+ use infile_utils,      only:inopts,open_db_from_file,close_db,write_inopt
+ use testutils,         only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ type(inopts), allocatable :: db(:)
+ integer :: nfail(2),ierr,nerr,lu,iopt
+ logical :: doFLD_old
+ character(len=*), parameter :: fname = 'test_fld_switch.tmp'
+
+ nfail(:) = 0
+ doFLD_old = doFLD
+ do iopt = 0,1
+    open(newunit=lu,file=fname,status='replace',form='formatted')
+    call write_inopt('eos_lom.dat','EOS_file','table',lu)
+    call write_inopt(iopt,'do FLD','Do FLD? (1) yes (0) no',lu)
+    close(lu)
+    doFLD = (iopt == 0)   ! start from the opposite state
+    nerr = 0
+    call open_db_from_file(db,fname,78,ierr)
+    call read_options_cooling_radapprox(db,nerr)
+    call close_db(db)
+    call checkval(merge(1,0,doFLD),iopt,0,nfail(iopt+1),'do FLD = '//achar(48+iopt)//' sets doFLD')
+ enddo
+ doFLD = doFLD_old
+ call update_test_scores(ntests,nfail,npass)
+
+end subroutine test_fld_switch
 
 end module testfld

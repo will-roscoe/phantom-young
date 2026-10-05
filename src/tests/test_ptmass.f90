@@ -160,6 +160,7 @@ subroutine test_ptmass(ntests,npass,string)
  !  Test sink particle creation
  !
  if (do_test_createsink .or. testall) call test_createsink(ntests,npass)
+ if (do_test_createsink .or. testall) call test_createsink_record(ntests,npass)
 
  if (do_test_SDAR .or. testall .and. .not.gr) call test_SDAR(ntests,npass)
 
@@ -1337,6 +1338,152 @@ real function gaussianr(r)
 end function gaussianr
 
 end subroutine test_createsink
+
+!-----------------------------------------------------------------------
+!+
+!  Test that record_created, which only records diagnostics for failed
+!  candidates, never changes which candidates become sinks. Each scenario
+!  is run with the switch off and on and the outcomes must be identical.
+!+
+!-----------------------------------------------------------------------
+subroutine test_createsink_record(ntests,npass)
+ use dim,          only:gravity,maxp,maxphase,maxvxyzu,gr
+ use boundary,     only:set_boundary
+ use deriv,        only:get_derivs_global
+ use eos,          only:ieos,polyk,gamma
+ use kdtree,       only:tree_accuracy
+ use io,           only:id,master,iverbose
+ use part,         only:init_part,npart,npartoftype,igas,xyzh,massoftype,hfact,&
+                        iphase,isetphase,fext,divcurlv,vxyzu,fxyzu,poten, &
+                        nptmass,xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,dptmass,&
+                        fxyz_ptmass_sinksink,pxyzu_ptmass,metrics_ptmass,rhoh
+ use ptmass,       only:icreate_sinks,ptmass_create,finish_ptmass,h_acc,rho_crit,rho_crit_cgs,&
+                        f_crit_override,set_record_created
+ use mpiutils,     only:reduceall_mpi
+ use spherical,    only:set_sphere
+ use units,        only:umass
+ use physcon,      only:solarm
+ use setup_params, only:npart_total
+ use testutils,    only:checkval,update_test_scores
+ use metric_tools, only:init_metric
+ integer, intent(inout) :: ntests,npass
+ integer :: iscen,nfailed(8),nsink(2,4)
+ real    :: msink(2,4),xsink(2,4),pos_fac,vel_fac
+ real    :: hacc_scen(4),fcrit_scen(4),u_scen(4)
+ integer :: nexpect(4)
+
+ if (id==master) write(*,"(/,a)") '--> testing that record_created does not change sink creation'
+ !
+ ! 1: passes every check
+ ! 2: fails CHECK 2 (2h > h_acc) with the density override on
+ ! 3: fails CHECK 2 with the density override off
+ ! 4: fails the energy checks (hot gas, if the build tracks thermal energy) with the density
+ ! override on, so is force-created
+ !
+ hacc_scen  = (/0.15,0.01,0.01,0.15/)
+ fcrit_scen = (/0.,1.,0.,1./) ! 1: density override on, threshold set below the test particle's density
+ u_scen = (/0.,0.,0.,1.e3/)
+ nexpect    = (/1,0,0,1/)
+ if (.not.gravity) nexpect(4) = 1
+
+ call set_units_for_tests(pos_fac,vel_fac)
+ if (gr) then
+    ieos    = 2
+    gamma   = 1.01
+    pos_fac = 1e4*pos_fac ! as test_createsink: avoid too small a density for GR
+ else
+    ieos  = 1
+    gamma = 5./3.
+ endif
+ iverbose = 0
+ do iscen=1,4
+    call run_one(iscen,.false.)
+    call run_one(iscen,.true.)
+ enddo
+ call set_record_created(.false.)
+ f_crit_override = 0.
+ icreate_sinks   = 0
+ polyk           = 0.
+
+ nfailed = 0
+ do iscen=1,4
+    call checkval(nsink(1,iscen),nexpect(iscen),0,nfailed(iscen),'nptmass expected (switch off)')
+    call checkval(nsink(2,iscen),nsink(1,iscen),0,nfailed(4+iscen),'nptmass same with switch on')
+    if (nsink(1,iscen) > 0 .and. nsink(2,iscen) > 0) then
+       call checkval(msink(2,iscen),msink(1,iscen),epsilon(0.),nfailed(4+iscen),'sink mass same with switch on')
+       call checkval(xsink(2,iscen),xsink(1,iscen),epsilon(0.),nfailed(4+iscen),'sink x same with switch on')
+    endif
+ enddo
+ call update_test_scores(ntests,nfailed(1:4),npass)
+ call update_test_scores(ntests,nfailed(5:8),npass)
+
+contains
+
+subroutine run_one(iscen,rec)
+ integer, intent(in) :: iscen
+ logical, intent(in) :: rec
+ integer :: i,itestp
+ real    :: psep,r2,r2min,totmass,rad
+
+ call init_part()
+ vxyzu(:,:) = 0.
+ fxyzu(:,:) = 0.
+ fext(:,:)  = 0.
+ xyzmh_ptmass(:,:) = 0.
+ vxyz_ptmass(:,:)  = 0.
+ if (gr) then
+    call init_metric(nptmass,xyzmh_ptmass,metrics_ptmass)
+    pxyzu_ptmass(:,:) = 0.
+ endif
+ call set_boundary(-1.*pos_fac,1.*pos_fac,-1.*pos_fac,1.*pos_fac,-1.*pos_fac,1.*pos_fac)
+ psep = 0.05*pos_fac
+ rad  = 0.2*pos_fac
+ npart_total = 0
+ if (id == master) then
+    call set_sphere('cubic',id,master,0.,rad,psep,hfact,npartoftype(igas),xyzh,nptot=npart_total)
+ else
+    npartoftype(igas) = 0
+ endif
+ totmass = 1.0*solarm/umass
+ massoftype(igas) = totmass/real(reduceall_mpi('+',npart_total))
+ npart = npartoftype(igas)
+ if (maxphase==maxp) iphase(1:npart) = isetphase(igas,iactive=.true.)
+ tree_accuracy = 0.
+ icreate_sinks = 1
+ rho_crit      = rho_crit_cgs
+ polyk         = 0.
+ if (maxvxyzu >= 4) vxyzu(4,1:npart) = u_scen(iscen)
+ h_acc         = hacc_scen(iscen)*pos_fac
+ call get_derivs_global()
+ r2min  = huge(r2min)
+ itestp = npart
+ do i=1,npart
+    r2 = dot_product(xyzh(1:3,i),xyzh(1:3,i))
+    if (r2 < r2min) then
+       itestp = i
+       r2min  = r2
+    endif
+ enddo
+ f_crit_override = 0.
+ if (fcrit_scen(iscen) > 0.) f_crit_override = 0.5*rhoh(xyzh(4,itestp),massoftype(igas))/rho_crit
+ nptmass = 0
+ call set_record_created(rec)
+ call ptmass_create(nptmass,npart,itestp,xyzh,vxyzu,fxyzu,fext,divcurlv,poten,&
+                    massoftype,xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,fxyz_ptmass_sinksink,dptmass,0.)
+ i = 1
+ if (rec) i = 2
+ nsink(i,iscen) = nptmass
+ msink(i,iscen) = 0.
+ xsink(i,iscen) = 0.
+ if (nptmass > 0) then
+    msink(i,iscen) = xyzmh_ptmass(4,1)
+    xsink(i,iscen) = xyzmh_ptmass(1,1)
+ endif
+ call finish_ptmass(nptmass)
+
+end subroutine run_one
+
+end subroutine test_createsink_record
 
 !-----------------------------------------------------------------------
 !+
