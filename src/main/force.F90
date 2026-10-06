@@ -57,6 +57,9 @@ module forces
 
  integer, parameter :: maxcellcache = 1000
 
+ real, private :: kfldcache(2,maxcellcache)
+!$omp threadprivate(kfldcache)
+
  public :: force, reconstruct_dv, get_drag_terms ! latter to avoid compiler warning
 
  !--indexing for xpartveci array
@@ -1611,7 +1614,13 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              if (usej) then
                 gradp_coolj = pmassj*prj*rho1j*rho1j*grkernj
                 if (doFLD .and. dt > 0.) then
-                   call get_k_fld(rhoj,enj,j,kfldj,Tj)
+                   if (n > maxcellcache) then
+                      call get_k_fld(rhoj,enj,j,kfldj,Tj)
+                   else
+                      if (kfldcache(1,n) < 0.) call get_k_fld(rhoj,enj,j,kfldcache(1,n),kfldcache(2,n))
+                      kfldj = kfldcache(1,n)
+                      Tj = kfldcache(2,n)
+                   endif
                    if (rhoj==0.) then
                       diffterm = 0.
                       print *, "setting diffterm = 0", i, j, rhoj
@@ -2523,7 +2532,8 @@ subroutine compute_cell(cell,listneigh,nneigh,Bevol,xyzh,vxyzu,fxyzu, &
  use options,         only:implicit_radiation
  use part,            only:get_partinfo,iamgas,mhd,igas,isink,maxphase,massoftype,aprmassoftype
  use viscosity,       only:irealvisc,bulkvisc
- use eos,             only:iresistive_heating
+ use eos,             only:iresistive_heating,icooling
+ use eos_stamatellos, only:doFLD
  use shock_capturing, only:beta,alphau,alphaB
 
  type(cellforce), intent(inout)  :: cell
@@ -2574,6 +2584,7 @@ subroutine compute_cell(cell,listneigh,nneigh,Bevol,xyzh,vxyzu,fxyzu, &
 
  realviscosity    = (irealvisc > 0)
  useresistiveheat = (iresistive_heating > 0)
+ if (icooling == 9 .and. doFLD) kfldcache(:,1:min(nneigh,maxcellcache)) = -1.
 
  over_parts: do ip = 1,cell%npcell
 
