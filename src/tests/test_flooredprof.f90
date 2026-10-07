@@ -11,11 +11,12 @@ module test_flooredprof
 ! :References: Mercer & Stamatellos 2020 (n=2 preset)
 ! :Owner: will-roscoe
 ! :Runtime parameters: None
-! :Dependencies: eos_stamatellos, physcon, testutils, units
+! :Dependencies: dump_utils, eos_stamatellos, physcon, testutils, units
 !
  use testutils,       only:checkval,update_test_scores
  use eos_stamatellos, only:get_T_profile,get_T0_from_lum,iprofile,T0_prof,n_prof,&
-                           R0_prof,T_bg_prof,qprofile
+                           R0_prof,T_bg_prof,qprofile,L_star_prof,&
+                           write_headeropts_flooredprof,read_headeropts_flooredprof
  implicit none
  public :: run_test_flooredprof
  private
@@ -25,7 +26,7 @@ subroutine run_test_flooredprof(ntests,npass)
  use units,   only:set_units
  use physcon, only:au,solarm
  integer, intent(inout) :: ntests,npass
- integer :: nfail(9)
+ integer :: nfail(12)
  real(kind=8) :: tol,L_02
 
  call set_units(dist=au,mass=solarm,G=1.d0)   ! code radius r == radius in AU
@@ -67,11 +68,40 @@ subroutine run_test_flooredprof(ntests,npass)
  call checkval(get_T_profile(1.d0), sqrt(T0_prof**2 + T_bg_prof**2), tol, nfail(9), &
                'derived T0 flows into get_T_profile')
 
+ ! header round trip: L_star is written only when set (lumdisc=3), absent otherwise (lumdisc=2)
+ call check_header_lstar(-1.d0, nfail(10), nfail(11))
+ call check_header_lstar(L_02,  nfail(12))
+
  call update_test_scores(ntests,nfail,npass)
 
  iprofile = 1
  qprofile = 0.
  T0_prof  = 100.
+ L_star_prof = -1.
 end subroutine run_test_flooredprof
+
+subroutine check_header_lstar(lstar,nfail_l,nfail_t0)
+ use dump_utils, only:dump_h,allocate_header,free_header
+ real(kind=8), intent(in) :: lstar
+ integer, intent(inout) :: nfail_l
+ integer, intent(inout), optional :: nfail_t0
+ type(dump_h) :: hdr
+ integer :: ierr
+ real :: t0_written
+
+ hdr = allocate_header(nint=4,nreal=10)
+ ierr = 0
+ L_star_prof = lstar
+ t0_written  = T0_prof
+ call write_headeropts_flooredprof(hdr,ierr)
+ L_star_prof = 123.
+ T0_prof     = 0.
+ call read_headeropts_flooredprof(hdr)
+ call checkval(L_star_prof,real(lstar),1.e-12,nfail_l,'L_star read back from header')
+ if (present(nfail_t0)) call checkval(T0_prof,t0_written,1.e-12,nfail_t0,'T0_prof read back from header')
+ T0_prof = t0_written
+ call free_header(hdr,ierr)
+
+end subroutine check_header_lstar
 
 end module test_flooredprof
