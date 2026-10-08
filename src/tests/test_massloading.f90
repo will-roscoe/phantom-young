@@ -15,7 +15,7 @@ module testmassloading
                          dm_load, mloadfactor, r_orb, t_orb,             &
                          t_init, R_load, torb_mstar0, np0_initial,         &
                          init_massloading, step_mass_loading,             &
-                         log_massloading,                                 &
+                         log_massloading, loading_rate,                   &
                          write_options_massloading, read_options_massloading,       &
                          write_options_massloading_setup, read_options_massloading_setup, &
                          write_headeropts_massloading, read_headeropts_massloading,  &
@@ -50,6 +50,7 @@ subroutine test_massloading(ntests, npass)
  call test_torb_mstar0(ntests, npass)
  call test_legacy_restart_state(ntests, npass)
  call test_total_mode(ntests, npass)
+ call test_loading_rate(ntests, npass)
 
  ! leave loading off: later suites call check_setup, which read this module's state
  call reset_massloading()
@@ -1171,5 +1172,51 @@ contains
  end subroutine load_two_steps
 
 end subroutine test_total_mode
+
+!---------------------------------------------------------------------------
+! loading_rate: nominal and delivered total rates for each convention
+!---------------------------------------------------------------------------
+subroutine test_loading_rate(ntests, npass)
+ use part,      only: massoftype, npartoftypetot, igas
+ use io,        only: id, master
+ use testutils, only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ integer :: nfailed(6)
+ real, parameter :: tol = 1.e-6, torb = 2.0, mp = 1.e-4, chi = 0.1
+ integer, parameter :: n0 = 1000
+ real :: ntot
+
+ if (id == master) write(*,"(a)") '  --> loading rate (nominal and delivered)'
+ nfailed(:) = 0
+ ntot = real(n0)
+
+ call reset_massloading()
+ massoftype(igas) = mp;  npartoftypetot(igas) = n0
+ iload_factor = 0;  iload = chi;  iload_dt = torb;  iload_total = 0
+ dm_load = 0.;  mloadfactor = 0.
+ call init_massloading()
+ t_orb = torb
+
+ call checkval(loading_rate(ntot, mp), dm_load/torb, tol, nfailed(1), 'const per-particle: nominal = dm_load/t_orb')
+ call checkval(loading_rate(0.6*ntot, mp), 0.6*dm_load/torb, tol, nfailed(2), 'const per-particle: delivered = f_alive*nominal')
+ iload_total = 1
+ call checkval(loading_rate(0.6*ntot, mp), dm_load/torb, tol, nfailed(3), 'const total: delivered = nominal')
+
+ call reset_massloading()
+ massoftype(igas) = mp;  npartoftypetot(igas) = n0
+ iload_factor = 2;  iload = 0.05;  iload_dt = torb
+ dm_load = 0.;  mloadfactor = 0.
+ call init_massloading()
+ t_orb = torb
+ call checkval(loading_rate(ntot, mp), ntot*mp*log(1.05)/torb, tol, nfailed(4), 'exp: nominal = n_p0*mp*ln(1+beta)/t_orb')
+ call checkval(loading_rate(0.6*ntot, mp), 0.6*ntot*mp*log(1.05)/torb, tol, nfailed(5), 'exp: delivered uses n_alive')
+ t_orb = 0.
+ call checkval(loading_rate(ntot, mp), 0., tol, nfailed(6), 't_orb unknown: rate 0')
+
+ call reset_massloading()
+ iload_factor = -1;  iload = 0.;  iload_dt = -1.;  iload_total = 0
+ dm_load = 0.;  mloadfactor = 0.
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_loading_rate
 
 end module testmassloading
