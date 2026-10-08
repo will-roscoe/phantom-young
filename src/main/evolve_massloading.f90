@@ -92,13 +92,13 @@ module mass_loading
    !   R_load       -- loading radius override [code units]; <0 = use disc R_ref
    !   iload_total  -- 0 = fixed rate per particle, 1 = fixed total rate over live gas
    !
-   ! :Dependencies: dim, dump_utils, infile_utils, io, mpiutils, part
+   ! :Dependencies: dim, dump_utils, infile_utils, io, mpiutils, part, physcon, units
    !
    use part, only: igas
    implicit none
 
    public :: init_massloading, step_mass_loading,                   &
-            log_massloading,                                       &
+            log_massloading, loading_rate, rate_string,             &
             write_options_massloading, read_options_massloading,   &
             write_options_massloading_setup,                       &
             read_options_massloading_setup,                        &
@@ -172,9 +172,10 @@ contains
          calc_torb   = (  iload_dt <= 0.  )
          initialised = .true.
          if (  id == master  ) then
-            write(iprint,"(1x,a,i0,a,es12.4,a,es12.4,a,i0,a,es12.4)") &
+            write(iprint,"(1x,a,i0,a,es12.4,a,es12.4,a,i0,a,es12.4,a)") &
                '[mass_loading] restart: type=', iload_factor, &
-               '  dm_load=', dm_load, '  r_orb=', r_orb, '  n_p0=', n_p0, '  M_star0=', mstar0
+               '  dm_load=', dm_load, '  r_orb=', r_orb, '  n_p0=', n_p0, '  M_star0=', mstar0, &
+               trim(rate_string(real(n_p0), m_p0, 'Mdot_nom'))
          endif
          return
       endif
@@ -216,12 +217,13 @@ contains
       initialised = .true.
 
       if (  id == master  ) then
-         write(iprint,"(1x,a,i0,a,es12.4,a,es12.4,a,es12.4,a,i0)") &
+         write(iprint,"(1x,a,i0,a,es12.4,a,es12.4,a,es12.4,a,i0,a)") &
             '[mass_loading] init: type=', iload_factor, &
             '  iload=',       iload,       &
             '  mloadfactor=', mloadfactor, &
             '  dm_load=',     dm_load,     &
-            '  n_p0=',        n_p0
+            '  n_p0=',        n_p0,        &
+            trim(rate_string(real(n_p0), m_p0, 'Mdot_nom'))
       endif
    end subroutine parse_massloading
 
@@ -431,11 +433,59 @@ contains
 
       if (  id == master  ) then
          write(iprint, &
-         "('[mass_loading] dump: t=',es10.3,'  M_disc/M_disc0=',es10.3,'  dm_p=',es10.3,'  f_alive=',f8.5)") &
-         time, ratio, dm_p, f_alive
+         "('[mass_loading] dump: t=',es10.3,'  M_disc/M_disc0=',es10.3,'  dm_p=',es10.3,'  f_alive=',f8.5,a,a)") &
+         time, ratio, dm_p, f_alive, &
+         trim(rate_string(real(n_p0), massoftype(igas), 'Mdot_nom')), &
+         trim(rate_string(real(n_alive), massoftype(igas), 'Mdot_del'))
       endif
 
    end subroutine log_massloading
+
+   !-----------------------------------------------------------------------
+   !+
+   !   Total mass-loading rate in code units (mass per time) delivered to a
+   !   disc of n_gas gas particles of mass mp.  0 if t_orb is not yet known.
+   !   Constant loading (modes 0/1): dm_load/t_orb; scaled by n_gas/n_p0 for
+   !   iload_total = 0 (rate is per particle), unscaled for iload_total = 1.
+   !   Exponential loading (mode 2): n_gas*mp*ln(1+mloadfactor)/t_orb.
+   !   Nominal rate: call with n_gas = n_p0.
+   !+
+   !-----------------------------------------------------------------------
+   real function loading_rate(n_gas, mp) result(rate)
+      real, intent(in) :: n_gas, mp
+
+      rate = 0.
+      if (  iload_factor < 0 .or. t_orb <= 0.  ) return
+      if (  iload_factor == 2  ) then
+         rate = n_gas * mp * log(1. + mloadfactor) / t_orb
+      else
+         rate = dm_load / t_orb
+         if (  iload_total == 0 .and. n_p0 > 0  ) rate = rate * n_gas / real(n_p0)
+      endif
+   end function loading_rate
+
+   !-----------------------------------------------------------------------
+   !+
+   !   Formatted '  <label>=<code>  <label>_Msun/yr=..  <label>_MJup/yr=..'
+   !   for loading_rate(n_gas, mp); empty string if the rate is unknown.
+   !+
+   !-----------------------------------------------------------------------
+   function rate_string(n_gas, mp, label) result(str)
+      use units,   only: umass, utime
+      use physcon, only: solarm, jupiterm, years
+      real,             intent(in) :: n_gas, mp
+      character(len=*), intent(in) :: label
+      character(len=120)           :: str
+      real             :: rate
+      real(kind=8)     :: gps
+
+      str  = ''
+      if (  iload_factor < 0 .or. t_orb <= 0.  ) return
+      rate = loading_rate(n_gas, mp)
+      gps  = real(rate,kind=8) * umass / utime
+      write(str,"('  ',a,'=',es10.3,'  ',a,'_Msun/yr=',es10.3,'  ',a,'_MJup/yr=',es10.3)") &
+         label, rate, label, gps*years/solarm, label, gps*years/jupiterm
+   end function rate_string
 
    !-----------------------------------------------------------------------
    !+
