@@ -411,7 +411,7 @@ end subroutine write_headeropts_flooredprof
 !+
 !-----------------------------------------------------------------------
 subroutine read_headeropts_flooredprof(hdr)
- use dump_utils, only:dump_h,extract
+ use dump_utils, only:dump_h,extract,i_real
  type(dump_h), intent(in) :: hdr
  integer :: ierr
  real    :: rval
@@ -424,7 +424,7 @@ subroutine read_headeropts_flooredprof(hdr)
     ierr = 0;  call extract('R0_prof',  R0_prof,   hdr, ierr)
     ierr = 0;  call extract('Tinf',     T_bg_prof, hdr, ierr)
     ierr = 0;  call extract('qprofile', qprofile,  hdr, ierr)
-    ierr = 0;  call extract('L_star',   rval,      hdr, ierr, default=-1.)
+    ierr = 0;  call extract('L_star', rval, hdr%realvals, hdr%realtags, hdr%nums(i_real), ierr, q=.true., default=-1.)
     L_star_prof = rval
  endif
 end subroutine read_headeropts_flooredprof

@@ -128,7 +128,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  real, intent(in) :: ui,duhydro,Tfloor
  real            :: coldensi,kappaBari,kappaParti,ri2
  real            :: gmwi,Tmini4,Ti,dudti_rad,Teqi,HLom,du_tot
- real            :: opaci,ueqi,umini,tthermi,presi,Hcomb
+ real            :: opaci,ueqi,tthermi,presi,Hcomb
  real            :: cs2,Om2,Hmod2,rhoi_cgs,ui_cgs
  real            :: Hstam,poti,du_FLDi,q_eff
 
@@ -210,8 +210,6 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
     endif
  endif
 
- call getintenerg_opdep(Tmini4**(1.0/4.0),rhoi_cgs,umini)
- umini = umini/unit_ergg
  opaci = (coldensi**2)*kappaBari + (1./kappaParti) ! physical units
  tau_store(i) = opaci
  dudti_rad = 4.*steboltz*(Tmini4 - Ti**4)/opaci/unit_ergg*utime! code units
