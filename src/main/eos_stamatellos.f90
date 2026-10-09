@@ -131,6 +131,7 @@ subroutine read_optab(eos_file,ierr)
  integer, intent(out) :: ierr
  integer :: i,j,errread,ios,iunit
  character(len=120) :: filepath,junk
+ character(len=512) :: line
 
  ! read in data file for interpolation
  filepath=find_phantom_datafile(eos_file,'eos/lombardi')
@@ -147,16 +148,22 @@ subroutine read_optab(eos_file,ierr)
     endif
  enddo
 ! allocate array for storing opacity tables
- allocate(optable(nx,ny,6))
+! columns: rho, T, u, mu, pseudo-mean (kappaBar), Rosseland (kappaPart), Planck.
+! A 6-column table has no Planck column, so Rosseland stands in for it.
+ allocate(optable(nx,ny,7))
  do i = 1,nx
     do j = 1,ny
-       read(iunit,*,iostat=ios) optable(i,j,1),optable(i,j,2),optable(i,j,3),&
-              optable(i,j,4),optable(i,j,5),optable(i,j,6)
+       read(iunit,'(A)',iostat=ios) line
        if (ios < 0) then
           write(*,*) 'Unexpected EOF in data section at i=',i,' j=',j
           ierr = 3
           close(iunit)
           return
+       endif
+       read(line,*,iostat=errread) optable(i,j,1:7)
+       if (errread /= 0) then
+          read(line,*,iostat=errread) optable(i,j,1:6)
+          optable(i,j,7) = optable(i,j,6)
        endif
     enddo
  enddo
@@ -166,15 +173,17 @@ end subroutine read_optab
 !
 ! Main subroutine for interpolating tables to get EOS values
 !
-subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
+subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  use io, only:warning
  real, intent(in)  :: ui,rhoi
  real, intent(out) :: kappaBar,kappaPart,Ti,gmwi
+ real, intent(out), optional :: kappaPl  ! Planck mean, for optically thin emission
 
  integer :: irho,iu
  real :: m,c
  real :: kbar1,kbar2
  real :: kappa1,kappa2
+ real :: kpl1,kpl2
  real :: Tpart1,Tpart2
  real :: gmw1,gmw2
  real :: rhomin,umin
@@ -204,6 +213,12 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  c = optable(irho,iu+1,6) - m*optable(irho,iu+1,3)
  kappa1 = m*ui + c
 
+ if (present(kappaPl)) then
+    m = (optable(irho,iu,7)-optable(irho,iu+1,7))/(optable(irho,iu,3)-optable(irho,iu+1,3))
+    c = optable(irho,iu+1,7) - m*optable(irho,iu+1,3)
+    kpl1 = m*ui + c
+ endif
+
  m = (optable(irho,iu,2) - optable(irho,iu+1,2))/(optable(irho,iu,3)-optable(irho,iu+1,3))
  c = optable(irho,iu+1,2) - m*optable(irho,iu+1,3)
  Tpart1 = m*ui + c
@@ -223,6 +238,12 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  c = optable(irho+1,iu+1,6) - m*optable(irho+1,iu+1,3)
  kappa2 = m*ui + c
 
+ if (present(kappaPl)) then
+    m = (optable(irho+1,iu,7) - optable(irho+1,iu+1,7))/(optable(irho+1,iu,3) - optable(irho+1,iu+1,3))
+    c = optable(irho+1,iu+1,7) - m*optable(irho+1,iu+1,3)
+    kpl2 = m*ui + c
+ endif
+
  m = (optable(irho+1,iu,2) - optable(irho+1,iu+1,2))/(optable(irho+1,iu,3) - optable(irho+1,iu+1,3))
  c = optable(irho+1,iu+1,2) - m*optable(irho+1,iu+1,3)
  Tpart2 = m*ui + c
@@ -234,6 +255,12 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
  m = (kappa2 - kappa1)/(optable(irho+1,1,1)-optable(irho,1,1))
  c = kappa2 - m*optable(irho+1,1,1)
  kappaPart = m*rhoi + c
+
+ if (present(kappaPl)) then
+    m = (kpl2 - kpl1)/(optable(irho+1,1,1)-optable(irho,1,1))
+    c = kpl2 - m*optable(irho+1,1,1)
+    kappaPl = m*rhoi + c
+ endif
 
  m = (kbar2 - kbar1)/(optable(irho+1,1,1)-optable(irho,1,1))
  c = kbar2 - m*optable(irho+1,1,1)
