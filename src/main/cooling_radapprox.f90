@@ -126,7 +126,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  integer, intent(in) :: i
  real, intent(in) :: xi,yi,zi,rhoi
  real, intent(in) :: ui,duhydro,Tfloor
- real            :: coldensi,kappaBari,kappaParti,ri2
+ real            :: coldensi,kappaBari,kappaParti,kappaPli,ri2
  real            :: gmwi,Tmini4,Ti,dudti_rad,Teqi,HLom,du_tot
  real            :: opaci,ueqi,tthermi,presi,Hcomb
  real            :: cs2,Om2,Hmod2,rhoi_cgs,ui_cgs
@@ -137,6 +137,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  du_FLDi = duFLD(i)
  kappaBari = 0.
  kappaParti = 0.
+ kappaPli = 0.
  Teqi = huge(Teqi)
  tthermi = huge(tthermi)
  opaci = epsilon(opaci)
@@ -154,7 +155,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
  ui_cgs = ui*unit_ergg
  rhoi_cgs = rhoi*unit_density
  call getopac_opdep(ui_cgs,rhoi_cgs,kappaBari,kappaParti,&
-           Ti,gmwi)
+           Ti,gmwi,kappaPl=kappaPli)
  eos_vars(iTemp,i) = Ti ! save temperature
  presi = kb_on_mh*rhoi*unit_density*Ti/gmwi ! cgs
  presi = presi/unit_pressure !code units
@@ -210,7 +211,7 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
     endif
  endif
 
- opaci = (coldensi**2)*kappaBari + (1./kappaParti) ! physical units
+ opaci = (coldensi**2)*kappaBari + (1./kappaPli) ! physical units; thin limit uses the Planck mean
  tau_store(i) = opaci
  dudti_rad = 4.*steboltz*(Tmini4 - Ti**4)/opaci/unit_ergg*utime! code units
 
