@@ -1785,8 +1785,11 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
  real         :: uradi,dradi,dradxi,dradyi,dradzi,runix,runiy,runiz
  real         :: dT4,R_rad,u_cgs,rho_cgs
  integer      :: ngradh_err
+ real, save   :: Tjcache(isizecellcache)
+!$omp threadprivate(Tjcache)
 
  ngradh_err = 0
+ Tjcache(1:min(nneigh,isizecellcache)) = -1.
  over_parts: do icell = 1,cell%npcell
     i = inodeparts(cell%arr_index(icell))
     ! note: only active particles have been sent here
@@ -1861,7 +1864,6 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
              iamgasj  = .true.
           endif
           if (.not. iamgasj) cycle loop_over_neighbours
-          if (.not. iactivej) cycle loop_over_neighbours
           ! get kernel quantities
           call get_kernel(q2i,qi,wabi,grkerni)
           wkerni = wabi*cnormk*hi21*hi1
@@ -1870,8 +1872,12 @@ subroutine calc_lambda_cell(cell,listneigh,nneigh,xyzh,vxyzu,iphase,gradh,lambda
           call rhoanddhdrho(hj,hj1,rhoj,rho1j,dhdrhoj,pmassj)
           u_cgs = vxyzu(4,j)*unit_ergg
           rho_cgs = rhoj*unit_density
-          call getopac_opdep(u_cgs,rho_cgs,&
-                 kappaBarj,kappaPartj,Tj,gmwj)
+          if (n > isizecellcache) then
+             call getopac_opdep(u_cgs,rho_cgs,kappaBarj,kappaPartj,Tj,gmwj)
+          else
+             if (Tjcache(n) < 0.) call getopac_opdep(u_cgs,rho_cgs,kappaBarj,kappaPartj,Tjcache(n),gmwj)
+             Tj = Tjcache(n)
+          endif
           uradi = uradi + get_radconst_code()*(Tj**4.0d0)*wkerni*pmassj/rhoj
 
           ! calculate components of gradient
