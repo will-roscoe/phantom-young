@@ -16,6 +16,7 @@ module io_control
 ! :Runtime parameters:
 !   - dtmax        : *time between dumps*
 !   - iverbose     : *verboseness of log (-1=quiet 0=default 1=allsteps 2=debug 5=max)*
+!   - log_splitstep : *print substep and mass-loading lines separately at iverbose=1*
 !   - nfulldump    : *full dump every n dumps*
 !   - nmax         : *maximum number of timesteps (0=just get derivs and stop)*
 !   - nmaxdumps    : *stop after n full dumps (-ve=ignore)*
@@ -26,7 +27,7 @@ module io_control
 !
 ! :Dependencies: dynamic_dtmax, infile_utils, io, timestep
 !
- use io,       only:iverbose
+ use io,       only:iverbose,log_splitstep
  use timestep, only:tmax,dtmax
  implicit none
 
@@ -94,6 +95,7 @@ subroutine write_options_iocontrol(iunit)
  call write_inopt(real(twallmax),'twallmax','maximum wall time (hhh:mm, 000:00=ignore)',iunit,time=.true.)
  call write_inopt(nfulldump,'nfulldump','full dump every n dumps',iunit)
  call write_inopt(iverbose,'iverbose','verboseness of log (-1=quiet 0=default 1=allsteps 2=debug 5=max)',iunit)
+ call write_inopt(log_splitstep,'log_splitstep','print substep and mass-loading lines separately at iverbose=1',iunit)
 
  ! options for dynamic dtmax
  call write_options_dynamic_dtmax(iunit)
@@ -122,6 +124,7 @@ subroutine read_options_iocontrol(db,nerr)
  call read_inopt(twallmax,'twallmax',db,errcount=nerr,default=0._4)
  call read_inopt(rhofinal_cgs,'rhofinal_cgs',db,errcount=nerr,default=0.)
  call read_inopt(iverbose,'iverbose',db,errcount=nerr,min=-9,max=99,default=0)
+ call read_inopt(log_splitstep,'log_splitstep',db,errcount=nerr,default=.false.)
  call read_options_dynamic_dtmax(db,nerr,dtmax)
 
  if (dtmax > tmax) call warn(label,'no output dtmax > tmax')

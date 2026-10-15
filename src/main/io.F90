@@ -34,6 +34,10 @@ module io
  !--verboseness level is set to zero by default
  !  but can be changed by external routines (e.g. as input file option)
  integer, public :: iverbose = 0
+ !--print the substep and mass-loading lines separately at iverbose=1;
+ !  otherwise their values are appended to the step line via steplog_extra
+ logical, public :: log_splitstep = .false.
+ character(len=60), public :: steplog_extra = ''
 
  public :: set_io_unit_numbers,real4,warn,error,fatal,die,comment
  public :: formatreal,formatint,cstring,warning
