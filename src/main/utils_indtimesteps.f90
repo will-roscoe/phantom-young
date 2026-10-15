@@ -465,13 +465,13 @@ end subroutine update_time_per_bin
 !+
 !-----------------------------------------------------------------
 subroutine print_dtlog_ind(iprint,ifrac,nfrac,time,dt,nactive,tcpu,np)
- use io, only:formatreal,formatint
+ use io, only:formatreal,formatint,steplog_extra
  integer,         intent(in) :: iprint,ifrac,nfrac
  real,            intent(in) :: time,dt
  integer(kind=8), intent(in) :: nactive
  real(kind=4),    intent(in) :: tcpu
  integer(kind=8), intent(in) :: np
- character(len=120) :: string
+ character(len=180) :: string
  character(len=14) :: tmp
  integer(kind=8), save :: nplast = 0
 
@@ -486,7 +486,8 @@ subroutine print_dtlog_ind(iprint,ifrac,nfrac,time,dt,nactive,tcpu,np)
  call formatint(nactive,tmp)
  string = trim(string)//' moved '//tmp
  call formatreal(real(tcpu),tmp)
- string = trim(string)//' in '//trim(tmp)//' cpu-s <'
+ string = trim(string)//' in '//trim(tmp)//' cpu-s <'//trim(steplog_extra)
+ steplog_extra = ''
  !
  ! only print particle number if it differs from
  ! the last time we printed it out
