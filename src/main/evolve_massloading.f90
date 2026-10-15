@@ -296,9 +296,10 @@ contains
    !-----------------------------------------------------------------------
    subroutine apply_partmass_const(dt, time)
       use part, only: massoftype
-      use io,   only: iprint, id, master, iverbose
+      use io,   only: iprint, id, master, iverbose, log_splitstep, steplog_extra
       real, intent(in)  ::    dt, time
       real              ::    m_old
+      character(len=24) ::    dmstr
 
       if (  dm_load == 0. .or. n_p0 <= 0 .or. t_orb <= 0. .or. dt <= 0.  ) then
          return
@@ -321,10 +322,15 @@ contains
       t_last = time
 
       if (  id == master .and. iverbose >= 1  ) then
-         write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
-            '[mass_loading] t=', time, &
-            '  dm/m=', (massoftype(igas) - m_old) / m_old, &
-            '  m_gas=', massoftype(igas)
+         if (  iverbose >= 2 .or. log_splitstep  ) then
+            write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+               '[mass_loading] t=', time, &
+               '  dm/m=', (massoftype(igas) - m_old) / m_old, &
+               '  m_gas=', massoftype(igas)
+         else
+            write(dmstr,"(a,es10.3)") ' dm/m = ', (massoftype(igas) - m_old) / m_old
+            steplog_extra = trim(steplog_extra)//dmstr
+         endif
       endif
 
    end subroutine apply_partmass_const
@@ -342,9 +348,10 @@ contains
    !-----------------------------------------------------------------------
    subroutine apply_partmass_exp(dt, time)
       use part, only: massoftype
-      use io,   only: iprint, id, master, iverbose
+      use io,   only: iprint, id, master, iverbose, log_splitstep, steplog_extra
       real, intent(in)  ::    dt, time
       real              ::    m_old
+      character(len=24) ::    dmstr
 
       if (  mloadfactor == 0. .or. t_orb <= 0. .or. dt <= 0.  ) then 
          return
@@ -357,10 +364,15 @@ contains
       massoftype(igas) = m_p0 * exp(log(1. + mloadfactor) * (time - t_init) / t_orb)
 
       if (  id == master .and. iverbose >= 1  ) then
-         write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
-            '[mass_loading] t=', time, &
-            '  dm/m=', (massoftype(igas) - m_old) / m_old, &
-            '  m_gas=', massoftype(igas)
+         if (  iverbose >= 2 .or. log_splitstep  ) then
+            write(iprint,"(1x,a,es12.4,a,es12.4,a,es12.4)") &
+               '[mass_loading] t=', time, &
+               '  dm/m=', (massoftype(igas) - m_old) / m_old, &
+               '  m_gas=', massoftype(igas)
+         else
+            write(dmstr,"(a,es10.3)") ' dm/m = ', (massoftype(igas) - m_old) / m_old
+            steplog_extra = trim(steplog_extra)//dmstr
+         endif
       endif
 
    end subroutine apply_partmass_exp

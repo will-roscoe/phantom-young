@@ -68,18 +68,21 @@ end subroutine set_defaults_timestep
 !-----------------------------------------------------------------
 subroutine print_dtlog(iprint,time,dt,dtforce,dtcourant,dterr,dtmax,&
                        dtrad,dtprint,dtinj,np)
+ use io,          only:steplog_extra
  integer,         intent(in) :: iprint
  real,            intent(in) :: time,dt,dtforce,dtcourant,dterr,dtmax,dtrad
  real,            intent(in), optional :: dtprint,dtinj
  integer(kind=8), intent(in) :: np
- character(len=20) :: str
+ character(len=80) :: str
+ character(len=12) :: npstr
  integer(kind=8), save :: nplast = 0
 
- str = ''
+ str = steplog_extra
+ steplog_extra = ''
  if (np /= nplast) then
     nplast = np
-    write(str,"(i12)") np
-    str = ', np = '//trim(adjustl(str))
+    write(npstr,"(i12)") np
+    str = trim(str)//', np = '//trim(adjustl(npstr))
  endif
 
  if (abs(dt-dtforce) < tiny(dt)) then

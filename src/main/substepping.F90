@@ -111,7 +111,7 @@ subroutine substep_gr(npart,ntypes,nptmass,dtsph,dtextforce,time,xyzh,vxyzu,pxyz
                       xyzmh_ptmass,vxyz_ptmass,pxyzu_ptmass,metrics_ptmass,metricderivs_ptmass,fxyz_ptmass,&
                       fxyz_ptmass_tree,dsdt_ptmass,dptmass,fsink_old,nbinmax,ibin_wake,gtgrad,group_info, &
                       bin_info,nmatrix,n_group,n_ingroup,n_sing,isionised)
- use io,             only:iverbose,id,master,iprint,fatal
+ use io,             only:iverbose,id,master,iprint,fatal,log_splitstep,steplog_extra
  use part,           only:fxyz_ptmass_sinksink,ndptmass
  use io_summary,     only:summary_variable,iosumextr,iosumextt
  use ptmass,         only:dk,ptmass_check_stars,icreate_sinks
@@ -132,6 +132,7 @@ subroutine substep_gr(npart,ntypes,nptmass,dtsph,dtextforce,time,xyzh,vxyzu,pxyz
  logical,         intent(in)    :: isionised(:)
  logical :: extf_vdep_flag,done,last_step,accreted
  integer :: force_count,nsubsteps
+ character(len=16) :: nsubstr
  real    :: timei,time_par,dt,t_end_step
  real    :: dtextforce_min
  real(kind=4) :: t1,t2,tcpu1,tcpu2
@@ -220,8 +221,13 @@ subroutine substep_gr(npart,ntypes,nptmass,dtsph,dtextforce,time,xyzh,vxyzu,pxyz
 
  if (nsubsteps > 1) then
     if (iverbose >=1 .and. id==master) then
-       write(iprint,"(a,i6,3(a,es10.3))") ' using ',nsubsteps,' substeps '//&
-             '(dthydro/dtextf =',dtsph/dtextforce_min,'), dt =',dtextforce_min,' dtsph =',dtsph
+       if (iverbose >= 2 .or. log_splitstep) then
+          write(iprint,"(a,i6,3(a,es10.3))") ' using ',nsubsteps,' substeps '//&
+                '(dthydro/dtextf =',dtsph/dtextforce_min,'), dt =',dtextforce_min,' dtsph =',dtsph
+       else
+          write(nsubstr,"(a,i0)") ' nsub = ',nsubsteps
+          steplog_extra = trim(nsubstr)//steplog_extra
+       endif
     endif
     call summary_variable('ext',iosumextr ,nsubsteps,dtsph/dtextforce_min)
     call summary_variable('ext',iosumextt ,nsubsteps,dtextforce_min,1.0/dtextforce_min)
@@ -273,7 +279,7 @@ subroutine substep(npart,ntypes,nptmass,dtsph,dtextforce,time,xyzh,vxyzu,fext, &
                    xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,fxyz_ptmass_tree,dsdt_ptmass,&
                    dptmass,fsink_old,nbinmax,ibin_wake,gtgrad,group_info, &
                    bin_info,nmatrix,n_group,n_ingroup,n_sing,isionised)
- use io,             only:iverbose,id,master,iprint,fatal
+ use io,             only:iverbose,id,master,iprint,fatal,log_splitstep,steplog_extra
  use options,        only:iexternalforce
  use part,           only:fxyz_ptmass_sinksink,ndptmass
  use io_summary,     only:summary_variable,iosumextr,iosumextt
@@ -295,6 +301,7 @@ subroutine substep(npart,ntypes,nptmass,dtsph,dtextforce,time,xyzh,vxyzu,fext, &
  logical,         intent(in)    :: isionised(:)
  logical :: extf_vdep_flag,done,last_step,accreted
  integer :: force_count,nsubsteps,ikicklast
+ character(len=16) :: nsubstr
  real    :: timei,time_par,dt,t_end_step
  real    :: dtextforce_min
  real(kind=4) :: t1,t2,tcpu1,tcpu2
@@ -423,8 +430,13 @@ subroutine substep(npart,ntypes,nptmass,dtsph,dtextforce,time,xyzh,vxyzu,fext, &
 
  if (nsubsteps > 1) then
     if (iverbose >=1 .and. id==master) then
-       write(iprint,"(a,i6,3(a,es10.3))") ' using ',nsubsteps,' substeps '//&
-             '(dthydro/dtextf =',dtsph/dtextforce_min,'), dt =',dtextforce_min,' dtsph =',dtsph
+       if (iverbose >= 2 .or. log_splitstep) then
+          write(iprint,"(a,i6,3(a,es10.3))") ' using ',nsubsteps,' substeps '//&
+                '(dthydro/dtextf =',dtsph/dtextforce_min,'), dt =',dtextforce_min,' dtsph =',dtsph
+       else
+          write(nsubstr,"(a,i0)") ' nsub = ',nsubsteps
+          steplog_extra = trim(nsubstr)//steplog_extra
+       endif
     endif
     call summary_variable('ext',iosumextr ,nsubsteps,dtsph/dtextforce_min)
     call summary_variable('ext',iosumextt ,nsubsteps,dtextforce_min,1.0/dtextforce_min)

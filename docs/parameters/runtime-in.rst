@@ -91,6 +91,14 @@ Run control and I/O
      - 0
      - Log verbosity: ``-1`` quiet, ``0`` default, ``1`` all steps,
        ``2`` debug, ``5`` maximum.
+   * - ``log_splitstep``
+     - logical
+     - F
+     - At ``iverbose = 1``, print the ``using N substeps`` and per-step
+       ``[mass_loading] t= dm/m= m_gas=`` lines separately. When ``F`` their
+       substep count and ``dm/m`` are appended to the ``> step`` line instead
+       (``... cpu-s < nsub = 3 dm/m =  1.250E-05``). At ``iverbose >= 2`` the
+       lines are always separate.
 
 Supplementary I/O options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
