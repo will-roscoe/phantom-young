@@ -192,7 +192,7 @@ subroutine pixel2vector(pixel,resolution,R,v,vector)
  integer, intent(in)  :: pixel, resolution
  real,    intent(in)  :: R(0:19,3,3), v(0:11,3)
  real,    intent(out) :: vector(3)
- real    :: A(3,3), x, y, norm
+ real    :: A(3,3), x, y, norm, vec(3)
  integer :: pix, face, pixperface
 
  if (resolution < 1) call error('pixel2vector','Resolution must exceed 0')
@@ -215,7 +215,8 @@ subroutine pixel2vector(pixel,resolution,R,v,vector)
     vector(2)      = y/norm
     vector(3)      = 1./norm
     call getmatrix(face,R,A)
-    call vecmatmul1(A,vector,vector)
+    vec = vector
+    call vecmatmul1(A,vec,vector)
  else
     ! This is a corner pixel:
     if (pix > 11) call error('pixel2vector','pixel number too big')
@@ -233,7 +234,7 @@ subroutine compute_matrices(R)
  ! (the horizontal plane with z=1).
  ! Only called once, so speed is irrelevant.
  real, intent(out) :: R(0:19,3,3)
- real    :: A(3,3), B(3,3), C(3,3), D(3,3), E(3,3)
+ real    :: A(3,3), B(3,3), C(3,3), D(3,3), E(3,3), F(3,3)
  real    :: pi, sn, cs, ct, x
  integer :: i,j,n
  do i=1,3
@@ -284,18 +285,24 @@ subroutine compute_matrices(R)
  enddo      ! Now E is the identity matrix.
  call putmatrix(0,R,E)
  call matmul1(B,A,E)
- call matmul1(B,E,E)
+ F = E
+ call matmul1(B,F,E)
  call putmatrix(5,R,E)
- call matmul1(E,A,E)
+ F = E
+ call matmul1(F,A,E)
  call putmatrix(10,R,E)
- call matmul1(E,B,E)
- call matmul1(E,B,E)
- call matmul1(E,A,E)
+ F = E
+ call matmul1(F,B,E)
+ F = E
+ call matmul1(F,B,E)
+ F = E
+ call matmul1(F,A,E)
  call putmatrix(15,R,E)
  do n=0,15,5
     call getmatrix(n,R,E)
     do i=1,4
-       call matmul1(A,E,E)
+       F = E
+       call matmul1(A,F,E)
        call putmatrix(n+i,R,E)
     enddo
  enddo
@@ -305,7 +312,8 @@ subroutine compute_matrices(R)
  ! the tangent plane into face n instead:
  do n=0,19
     call getmatrix(n,R,E)
-    call matmul1(E,C,E)
+    F = E
+    call matmul1(F,C,E)
     call putmatrix(n,R,E)
  enddo
 end subroutine compute_matrices
@@ -381,7 +389,7 @@ end subroutine compute_corners
 
 subroutine matmul1(A,B,C)
  ! Matrix multiplication C = AB.
- ! A, B and C are allowed to be physiclly the same.
+ ! C must not be the same array as A or B (A and B are intent(in)).
  real, intent(in) :: A(3,3), B(3,3)
  real    :: C(3,3)  ! do not declare intent to prevent compiler warnings
  real    :: D(3,3), sum
@@ -403,7 +411,7 @@ end subroutine matmul1
 
 subroutine matmul2(A,B,C)
  ! Matrix multiplication C = AB^t
- ! A, B and C are allowed to be physically the same.
+ ! C must not be the same array as A or B (A and B are intent(in)).
  real, intent(in)  :: A(3,3), B(3,3)
  real, intent(out) :: C(3,3)
  real    :: D(3,3), sum
@@ -448,7 +456,7 @@ end subroutine matmul2
 
 subroutine vecmatmul1(A,b,c)
  ! Matrix multiplication c = Ab
- ! b and c are allowed to be physically the same.
+ ! c must not be the same array as b (b is intent(in)).
  real, intent(in) :: A(3,3), b(3)
  real    :: c(3)  ! intent(out) but do not declare to prevent warnings
  real    :: d(3), sum
