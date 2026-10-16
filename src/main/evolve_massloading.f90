@@ -399,7 +399,8 @@ contains
       if (  .not. initialised  ) then 
          call init_massloading()
       endif
-      if ( (  iload_factor < 0  ) .or. (  .not. dofrac_load .and. dm_load == 0.  ) .or. (  dofrac_load .and. mloadfactor == 0.  )  ) return
+      if ( (  iload_factor < 0  ) .or. (  .not. dofrac_load .and. dm_load == 0.  ) .or. &
+           (  dofrac_load .and. mloadfactor == 0.  )  ) return
   
       if (  .not. ind_timesteps .or. istepfrac == 2**nbinmax .or. t_orb <= 0.  ) then
          call update_r_orb()
