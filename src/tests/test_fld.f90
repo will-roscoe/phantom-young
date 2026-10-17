@@ -16,7 +16,7 @@ module testfld
 ! :Runtime parameters: None
 !
 ! :Dependencies: boundary, datafiles, deriv, dim, densityforce, eos, eos_stamatellos,
-!   io, part, physcon, testutils, unifdis, units
+!   fld_options, io, part, physcon, testutils, unifdis, units
 !
  implicit none
  public :: test_fld
@@ -34,6 +34,7 @@ subroutine test_fld(ntests,npass)
  call test_gradh_fallback(ntests,npass)
  call test_first_pass(ntests,npass)
  call test_fld_switch(ntests,npass)
+ call test_fld_options(ntests,npass)
  call test_diffusion_rate(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
@@ -231,36 +232,92 @@ end subroutine test_first_pass
 !-----------------------------------------------------------------------
 ! 'do FLD' in the .in must switch FLD (doFLD) on and off. It was read
 ! into fld_opt and never copied, so FLD ran whatever the .in said.
+! fld_mode records the scheme: 0 off, 1 explicit, 2 implicit (default)
 !-----------------------------------------------------------------------
 subroutine test_fld_switch(ntests,npass)
  use cooling_radapprox, only:read_options_cooling_radapprox
- use eos_stamatellos,   only:doFLD
+ use eos_stamatellos,   only:doFLD,fld_mode
  use infile_utils,      only:inopts,open_db_from_file,close_db,write_inopt
  use testutils,         only:checkval,update_test_scores
  integer, intent(inout) :: ntests,npass
  type(inopts), allocatable :: db(:)
- integer :: nfail(2),ierr,nerr,lu,iopt
+ integer :: nfail(7),ierr,nerr,lu,iopt,fld_mode_old
  logical :: doFLD_old
  character(len=*), parameter :: fname = 'test_fld_switch.tmp'
 
  nfail(:) = 0
  doFLD_old = doFLD
- do iopt = 0,1
+ fld_mode_old = fld_mode
+ do iopt = 0,2
     open(newunit=lu,file=fname,status='replace',form='formatted')
     call write_inopt('eos_lom.dat','EOS_file','table',lu)
-    call write_inopt(iopt,'do FLD','Do FLD? (1) yes (0) no',lu)
+    call write_inopt(iopt,'do FLD','Do FLD? (0) no (1) explicit (2) implicit',lu)
     close(lu)
     doFLD = (iopt == 0)   ! start from the opposite state
+    fld_mode = -1
     nerr = 0
     call open_db_from_file(db,fname,78,ierr)
     call read_options_cooling_radapprox(db,nerr)
     call close_db(db)
-    call checkval(merge(1,0,doFLD),iopt,0,nfail(iopt+1),'do FLD = '//achar(48+iopt)//' sets doFLD')
+    call checkval(merge(1,0,doFLD),merge(0,1,iopt==0),0,nfail(2*iopt+1),'do FLD = '//achar(48+iopt)//' sets doFLD')
+    call checkval(fld_mode,iopt,0,nfail(2*iopt+2),'do FLD = '//achar(48+iopt)//' sets fld_mode')
  enddo
+ ! an .in without the key gets the implicit scheme
+ open(newunit=lu,file=fname,status='replace',form='formatted')
+ call write_inopt('eos_lom.dat','EOS_file','table',lu)
+ close(lu)
+ fld_mode = -1
+ nerr = 0
+ call open_db_from_file(db,fname,78,ierr)
+ call read_options_cooling_radapprox(db,nerr)
+ call close_db(db)
+ call checkval(fld_mode,2,0,nfail(7),'do FLD absent defaults to 2')
  doFLD = doFLD_old
+ fld_mode = fld_mode_old
  call update_test_scores(ntests,nfail,npass)
 
 end subroutine test_fld_switch
+
+!-----------------------------------------------------------------------
+! do FLD = 1 and RADIATION=yes + icooling 9 are refused at start-up unless
+! I_WILL_NOT_PUBLISH_CRAP is true, when they only warn
+!-----------------------------------------------------------------------
+subroutine test_fld_options(ntests,npass)
+ use fld_options, only:env_is_true,check_fld_options,ierr_fld_warn,ierr_fld_fatal
+ use testutils,   only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(13),ierr
+ character(len=200) :: msg
+
+ nfail(:) = 0
+ call checkval(env_is_true('1'),.true.,nfail(1),'env 1 is true')
+ call checkval(env_is_true(' YeS '),.true.,nfail(2),'env YeS is true')
+ call checkval(env_is_true('0') .or. env_is_true('') .or. env_is_true('nope'),.false.,nfail(3), &
+               'env 0/empty/other is false')
+
+ call check_fld_options(2,.false.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,0,0,nfail(4),'mode 2 without radiation is fine')
+ call check_fld_options(0,.false.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,0,0,nfail(5),'mode 0 is fine')
+ call check_fld_options(1,.false.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(6),'mode 1 is fatal')
+ call checkval(index(msg,'do FLD = 2') > 0,.true.,nfail(7),'mode 1 message names do FLD = 2')
+ call check_fld_options(1,.false.,.false.,.false.,.true.,ierr,msg)
+ call checkval(ierr,ierr_fld_warn,0,nfail(8),'mode 1 with the env var only warns')
+
+ call check_fld_options(2,.true.,.true.,.false.,.false.,ierr,msg)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(9),'radiation exchange on with icooling 9 is fatal')
+ call checkval(index(msg,'gas-rad_exchange') > 0 .and. index(msg,'implicit_radiation') > 0,.true.,nfail(10), &
+               'radiation message names both keys')
+ call check_fld_options(2,.true.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,0,0,nfail(11),'radiation build with both keys off is fine')
+ call check_fld_options(0,.true.,.false.,.true.,.false.,ierr,msg)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(12),'implicit_radiation on with icooling 9 is fatal')
+ call check_fld_options(2,.true.,.true.,.true.,.true.,ierr,msg)
+ call checkval(ierr,ierr_fld_warn,0,nfail(13),'radiation keys on with the env var only warn')
+ call update_test_scores(ntests,nfail,npass)
+
+end subroutine test_fld_options
 
 !-----------------------------------------------------------------------
 ! the SPH diffusion term against the continuum (1/rho) div(k grad T):

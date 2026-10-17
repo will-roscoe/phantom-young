@@ -386,8 +386,11 @@ Parameters active when ``icooling = 9``:
        0 = no irradiation.
    * - ``do FLD``
      - int
-     - 1
-     - Enable flux-limited diffusion: ``1`` yes, ``0`` no.
+     - 2
+     - Flux-limited diffusion: ``0`` off, ``1`` explicit, ``2`` implicit.
+       ``1`` stops the run at start-up unless the environment variable
+       ``I_WILL_NOT_PUBLISH_CRAP`` is true (``1``, ``true``, ``yes`` or ``on``),
+       when it only warns.
    * - ``Tfloor``
      - real
      - 5.0

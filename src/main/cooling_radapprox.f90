@@ -22,7 +22,7 @@ module cooling_radapprox
   implicit none
   integer, public :: od_method = 4 ! default = Modified Lombardi method (Young et al. 2024)
   real  :: Lstar = 0. ! in units of L_sun
-  integer :: fld_opt = 1 ! by default FLD is switched on
+  integer :: fld_opt = 2 ! 0 off, 1 explicit, 2 implicit (default)
  integer :: isink_star ! index of sink to use as illuminating star
  public :: radcool_update_du,write_options_cooling_radapprox,read_options_cooling_radapprox
  public :: init_star,radcool_evolve_ui
@@ -268,14 +268,14 @@ subroutine write_options_cooling_radapprox(iunit)
  endif
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
- call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
+ call write_inopt(FLD_opt,'do FLD','Do FLD? (0) no (1) explicit (2) implicit',iunit)
  if (iprofile /= 2) call write_inopt(qprofile,'qprofile',&
       'q index for T profile (lumdisc=1): 0=standard qindex=0.25, otherwise use specified qindex',iunit)
 end subroutine write_options_cooling_radapprox
 
 subroutine read_options_cooling_radapprox(db,nerr)
  use io,              only:fatal
- use eos_stamatellos, only:eos_file,qprofile,doFLD
+ use eos_stamatellos, only:eos_file,qprofile,doFLD,fld_mode
  use infile_utils,    only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
@@ -285,8 +285,9 @@ subroutine read_options_cooling_radapprox(db,nerr)
  call read_inopt(eos_file,'EOS_file',db,errcount=nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
- call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=1,default=1)
- doFLD = (FLD_opt == 1)
+ call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=2,default=2)
+ fld_mode = FLD_opt
+ doFLD = (FLD_opt > 0)
  call read_inopt(qprofile,'qprofile',db,errcount=nerr,min=0.,default=0.)
 
  if (ieosread /= 24) call fatal('ieosread','For icooling=9, you need ieos=24')

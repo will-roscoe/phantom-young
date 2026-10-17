@@ -20,11 +20,11 @@ module readwrite_infile
 !   - tolh     : *tolerance on h-rho iterations*
 !
 ! :Dependencies: HIIRegion, boundary_dyn, cooling, damping, dim, dust,
-!   dust_formation, eos, externalforces, fileutils, forcing, gravwaveutils,
-!   growth, infile_utils, injection, io, io_control, mcfost_utils, metric,
-!   mpiutils, neighkdtree, nicil_sup, options, part, porosity, ptmass,
-!   ptmass_radiation, radiation_utils, shock_capturing, timestep,
-!   utils_apr, viscosity
+!   dust_formation, eos, externalforces, fileutils, fld_options, forcing,
+!   gravwaveutils, growth, infile_utils, injection, io, io_control,
+!   mcfost_utils, metric, mpiutils, neighkdtree, nicil_sup, options, part,
+!   porosity, ptmass, ptmass_radiation, radiation_utils, shock_capturing,
+!   timestep, utils_apr, viscosity
 !
  use options,   only:iexternalforce
  use part,      only:hfact,tolh
@@ -282,7 +282,8 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  use infile_utils,     only:inopts,read_inopt
  use options,          only:use_porosity
  use part,             only:hfact,tolh
- use eos,              only:read_options_eos
+ use eos,              only:read_options_eos,icooling
+ use fld_options,      only:check_fld_at_startup
  use io_control,       only:read_options_iocontrol
  use options,          only:read_options_output
  use shock_capturing,  only:read_options_shock_capturing
@@ -369,6 +370,9 @@ subroutine read_options_from_db(db,nerr,logfile,dumpfile,evfile)
  call read_options_H2R(db,nerr)
  call read_options_output(db,nerr)
  call read_options_gravitationalwaves(db,nerr)
+
+ ! needs the radiation options, so after every read
+ if (maxvxyzu >= 4 .and. icooling == 9) call check_fld_at_startup()
 
 end subroutine read_options_from_db
 

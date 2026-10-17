@@ -49,7 +49,7 @@
             EOS_file =  eos_lom.dat   ! File containing tabulated EOS values
            OD method =           4    ! Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi
                Lstar =       0.000    ! Luminosity of host star for calculating Tmin (Lsun)
-              do FLD =           1    ! Do FLD? (1) yes (0) no
+              do FLD =           2    ! Do FLD? (0) no (1) explicit (2) implicit
               Tfloor =       5.000    ! temperature floor (K); on if > 0
 
 # options controlling sink particles
