@@ -445,6 +445,16 @@ module part
 
  private :: hrho4,hrho8,hrho4_pmass,hrho8_pmass,hrhomixed_pmass
  private :: get_ntypes_i4,get_ntypes_i8
+!
+!--per-particle arrays owned by modules compiled after part (set by their
+!  init routines) are moved through this hook in copy_particle_all
+!
+ abstract interface
+  subroutine copy_extra_iface(src,dst)
+   integer, intent(in) :: src,dst
+  end subroutine copy_extra_iface
+ end interface
+ procedure(copy_extra_iface), pointer, public :: copy_particle_extra => null()
 
 contains
 
@@ -1375,6 +1385,7 @@ subroutine copy_particle_all(src,dst,new_part)
  if (do_nucleation) nucleation(:,dst) = nucleation(:,src)
  if (itau_alloc == 1) tau(dst) = tau(src)
  if (itauL_alloc == 1) tau_lucy(dst) = tau_lucy(src)
+ if (associated(copy_particle_extra)) call copy_particle_extra(src,dst)
 
  if (use_krome) then
     T_gas_cool(dst)       = T_gas_cool(src)
