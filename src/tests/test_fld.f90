@@ -38,6 +38,7 @@ subroutine test_fld(ntests,npass)
  call test_diffusion_rate(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
+ call test_relaxation_inf_guard(ntests,npass)
 
 end subroutine test_fld
 
@@ -598,5 +599,56 @@ subroutine test_lambda_inactive(ntests,npass)
  cooling_in_step = cooling_in_step_old
 
 end subroutine test_lambda_inactive
+
+!-----------------------------------------------------------------------
+! a backward relaxation step with |dt| >> t_therm and u > u_eq divides by
+! exp(dt/t_therm) = 0; the result must stay finite and keep the input u
+!-----------------------------------------------------------------------
+subroutine test_relaxation_inf_guard(ntests,npass)
+ use cooling_radapprox, only:radcool_evolve_ui
+ use datafiles,         only:find_phantom_datafile
+ use eos,               only:ieos,init_eos,finish_eos
+ use eos_stamatellos,   only:eos_file,ttherm_store,ueqi_store
+ use io,                only:id,master
+ use part,              only:massoftype,igas
+ use physcon,           only:solarm,au
+ use testutils,         only:checkval,update_test_scores
+ use units,             only:set_units
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2),ierr,ieos_old
+ real    :: u,u0,massoftype_old
+ character(len=120) :: pdir
+
+ if (id==master) write(*,"(/,a)") '--> backward relaxation with |dt| >> t_therm stays finite'
+ call get_environment_variable('PHANTOM_DIR',pdir)
+ if (len_trim(pdir) == 0 .or. len_trim(find_phantom_datafile(eos_file,'eos/lombardi')) == 0) then
+    if (id==master) write(*,"(a)") '  --> skipping relaxation guard test (no opacity table)'
+    return
+ endif
+ ieos_old = ieos; ieos = 24
+ call set_units(mass=solarm,dist=au,G=1.d0)
+ call init_eos(ieos,ierr)
+ if (ierr /= 0) then
+    if (id==master) write(*,"(a)") '  --> skipping relaxation guard test (init_eos failed)'
+    ieos = ieos_old
+    return
+ endif
+ massoftype_old = massoftype(igas)
+ massoftype(igas) = 1.e-6   ! with h = 1: rho ~ 1e-12 g/cm^3, inside the table
+ ttherm_store(1) = 1.e-3
+ ueqi_store(1)   = 1.
+ u0 = 2.
+ u  = u0
+ call radcool_evolve_ui(u,-1.e3,1,1.e4,1.)   ! dt/t_therm = -1e6; floor (10 K) far below u0
+
+ nfail(:) = 0
+ call checkval(u <= huge(u) .and. u == u,.true.,nfail(1),'backward relaxation stays finite')
+ call checkval(u,u0,0.,nfail(2),'non-finite result falls back to the input u')
+ call update_test_scores(ntests,nfail,npass)
+ massoftype(igas) = massoftype_old
+ call finish_eos(ieos,ierr)
+ ieos = ieos_old
+
+end subroutine test_relaxation_inf_guard
 
 end module testfld

@@ -94,13 +94,16 @@ subroutine radcool_evolve_ui(ui,dt,i,Tfloor,h,uout)
        expdtonttherm = exp(-dt/tthermi)
        utemp = ui*expdtonttherm + ueqi*(1.-expdtonttherm)
     elseif (dt < 0.) then
-       ! i.e. for the backwards step in the leapfrog integrator
+       ! i.e. for the backwards step in the leapfrog integrator;
+       ! with |dt| >> tthermi the division would overflow, so ui is kept
        expdtonttherm = exp(dt/tthermi)
-       utemp = (ui - ueqi*(1.-expdtonttherm))/expdtonttherm
+       if (abs(ui - ueqi*(1.-expdtonttherm)) < huge(ui)*expdtonttherm) then
+          utemp = (ui - ueqi*(1.-expdtonttherm))/expdtonttherm
+       endif
     endif
 
     ! if tthermi ==0 or dt/thermi is neglible then ui doesn't change
-    if (isnan(utemp) .or. utemp < epsilon(utemp)) then
+    if (isnan(utemp) .or. abs(utemp) > huge(utemp) .or. utemp < epsilon(utemp)) then
        utemp = ui
     endif
  endif

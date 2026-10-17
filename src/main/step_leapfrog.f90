@@ -34,6 +34,7 @@ module step_lf_global
  use timestep_ind, only:maxbins,itdt,ithdt,itdt1,ittwas
  implicit none
  real :: ibin_dts(4,0:maxbins)
+ real, allocatable, save, private :: u_half(:)   ! u before the corrector's relaxation (icooling = 9)
 
 contains
 
@@ -449,6 +450,12 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
  errmaxmean = 0.0
  nwake      = 0
  nvfloorc   = 0
+ if (icooling == 9 .and. maxvxyzu >= 4) then
+    if (allocated(u_half)) then
+       if (size(u_half) < size(vxyzu,2)) deallocate(u_half)
+    endif
+    if (.not.allocated(u_half)) allocate(u_half(size(vxyzu,2)))
+ endif
  iterations: do while (its < maxits .and. .not.converged .and. npart > 0)
     its     = its + 1
     errmax  = 0.
@@ -468,7 +475,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp shared(xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,nptmass,massoftype) &
 !$omp shared(dtsph,ufloor,icooling,Tfloor) &
 !$omp shared(ibin,ibin_old,twas,timei,ibin_wake) &
-!$omp shared(ibin_dts,nbinmax) &
+!$omp shared(ibin_dts,nbinmax,u_half) &
 !$omp private(dti,hdti) &
 !$omp shared(rad,radpred,drad)&
 !$omp private(i,vxi,vyi,vzi) &
@@ -586,6 +593,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 vzi = vxyzu(3,i) + hdtsph*fxyzu(3,i)
                 if (maxvxyzu >= 4) then
                    if (icooling == 9) then
+                      u_half(i) = vxyzu(4,i)
                       call radcool_evolve_ui(vxyzu(4,i),hdtsph,i,Tfloor,xyzh(4,i),eni)
                    else
                       eni = vxyzu(4,i) + hdtsph*fxyzu(4,i)
@@ -643,7 +651,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp shared(Bevol,dBevol,Bpred,pxyzu,ppred) &
 !$omp shared(dustprop,ddustprop,dustproppred,use_dustfrac,dustevol,dustpred,ddustevol) &
 !$omp shared(filfac,filfacpred,use_porosity) &
-!$omp shared(rad,drad,radpred,icooling,Tfloor,xyzh) &
+!$omp shared(rad,drad,radpred,icooling,u_half) &
 !$omp firstprivate(itype) &
 !$omp schedule(static)
        until_converged: do i=1,npart
@@ -681,7 +689,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 pxyzu(:,i) = pxyzu(:,i) - hdtsph*fxyzu(:,i)
              else
                 if (icooling == 9) then
-                   call radcool_evolve_ui(vxyzu(4,i),-hdtsph,i,Tfloor,xyzh(4,i))
+                   vxyzu(4,i) = u_half(i)   ! inverting the relaxation overflows when hdtsph >> t_therm
                    vxyzu(1:3,i) = vxyzu(1:3,i) - hdtsph*fxyzu(1:3,i)
                 else
                    vxyzu(:,i) = vxyzu(:,i) - hdtsph*fxyzu(:,i)
