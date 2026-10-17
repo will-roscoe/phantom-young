@@ -17,7 +17,7 @@ module testfld
 !
 ! :Dependencies: boundary, cooling, datafiles, deriv, dim, densityforce, eos,
 !   eos_stamatellos, fld_implicit, fld_options, io, part, physcon, testutils,
-!   timestep, unifdis, units
+!   timestep, timestep_ind, unifdis, units
 !
  implicit none
  public :: test_fld
@@ -50,6 +50,10 @@ subroutine test_fld(ntests,npass)
  call test_fld_implicit_zero_lambda(ntests,npass)
  call test_fld_implicit_fixed_boundary(ntests,npass)
  call test_fld_implicit_capped(ntests,npass)
+ call test_fld_implicit_residual(ntests,npass)
+ call test_fld_implicit_split(ntests,npass)
+ call test_fld_implicit_conserve_unconverged(ntests,npass)
+ call test_fld_implicit_owed(ntests,npass)
 
 end subroutine test_fld
 
@@ -1011,5 +1015,221 @@ real function t_cell()
  t_cell = fld_tcell
 
 end function t_cell
+
+!-----------------------------------------------------------------------
+! sweeps, splits, residual and leak at dt/t_cell = 1, 10, 100, 1000; at
+! 1000 the result meets the residual criterion everywhere
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_residual(ntests,npass)
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:fld_nsweeps,fld_nsplits,fld_resid,fld_leak,fld_tol
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2),m
+ real    :: tc,ratio
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: residual criterion'
+ if (.not. fld_box('step',1.)) return
+ tc = t_cell()
+ if (id==master) write(*,"(a,es10.3)") '  t_cell (code time) ',tc
+ do m=0,3
+    ratio = 10.**m
+    call solve_at(ratio*tc)
+    if (id==master) write(*,"(a,es8.1,a,i7,a,i5,a,es10.3,a,es10.3)") '  dt/t_cell ',ratio,'  sweeps ',fld_nsweeps, &
+       '  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak
+ enddo
+ nfail(:) = 0
+ call checkval(fld_resid < fld_tol,.true.,nfail(1),'dt = 1e3 t_cell: max |r_i|/(c_v,i T_i) < fld_tol')
+ call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(2),'dt = 1e3 t_cell: finite du_FLD')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_residual
+
+!-----------------------------------------------------------------------
+! a sweep cap of 5 at dt = 10 t_cell: the solve converges by splitting
+! the step, and agrees with an unsplit solve under a large cap to within
+! the time-discretisation difference of one backward-Euler step against
+! 16 steps of dt/16 (measured 0.17 of max |du| free, 0.22 periodic)
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_split(ntests,npass)
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:fld_sweep_cap,fld_nsweeps,fld_nsplits,fld_resid,fld_tol
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(4),cap_old,nsweep_ref,nsplit_ref
+ real    :: dt,err
+ real, allocatable :: du_ref(:)
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: step splitting when the sweep cap is reached (dt = 10 t_cell)'
+ if (.not. fld_box('step',1.)) return
+ dt = 10.*t_cell()
+ cap_old = fld_sweep_cap
+ fld_sweep_cap = 100000
+ call solve_at(dt)
+ du_ref = duFLD(1:npart); nsweep_ref = fld_nsweeps; nsplit_ref = fld_nsplits
+ fld_sweep_cap = 5
+ call solve_at(dt)
+ fld_sweep_cap = cap_old
+ err = maxval(abs(duFLD(1:npart) - du_ref))/maxval(abs(du_ref))
+ if (id==master) write(*,"(a,i7,a,i7,a,i5,a,es10.3)") '  reference sweeps ',nsweep_ref,'  capped: sweeps ',fld_nsweeps, &
+    '  splits ',fld_nsplits,'  max |du - du_ref|/max |du_ref| ',err
+ nfail(:) = 0
+ call checkval(nsplit_ref,0,0,nfail(1),'large cap: reference converges without splitting')
+ call checkval(fld_nsplits > 0,.true.,nfail(2),'cap 5: the step is split')
+ call checkval(fld_resid < fld_tol,.true.,nfail(3),'cap 5: converged after splitting')
+ call checkval(err,0.,0.3,nfail(4),'cap 5: du_FLD matches the unsplit reference')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_split
+
+!-----------------------------------------------------------------------
+! splitting off and one sweep at dt = 1e3 t_cell: far from converged,
+! but the pairwise update still conserves sum m du_FLD to round-off,
+! and the pair coefficients are exactly symmetric
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_conserve_unconverged(ntests,npass)
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:fld_sweep_cap,fld_split_depth,fld_resid,fld_leak,fld_tol,fld_pair_asymmetry
+ use io,              only:id,master
+ use part,            only:npart,massoftype,igas
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(6),cap_old,depth_old,i
+ real    :: dt,dsum,dabs,Tmin,Tmax,asym
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: conservation without convergence'
+ if (.not. fld_box('step',1.)) return
+ dt = 1.e3*t_cell()
+ cap_old = fld_sweep_cap; depth_old = fld_split_depth
+ fld_sweep_cap = 1; fld_split_depth = 0
+ call solve_at(dt)
+ fld_sweep_cap = cap_old; fld_split_depth = depth_old
+ asym = fld_pair_asymmetry()
+ dsum = 0.; dabs = 0.; Tmin = huge(0.); Tmax = -huge(0.)
+ do i=1,npart
+    dsum = dsum + massoftype(igas)*duFLD(i)*dt; dabs = dabs + massoftype(igas)*abs(duFLD(i))*dt
+    Tmin = min(Tmin,T_after(i,dt)); Tmax = max(Tmax,T_after(i,dt))
+ enddo
+ if (id==master) write(*,"(a,es10.3,a,es10.3,a,es10.3,a,2(1x,es10.3))") '  residual ',fld_resid, &
+    '  sum m du/sum m |du| ',dsum/max(dabs,tiny(0.)),'  leak ',fld_leak,'  T min max',Tmin,Tmax
+ nfail(:) = 0
+ call checkval(fld_resid > fld_tol,.true.,nfail(1),'one sweep, no splitting: not converged')
+ call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(2),'not converged: finite du_FLD')
+ call checkval(abs(dsum)/max(dabs,tiny(0.)) < 1.e-12,.true.,nfail(3),'not converged: sum m du_FLD = 0 to round-off')
+ call checkval(abs(fld_leak) < 1.e-12,.true.,nfail(4),'not converged: |fld_leak| < 1e-12')
+ call checkval(asym,0.,0.,nfail(5),'K_ij = K_ji exactly')
+ call checkval(dabs > 0. .and. Tmin >= 30.*(1.-1.e-6) .and. Tmax <= 60.*(1.+1.e-6),.true.,nfail(6), &
+               'not converged: energy still moves, T within the old extremes')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_conserve_unconverged
+
+!-----------------------------------------------------------------------
+! individual timesteps: an active particle's exchange with an inactive
+! neighbour goes to the neighbour's owed_FLD, which the neighbour applies
+! (and zeroes) when it next solves, so a full cycle conserves energy to
+! round-off; two active particles in different bins exchange over the
+! shorter of their two steps
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_owed(ntests,npass)
+ use dim,             only:ind_timesteps,maxp,maxphase
+ use eos_stamatellos, only:duFLD,owed_FLD,lambda_FLD
+ use fld_implicit,    only:do_fld_implicit
+ use io,              only:id,master
+ use part,            only:npart,xyzh,vxyzu,iphase,isetphase,igas,ibin,iactive
+ use testutils,       only:checkval,update_test_scores
+ use timestep,        only:dtmax
+ use timestep_ind,    only:get_dt
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(8),i,i1,i2
+ real    :: ecycle,eabs,ei,eB,oB,e02,e22,e00,pair02
+ real, allocatable :: r2(:)
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: owed exchange with inactive neighbours'
+ if (.not. ind_timesteps .or. maxphase /= maxp) then
+    if (id==master) write(*,"(a)") '  --> skipping (needs individual timesteps)'
+    return
+ endif
+ if (.not. fld_box('step',1.)) return
+ dtmax = 10.*t_cell()
+ i1 = minloc(abs(xyzh(1,1:npart)),1)               ! a particle at the step
+ nfail(:) = 0
+ ecycle = 0.; eabs = 0.
+ ! A: everyone active, i1 in bin 1 and the rest in bin 0
+ ibin(1:npart) = 0; ibin(i1) = 1
+ iphase(1:npart) = isetphase(igas,iactive=.true.)
+ call do_fld_implicit(dtmax,npart,xyzh,vxyzu)
+ call add_energy()
+ call checkval(all(owed_FLD(1:npart) == 0.),.true.,nfail(1),'everyone active: nothing owed')
+ ! B: half way through the bin-0 step only i1 is active
+ do i=1,npart
+    iphase(i) = isetphase(igas,iactive=(i==i1))
+ enddo
+ call do_fld_implicit(dtmax,npart,xyzh,vxyzu)
+ eB = duFLD(i1)*get_dt(dtmax,ibin(i1)); oB = sum(owed_FLD(1:npart))
+ call add_energy()
+ if (id==master) write(*,"(a,es12.4,a,es12.4,a,i5)") '  i1 alone: energy in ',eB,'  owed by it ',oB, &
+    '  neighbours owed ',count(owed_FLD(1:npart) /= 0.)
+ call checkval(abs(eB) > 0. .and. count(owed_FLD(1:npart) /= 0.) > 0,.true.,nfail(2),'inactive neighbours are owed')
+ call checkval(abs(eB + oB) <= 1.e-12*abs(eB),.true.,nfail(3),'what i1 gains its neighbours are owed')
+ ! C: everyone active again at the end of the bin-0 step
+ iphase(1:npart) = isetphase(igas,iactive=.true.)
+ call do_fld_implicit(dtmax,npart,xyzh,vxyzu)
+ call add_energy()
+ if (id==master) write(*,"(a,es12.4,a,es12.4)") '  cycle: sum m du dt ',ecycle,'  sum m |du dt| ',eabs
+ call checkval(all(owed_FLD(1:npart) == 0.),.true.,nfail(4),'owed applied and zeroed when the neighbours solve')
+ call checkval(abs(ecycle) <= 1.e-12*eabs,.true.,nfail(5),'a full cycle conserves energy to round-off')
+
+ ! two active neighbours across the step, every other particle with k = 0
+ allocate(r2(npart))
+ do i=1,npart
+    r2(i) = sum((xyzh(1:3,i) - xyzh(1:3,i1))**2)
+    if (xyzh(1,i)*xyzh(1,i1) >= 0.) r2(i) = huge(0.)
+ enddo
+ i2 = minloc(r2,1)
+ lambda_FLD(1:npart) = 0.; lambda_FLD(i1) = 1./3.; lambda_FLD(i2) = 1./3.
+ do i=1,npart
+    iphase(i) = isetphase(igas,iactive=(i==i1 .or. i==i2))
+ enddo
+ e02 = pair_energy(0_1,2_1,pair02)
+ e22 = pair_energy(2_1,2_1)
+ e00 = pair_energy(0_1,0_1)
+ if (id==master) write(*,"(a,3es12.4,a,es10.3,a,es10.3)") '  pair energy, bins (0,2) (2,2) (0,0):',e02,e22,e00, &
+    '  i1 + i2 ',pair02,'  (0,2)/(2,2) - 1 ',e02/e22 - 1.
+ call checkval(abs(e02 - e22) <= 1.e-6*abs(e22),.true.,nfail(6),'bins 0 and 2 exchange over the bin-2 step')
+ call checkval(abs(e02 - e00) > 1.e-3*abs(e00),.true.,nfail(7),'and not over the bin-0 step')
+ call checkval(abs(pair02) <= 1.e-14*abs(e02),.true.,nfail(8),'the pair exchange is antisymmetric')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+contains
+
+subroutine add_energy()
+ do i=1,npart
+    if (.not.iactive(iphase(i))) cycle
+    ei = duFLD(i)*get_dt(dtmax,ibin(i))
+    ecycle = ecycle + ei; eabs = eabs + abs(ei)
+ enddo
+end subroutine add_energy
+
+! energy per unit mass i1 gains with i1 in bin b1 and i2 in bin b2; sum is that plus i2's
+real function pair_energy(b1,b2,sum12)
+ integer(kind=1), intent(in) :: b1,b2
+ real, intent(out), optional :: sum12
+ ibin(i1) = b1; ibin(i2) = b2
+ owed_FLD(1:npart) = 0.
+ call do_fld_implicit(dtmax,npart,xyzh,vxyzu)
+ pair_energy = duFLD(i1)*get_dt(dtmax,b1)
+ if (present(sum12)) sum12 = pair_energy + duFLD(i2)*get_dt(dtmax,b2)
+end function pair_energy
+
+end subroutine test_fld_implicit_owed
 
 end module testfld
