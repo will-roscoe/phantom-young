@@ -20,7 +20,7 @@ module fld_implicit
 !   radiation_implicit, timestep, timestep_ind, units
 !
  implicit none
- integer, public :: fld_sweep_cap   = 200   ! Gauss-Seidel sweeps allowed per (sub-)step before it is split
+ integer, public :: fld_sweep_cap   = 20000   ! Gauss-Seidel sweeps allowed per (sub-)step before it is split
  integer, public :: fld_split_depth = 10    ! maximum number of times a step may be halved
  integer, public :: fld_nsweeps = 0     ! sweeps used by the last solve, all sub-steps together
  integer, public :: fld_nsplits = 0     ! step splits in the last solve
@@ -181,8 +181,9 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  !$omp end parallel do
  dsum = dsum + edep - elost; dabs = dabs + edep_abs + abs(elost)
  if (dabs > 0.) fld_leak = dsum/dabs
- if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i4,a,es10.3,a,es10.3)") &
-    ' fld_implicit: sweeps ',fld_nsweeps,'  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak
+ if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i4,a,es10.3,a,es10.3,a,es10.3)") &
+    ' fld_implicit: sweeps ',fld_nsweeps,'  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak, &
+    '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell))
 
 end subroutine do_fld_implicit
 
