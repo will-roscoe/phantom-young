@@ -16,7 +16,7 @@ module testfld
 ! :Runtime parameters: None
 !
 ! :Dependencies: boundary, datafiles, deriv, dim, densityforce, eos, eos_stamatellos,
-!   io, part, physcon, testutils, unifdis, units
+!   fld_options, io, part, physcon, testutils, unifdis, units
 !
  implicit none
  public :: test_fld
@@ -34,6 +34,7 @@ subroutine test_fld(ntests,npass)
  call test_gradh_fallback(ntests,npass)
  call test_first_pass(ntests,npass)
  call test_fld_switch(ntests,npass)
+ call test_fld_options(ntests,npass)
  call test_diffusion_rate(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
@@ -276,6 +277,47 @@ subroutine test_fld_switch(ntests,npass)
  call update_test_scores(ntests,nfail,npass)
 
 end subroutine test_fld_switch
+
+!-----------------------------------------------------------------------
+! do FLD = 1 and RADIATION=yes + icooling 9 are refused at start-up unless
+! I_WILL_NOT_PUBLISH_CRAP is true, when they only warn
+!-----------------------------------------------------------------------
+subroutine test_fld_options(ntests,npass)
+ use fld_options, only:env_is_true,check_fld_options,ierr_fld_warn,ierr_fld_fatal
+ use testutils,   only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(13),ierr
+ character(len=200) :: msg
+
+ nfail(:) = 0
+ call checkval(env_is_true('1'),.true.,nfail(1),'env 1 is true')
+ call checkval(env_is_true(' YeS '),.true.,nfail(2),'env YeS is true')
+ call checkval(env_is_true('0') .or. env_is_true('') .or. env_is_true('nope'),.false.,nfail(3), &
+               'env 0/empty/other is false')
+
+ call check_fld_options(2,.false.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,0,0,nfail(4),'mode 2 without radiation is fine')
+ call check_fld_options(0,.false.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,0,0,nfail(5),'mode 0 is fine')
+ call check_fld_options(1,.false.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(6),'mode 1 is fatal')
+ call checkval(index(msg,'do FLD = 2') > 0,.true.,nfail(7),'mode 1 message names do FLD = 2')
+ call check_fld_options(1,.false.,.false.,.false.,.true.,ierr,msg)
+ call checkval(ierr,ierr_fld_warn,0,nfail(8),'mode 1 with the env var only warns')
+
+ call check_fld_options(2,.true.,.true.,.false.,.false.,ierr,msg)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(9),'radiation exchange on with icooling 9 is fatal')
+ call checkval(index(msg,'gas-rad_exchange') > 0 .and. index(msg,'implicit_radiation') > 0,.true.,nfail(10), &
+               'radiation message names both keys')
+ call check_fld_options(2,.true.,.false.,.false.,.false.,ierr,msg)
+ call checkval(ierr,0,0,nfail(11),'radiation build with both keys off is fine')
+ call check_fld_options(0,.true.,.false.,.true.,.false.,ierr,msg)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(12),'implicit_radiation on with icooling 9 is fatal')
+ call check_fld_options(2,.true.,.true.,.true.,.true.,ierr,msg)
+ call checkval(ierr,ierr_fld_warn,0,nfail(13),'radiation keys on with the env var only warn')
+ call update_test_scores(ntests,nfail,npass)
+
+end subroutine test_fld_options
 
 !-----------------------------------------------------------------------
 ! the SPH diffusion term against the continuum (1/rho) div(k grad T):
