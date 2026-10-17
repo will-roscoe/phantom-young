@@ -105,6 +105,10 @@ subroutine copy_coolra_stores(src,dst)
  if (allocated(lambda_FLD))   lambda_FLD(dst)   = lambda_FLD(src)
  if (allocated(urad_FLD))     urad_FLD(dst)     = urad_FLD(src)
  if (allocated(gradP_cool))   gradP_cool(dst)   = gradP_cool(src)
+ if (allocated(owed_FLD)) then   ! energy in transit: moved, not duplicated
+    owed_FLD(dst) = owed_FLD(src)
+    if (dst /= src) owed_FLD(src) = 0.
+ endif
 
 end subroutine copy_coolra_stores
 

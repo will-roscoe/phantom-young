@@ -143,10 +143,10 @@ subroutine test_shuffle_moves_coolra_stores(ntests, npass)
  use part,            only:xyzh,npartoftype,npart,init_part,shuffle_part,kill_particle,&
                            igas,isetphase,iphase,maxphase,maxp
  use eos_stamatellos, only:init_coolra,finish_coolra,ttherm_store,ueqi_store,tau_store,&
-                           du_store,duSPH,Gpot_cool,duFLD,lambda_FLD,urad_FLD,gradP_cool
+                           du_store,duSPH,Gpot_cool,duFLD,lambda_FLD,urad_FLD,gradP_cool,owed_FLD
  integer, intent(inout) :: ntests,npass
  integer, parameter :: n = 10, ikill = 3
- integer :: nfailed(10),i
+ integer :: nfailed(12),i
 
  if (id==master) write(*,"(/,a)") '--> testing shuffle_part moves the cooling stores'
 
@@ -162,7 +162,7 @@ subroutine test_shuffle_moves_coolra_stores(ntests, npass)
  do i=1,n
     ttherm_store(i) = 1.*i; ueqi_store(i) = 2.*i; tau_store(i) = 3.*i; du_store(i) = 4.*i
     duSPH(i) = 5.*i; Gpot_cool(i) = 6.*i; duFLD(i) = 7.*i; lambda_FLD(i) = 8.*i
-    urad_FLD(i) = 9.*i; gradP_cool(i) = 10.*i
+    urad_FLD(i) = 9.*i; gradP_cool(i) = 10.*i; owed_FLD(i) = 11.*i
  enddo
 
  call kill_particle(ikill,npartoftype)
@@ -179,6 +179,9 @@ subroutine test_shuffle_moves_coolra_stores(ntests, npass)
  call checkval(lambda_FLD(ikill),8.*n,0.,nfailed(8),'lambda_FLD moved')
  call checkval(urad_FLD(ikill),9.*n,0.,nfailed(9),'urad_FLD moved')
  call checkval(gradP_cool(ikill),10.*n,0.,nfailed(10),'gradP_cool moved')
+ ! owed_FLD is energy in transit: it moves, and the vacated slot holds none
+ call checkval(owed_FLD(ikill),11.*n,0.,nfailed(11),'owed_FLD moved')
+ call checkval(owed_FLD(n),0.,0.,nfailed(12),'owed_FLD cleared in the vacated slot')
  call update_test_scores(ntests,nfailed,npass)
 
  call finish_coolra()
