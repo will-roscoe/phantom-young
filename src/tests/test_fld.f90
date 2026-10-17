@@ -15,13 +15,19 @@ module testfld
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: boundary, datafiles, deriv, dim, densityforce, eos, eos_stamatellos,
-!   fld_options, io, part, physcon, testutils, unifdis, units
+! :Dependencies: boundary, cooling, datafiles, deriv, dim, densityforce, eos,
+!   eos_stamatellos, fld_implicit, fld_options, io, part, physcon, testutils,
+!   timestep, unifdis, units
 !
  implicit none
  public :: test_fld
 
  private
+
+ ! settings fld_box changes, restored by fld_box_done
+ integer :: box_ieos,box_icooling
+ real    :: box_gamma,box_dtmax
+ logical :: box_doFLD,box_cooling_in_step
 
 contains
 
@@ -39,6 +45,11 @@ subroutine test_fld(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
  call test_relaxation_inf_guard(ntests,npass)
+ call test_fld_implicit_step(ntests,npass)
+ call test_fld_implicit_explicit_limit(ntests,npass)
+ call test_fld_implicit_zero_lambda(ntests,npass)
+ call test_fld_implicit_fixed_boundary(ntests,npass)
+ call test_fld_implicit_capped(ntests,npass)
 
 end subroutine test_fld
 
@@ -650,5 +661,314 @@ subroutine test_relaxation_inf_guard(ntests,npass)
  ieos = ieos_old
 
 end subroutine test_relaxation_inf_guard
+! a 24^3 box (periodic in periodic builds) at rho = 1e-12 g/cc with the
+! FLD hybrid on, T(x) a 30 K / 30(1+amp) K step or 30(1 + amp sin) K, and
+! lambda from a density pass. Returns .false. (the test skips) without the
+! opacity table; fld_box_done restores the settings it changed
+!-----------------------------------------------------------------------
+logical function fld_box(profile,amp)
+ use boundary,        only:set_boundary,xmin,xmax,ymin,ymax,zmin,zmax,dxbound,dybound,dzbound
+ use cooling,         only:cooling_in_step
+ use datafiles,       only:find_phantom_datafile
+ use deriv,           only:get_derivs_global
+ use dim,             only:maxp,maxphase,periodic,ind_timesteps
+ use eos,             only:ieos,icooling,init_eos,gamma
+ use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep
+ use io,              only:id,master
+ use part,            only:init_part,npart,npartoftype,massoftype,xyzh,vxyzu,hfact,iphase,isetphase,igas,ibin
+ use physcon,         only:solarm,au,pi
+ use timestep,        only:dtmax
+ use unifdis,         only:set_unifdis
+ use units,           only:set_units,unit_density,unit_ergg
+ character(len=*), intent(in) :: profile   ! 'step' or 'sine'
+ real,             intent(in) :: amp
+ character(len=120) :: pdir
+ integer :: i,ierr
+ real    :: psep,rho_cgs,T,u_cgs
+
+ fld_box = .false.
+ call get_environment_variable('PHANTOM_DIR',pdir)
+ if (len_trim(pdir) == 0 .or. len_trim(find_phantom_datafile(eos_file,'eos/lombardi')) == 0) then
+    if (id==master) write(*,"(a)") '  --> skipping (no opacity table)'
+    return
+ endif
+ box_ieos = ieos; box_icooling = icooling; box_doFLD = doFLD; box_gamma = gamma
+ box_cooling_in_step = cooling_in_step; box_dtmax = dtmax
+ ieos = 24; icooling = 9; doFLD = .true.; gamma = 5./3.; cooling_in_step = .true.
+ call set_units(mass=solarm,dist=au,G=1.d0)
+ call init_eos(ieos,ierr)
+ if (ierr /= 0) then
+    if (id==master) write(*,"(a)") '  --> skipping (init_eos failed)'
+    call fld_box_done(finish=.false.)
+    return
+ endif
+ call init_part()
+ call set_boundary(-0.5,0.5,-0.5,0.5,-0.5,0.5)
+ psep = dxbound/24.
+ npart = 0
+ call set_unifdis('cubic',id,master,xmin,xmax,ymin,ymax,zmin,zmax,psep,hfact,npart,xyzh,periodic)
+ npartoftype(:) = 0; npartoftype(igas) = npart
+ rho_cgs = 1.e-12
+ massoftype(igas) = rho_cgs/unit_density*dxbound*dybound*dzbound/npart
+ if (maxphase==maxp) iphase(1:npart) = isetphase(igas,iactive=.true.)
+ if (ind_timesteps) ibin(1:npart) = 0
+ do i=1,npart
+    if (profile == 'step') then
+       T = merge(30.*(1.+amp),30.,xyzh(1,i) > 0.)
+    else
+       T = 30.*(1. + amp*sin(2.*pi*xyzh(1,i)/dxbound))
+    endif
+    call getintenerg_opdep(T,rho_cgs,u_cgs)
+    vxyzu(4,i) = u_cgs/unit_ergg
+ enddo
+ dtmax = 1.
+ call get_derivs_global()   ! lambda from a converged density pass
+ fld_box = .true.
+
+end function fld_box
+
+subroutine fld_box_done(finish)
+ use cooling,  only:cooling_in_step
+ use dim,      only:maxp,maxphase
+ use eos,      only:ieos,icooling,finish_eos,gamma
+ use eos_stamatellos, only:doFLD
+ use part,     only:npart,iphase,isetphase,igas
+ use timestep, only:dtmax
+ logical, intent(in), optional :: finish   ! .false. if init_eos failed
+ integer :: ierr
+ logical :: do_finish
+
+ do_finish = .true.
+ if (present(finish)) do_finish = finish
+ if (maxphase==maxp) iphase(1:npart) = isetphase(igas,iactive=.true.)
+ if (do_finish) call finish_eos(ieos,ierr)
+ ieos = box_ieos; icooling = box_icooling; doFLD = box_doFLD; gamma = box_gamma
+ cooling_in_step = box_cooling_in_step; dtmax = box_dtmax
+
+end subroutine fld_box_done
+
+!-----------------------------------------------------------------------
+! one implicit solve at dt: with individual timesteps dt_i = dtmax/2**ibin(i),
+! so every particle goes to bin 0 (derivs assigns bins) and dtmax = dt
+!-----------------------------------------------------------------------
+subroutine solve_at(dt)
+ use dim,          only:ind_timesteps
+ use fld_implicit, only:do_fld_implicit
+ use part,         only:npart,xyzh,vxyzu,ibin
+ use timestep,     only:dtmax
+ real, intent(in) :: dt
+
+ dtmax = dt
+ if (ind_timesteps) ibin(1:npart) = 0
+ call do_fld_implicit(dt,npart,xyzh,vxyzu)
+
+end subroutine solve_at
+
+!-----------------------------------------------------------------------
+! the temperature an active particle reaches after dt at rate du_FLD
+!-----------------------------------------------------------------------
+real function T_after(i,dt)
+ use eos_stamatellos, only:duFLD,getopac_opdep
+ use part,            only:xyzh,vxyzu,massoftype,igas,rhoh
+ use units,           only:unit_ergg,unit_density
+ integer, intent(in) :: i
+ real,    intent(in) :: dt
+ real :: kb,kp,mu
+
+ call getopac_opdep((vxyzu(4,i) + dt*duFLD(i))*unit_ergg,rhoh(xyzh(4,i),massoftype(igas))*unit_density, &
+                    kb,kp,T_after,mu)
+
+end function T_after
+
+!-----------------------------------------------------------------------
+! a temperature step. At dt >> t_diff the sweep cap is reached, but T'
+! stays within the old extremes (no new extrema). At a dt where the
+! solve converges, sum m du / sum m |du| with every particle active is
+! of order fld_tol x dt/t_diff, and fld_leak reports it
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_step(ntests,npass)
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:fld_leak,fld_nsweeps,fld_maxchange,fld_sweep_cap,fld_tol
+ use io,              only:id,master
+ use part,            only:npart,massoftype,igas
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(5),i
+ real    :: dt,Tnew,Tmin,Tmax,dsum,dabs,leak_big
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: temperature step'
+ if (.not. fld_box('step',1.)) return    ! 30 K and 60 K halves
+ dt = 1.e6                                ! far beyond the diffusion time of the box
+ call solve_at(dt)
+ leak_big = fld_leak
+ Tmin = huge(0.); Tmax = -huge(0.)
+ do i=1,npart
+    Tnew = T_after(i,dt)
+    Tmin = min(Tmin,Tnew); Tmax = max(Tmax,Tnew)
+ enddo
+ if (id==master) write(*,"(a,es9.2,a,i4,a,es10.3,a,2(1x,f9.4),a,es10.3)") '  dt ',dt,'  sweeps ',fld_nsweeps, &
+    '  max dT/T ',fld_maxchange,'  T min max',Tmin,Tmax,'  leak ',leak_big
+ nfail(:) = 0
+ call checkval(Tmin >= 30.*(1.-1.e-6),.true.,nfail(1),'step at dt >> t_diff: no T below the cold side')
+ call checkval(Tmax <= 60.*(1.+1.e-6),.true.,nfail(2),'step at dt >> t_diff: no T above the hot side')
+
+ dt = 1.e-2                               ! a few cell diffusion times: converges
+ call solve_at(dt)
+ dsum = 0.; dabs = 0.
+ do i=1,npart
+    dsum = dsum + massoftype(igas)*duFLD(i); dabs = dabs + massoftype(igas)*abs(duFLD(i))
+ enddo
+ if (id==master) write(*,"(a,es9.2,a,i4,a,es10.3,a,es10.3)") '  dt ',dt,'  sweeps ',fld_nsweeps, &
+    '  max dT/T ',fld_maxchange,'  leak ',fld_leak
+ call checkval(fld_nsweeps < fld_sweep_cap,.true.,nfail(3),'step at a few t_diff: converged')
+ call checkval(abs(fld_leak - dsum/dabs) < 1.e-12,.true.,nfail(4),'fld_leak = sum m du_FLD / sum m |du_FLD|')
+ call checkval(abs(fld_leak) < 100.*fld_tol,.true.,nfail(5),'global timesteps, converged: |leak| < 100 fld_tol')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_step
+
+!-----------------------------------------------------------------------
+! as dt -> 0 the implicit rate tends to the explicit pair sum of the
+! force pass (do FLD = 1), particle by particle
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_explicit_limit(ntests,npass)
+ use deriv,           only:get_derivs_global
+ use dim,             only:mhd
+ use eos_stamatellos, only:duFLD
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2)
+ real    :: dt,errmax,dumax
+ real, allocatable :: du_explicit(:)
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: tends to the explicit term as dt -> 0'
+ if (mhd) then   ! force.F90 runs the explicit pair term only when .not. mhd
+    if (id==master) write(*,"(a)") '  --> skipping (MHD build: no explicit FLD pair term to compare with)'
+    return
+ endif
+ if (.not. fld_box('sine',0.01)) return
+ dt = 1.e-8
+ call get_derivs_global(dt=dt)          ! the explicit pair sum
+ du_explicit = duFLD(1:npart)
+ call solve_at(dt)
+ dumax  = maxval(abs(du_explicit))
+ errmax = maxval(abs(duFLD(1:npart) - du_explicit))/max(dumax,tiny(0.))
+ if (id==master) write(*,"(a,es10.3,a,es10.3)") '  max |du_explicit| ',dumax,'  max |du_implicit - du_explicit|/max ',errmax
+ nfail(:) = 0
+ call checkval(dumax > 0.,.true.,nfail(1),'explicit pair term ran')
+ call checkval(errmax,0.,1.e-4,nfail(2),'implicit du_FLD at small dt = explicit du_FLD')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_explicit_limit
+
+!-----------------------------------------------------------------------
+! a particle with lambda = 0 has k = 0: no exchange, no NaN
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_zero_lambda(ntests,npass)
+ use eos_stamatellos, only:duFLD,lambda_FLD
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2)
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: a particle with lambda = 0'
+ if (.not. fld_box('step',1.)) return
+ lambda_FLD(1) = 0.        ! a derivs call would recompute lambda, so call the solve directly
+ call solve_at(1.e3)
+ nfail(:) = 0
+ call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(1),'lambda = 0: no NaN in du_FLD')
+ call checkval(duFLD(1),0.,1.e-30,nfail(2),'lambda = 0: no exchange for that particle')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_zero_lambda
+
+!-----------------------------------------------------------------------
+! individual timesteps: an active particle surrounded by inactive ones
+! sees them as a fixed boundary, and uses its own bin's dt
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_fixed_boundary(ntests,npass)
+ use dim,             only:ind_timesteps,maxp,maxphase
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:do_fld_implicit,fld_nsweeps,fld_leak
+ use io,              only:id,master
+ use part,            only:npart,xyzh,vxyzu,iphase,isetphase,igas,ibin
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(3),i,iact
+ real    :: du_dt1,du_dt2,leak1
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: inactive neighbours are a fixed boundary'
+ if (.not. ind_timesteps .or. maxphase /= maxp) then
+    if (id==master) write(*,"(a)") '  --> skipping (needs individual timesteps)'
+    return
+ endif
+ if (.not. fld_box('step',1.)) return
+ iact = minloc(abs(xyzh(1,1:npart)),1)            ! a particle at the step
+ do i=1,npart
+    iphase(i) = isetphase(igas,iactive=(i==iact))
+ enddo
+ ibin(iact) = 0
+ call do_fld_implicit(1.,npart,xyzh,vxyzu)        ! dt_i = dtmax/2**0 = 1
+ du_dt1 = duFLD(iact)
+ leak1  = fld_leak
+ nfail(:) = 0
+ call checkval(fld_nsweeps <= 2,.true.,nfail(1),'all neighbours fixed: converges at once')
+ ibin(iact) = 3                                   ! dt_i = 1/8, whatever dt the call passes
+ call do_fld_implicit(1.,npart,xyzh,vxyzu)
+ du_dt2 = duFLD(iact)
+ call checkval(abs(du_dt2) > abs(du_dt1),.true.,nfail(2),'the particle uses its own bin dt (shorter dt, faster rate)')
+
+ ! every other particle active: the exchange with the inactive half is not returned this step
+ do i=1,npart
+    iphase(i) = isetphase(igas,iactive=(mod(i,2)==0))
+ enddo
+ ibin(1:npart) = 0
+ call do_fld_implicit(1.,npart,xyzh,vxyzu)
+ if (id==master) write(*,"(a,es10.3,a,es10.3)") '  leak, one active particle: ',leak1, &
+    '  half the particles active: ',fld_leak
+ call checkval(abs(fld_leak) <= 1.,.true.,nfail(3),'half active: leak finite and within [-1,1]')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_fixed_boundary
+
+!-----------------------------------------------------------------------
+! a sweep cap too small to converge: warn, keep a bounded iterate
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_capped(ntests,npass)
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:fld_sweep_cap
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2),cap_old,i
+ real    :: dt,Tmin,Tmax
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: sweep cap reached'
+ if (.not. fld_box('step',1.)) return
+ cap_old = fld_sweep_cap
+ fld_sweep_cap = 1
+ dt = 1.e6
+ call solve_at(dt)
+ fld_sweep_cap = cap_old
+ Tmin = huge(0.); Tmax = -huge(0.)
+ do i=1,npart
+    Tmin = min(Tmin,T_after(i,dt)); Tmax = max(Tmax,T_after(i,dt))
+ enddo
+ nfail(:) = 0
+ call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(1),'one sweep at dt >> t_diff: finite du_FLD')
+ call checkval(Tmin >= 30.*(1.-1.e-6) .and. Tmax <= 60.*(1.+1.e-6),.true.,nfail(2), &
+               'one sweep at dt >> t_diff: T within the old extremes')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_capped
 
 end module testfld
