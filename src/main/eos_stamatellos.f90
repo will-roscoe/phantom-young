@@ -14,7 +14,7 @@ module eos_stamatellos
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: allocutils, datafiles, dim, io
+! :Dependencies: allocutils, datafiles, dim, io, part
 !
 
  implicit none
@@ -40,7 +40,7 @@ module eos_stamatellos
  real,    public :: L_star_prof = -1. ! Lsun, luminosity T0_prof was derived from (lumdisc=3); <0 = none
 
  public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
- public :: alloc_coolra_stores
+ public :: alloc_coolra_stores,copy_coolra_stores
  public :: get_k_fld
  public :: get_T_profile,get_T0_from_lum
  public :: write_headeropts_flooredprof,read_headeropts_flooredprof
@@ -51,6 +51,8 @@ contains
 !+
 !  Allocate the four per-particle cooling stores, and zero them ONLY
 !  when this call is what created them.
+!  Also installs copy_coolra_stores as part:copy_particle_extra, so
+!  shuffle_part moves the cooling arrays with their particles.
 !
 !  They are the state of the exponential relaxation in radcool_evolve_ui,
 !  they are written to every full dump, and on a restart they are read back
@@ -62,8 +64,10 @@ contains
 subroutine alloc_coolra_stores()
  use dim, only:maxp,maxp_alloc
  use allocutils, only:allocate_array
+ use part, only:copy_particle_extra
  integer :: np
 
+ copy_particle_extra => copy_coolra_stores
  if (allocated(ttherm_store)) return
  if (maxp == 0) then
     np = int(maxp_alloc)
@@ -80,6 +84,29 @@ subroutine alloc_coolra_stores()
  du_store(:)     = 0d0
 
 end subroutine alloc_coolra_stores
+
+!----------------------------------------------------------------
+!+
+!  Copy particle src's entries in the per-particle cooling arrays to
+!  dst; alloc_coolra_stores installs it as part:copy_particle_extra so that
+!  copy_particle_all (shuffle_part) moves them. Unallocated arrays are skipped.
+!+
+!----------------------------------------------------------------
+subroutine copy_coolra_stores(src,dst)
+ integer, intent(in) :: src,dst
+
+ if (allocated(ttherm_store)) ttherm_store(dst) = ttherm_store(src)
+ if (allocated(ueqi_store))   ueqi_store(dst)   = ueqi_store(src)
+ if (allocated(tau_store))    tau_store(dst)    = tau_store(src)
+ if (allocated(du_store))     du_store(dst)     = du_store(src)
+ if (allocated(duSPH))        duSPH(dst)        = duSPH(src)
+ if (allocated(Gpot_cool))    Gpot_cool(dst)    = Gpot_cool(src)
+ if (allocated(duFLD))        duFLD(dst)        = duFLD(src)
+ if (allocated(lambda_FLD))   lambda_FLD(dst)   = lambda_FLD(src)
+ if (allocated(urad_FLD))     urad_FLD(dst)     = urad_FLD(src)
+ if (allocated(gradP_cool))   gradP_cool(dst)   = gradP_cool(src)
+
+end subroutine copy_coolra_stores
 
 subroutine init_coolra()
  use dim, only:maxp,maxp_alloc
@@ -115,6 +142,8 @@ subroutine init_coolra()
 end subroutine init_coolra
 
 subroutine finish_coolra()
+ use part, only:copy_particle_extra
+ nullify(copy_particle_extra)
  if (allocated(optable)) deallocate(optable)
  if (allocated(gradP_cool)) deallocate(gradP_cool)
  if (allocated(ttherm_store)) deallocate(ttherm_store)
