@@ -58,6 +58,7 @@ subroutine test_radiation(ntests,npass)
     if (id==master) write(*,"(/,a)") '--> SKIPPING TEST OF RADIATION DERIVS (need -DPERIODIC)'
  else
     if (.not.mpi) call test_implicit_matches_explicit(ntests,npass)
+    if (.not.mpi) call test_implicit_inactive_particles(ntests,npass)
 
     iverbose = -1
     implicit_radiation = .false.
@@ -286,6 +287,75 @@ subroutine test_implicit_matches_explicit(ntests,npass)
  tolh = tolh_old
 
 end subroutine test_implicit_matches_explicit
+
+!---------------------------------------------------------
+!+
+!  check the implicit solver copes with inactive particles
+!  (negative entries in inodeparts with individual timesteps)
+!+
+!---------------------------------------------------------
+subroutine test_implicit_inactive_particles(ntests,npass)
+ use part,     only:npart,xyzh,vxyzu,rad,radprop,drad,init_part,&
+                    iphase,maxphase,isetphase,igas
+ use options,  only:tolh
+ use deriv,    only:get_derivs_global
+ use io,       only:iverbose
+ use timestep, only:dtmax
+ use radiation_utils,    only:implicit_radiation
+ use radiation_implicit, only:do_radiation_implicit
+ use implicit, only:ivar,ncompactlocal
+ integer, intent(inout) :: ntests,npass
+ real :: kappa_code,c_code,xi0,rho0,tolh_old,pmassi
+ integer :: i,ierr,nerr(1),nwrong,nactive
+
+ if (id==master) write(*,"(/,a)") '--> checking implicit routine with inactive particles'
+
+ implicit_radiation = .true.
+ iverbose = 0
+ call init_part()
+ tolh_old = tolh
+ tolh = 1.e-8
+ dtmax = 5.e-22
+ call setup_radiation_diffusion_problem_sinusoid(kappa_code,c_code,xi0,rho0,pmassi)
+ vxyzu(1:3,:) = 0.
+ call get_derivs_global()
+ if (maxphase > 0) then
+    do i=1,npart
+       iphase(i) = isetphase(igas,iactive=(mod(i,2)==0))
+    enddo
+ endif
+ call get_derivs_global()
+ radprop(ifluxx:ifluxz,:) = 0.
+ call do_radiation_implicit(1.e-24,npart,rad,xyzh,vxyzu,radprop,drad,ierr)
+
+ nerr = 0
+ call checkval(ierr,0,0,nerr(1),'no errors from implicit solver with inactive particles')
+ call update_test_scores(ntests,nerr,npass)
+
+ nactive = 0
+ nwrong = 0
+ do i=1,npart
+    if (mod(i,2)==0) nactive = nactive + 1
+ enddo
+ do i=1,ncompactlocal
+    if (ivar(3,i) < 1 .or. ivar(3,i) > npart) then
+       nwrong = nwrong + 1
+    elseif (mod(ivar(3,i),2) /= 0) then
+       nwrong = nwrong + 1
+    endif
+ enddo
+ nerr = 0
+ call checkval(nwrong,0,0,nerr(1),'only active particles in implicit solve')
+ call update_test_scores(ntests,nerr,npass)
+
+ nerr = 0
+ call checkval(ncompactlocal,nactive,0,nerr(1),'all active particles in implicit solve')
+ call update_test_scores(ntests,nerr,npass)
+
+ if (maxphase > 0) iphase(1:npart) = isetphase(igas,iactive=.true.)
+ tolh = tolh_old
+
+end subroutine test_implicit_inactive_particles
 
 !---------------------------------------------------------
 !+
