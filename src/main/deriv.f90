@@ -14,10 +14,10 @@ module deriv
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: cons2prim, densityforce, derivutils, dim, externalforces,
-!   forces, forcing, growth, io, metric_tools, neighkdtree, options, part,
-!   porosity, ptmass, ptmass_radiation, radiation_implicit, timestep,
-!   timestep_ind, timing
+! :Dependencies: cons2prim, densityforce, derivutils, dim, eos,
+!   eos_stamatellos, externalforces, fld_implicit, forces, forcing, growth,
+!   io, metric_tools, neighkdtree, options, part, porosity, ptmass,
+!   ptmass_radiation, radiation_implicit, timestep, timestep_ind, timing
 !
  implicit none
 
@@ -60,6 +60,9 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
  use cons2prim,      only:cons2primall,cons2prim_everything
  use metric_tools,   only:init_metric
  use radiation_implicit, only:do_radiation_implicit,ierr_failed_to_converge
+ use eos,            only:icooling
+ use eos_stamatellos, only:doFLD,fld_mode
+ use fld_implicit,   only:do_fld_implicit
  use options,        only:implicit_radiation,implicit_radiation_store_drad,use_porosity,need_pressure_on_sinks
  integer,      intent(in)    :: icall
  integer,      intent(inout) :: npart
@@ -158,6 +161,16 @@ subroutine derivs(icall,npart,nactive,xyzh,vxyzu,fxyzu,fext,divcurlv,divcurlB,&
     call do_radiation_implicit(dt,npart,rad,xyzh,vxyzu,radprop,drad,ierr)
     if (ierr /= 0 .and. ierr /= ierr_failed_to_converge) call fatal('radiation','Failed in radiation')
     call do_timing('radiation',tlast,tcpulast)
+ endif
+
+ !
+ ! implicit FLD for the Forgan hybrid (do FLD = 2): duFLD for the active particles.
+ ! A corrector repeat (icall = 2) keeps the duFLD of the first call, as the solve
+ ! has already moved energy into owed_FLD
+ !
+ if (icooling == 9 .and. doFLD .and. fld_mode == 2 .and. dt > 0. .and. icall /= 2) then
+    call do_fld_implicit(dt,npart,xyzh,vxyzu)
+    call do_timing('radiation',tlast,tcpulast)   ! no timer of its own; 'fld' would fall to itimer_fromstart
  endif
 
  !

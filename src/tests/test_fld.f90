@@ -54,6 +54,8 @@ subroutine test_fld(ntests,npass)
  call test_fld_implicit_split(ntests,npass)
  call test_fld_implicit_conserve_unconverged(ntests,npass)
  call test_fld_implicit_owed(ntests,npass)
+ call test_fld_implicit_derivs(ntests,npass)
+ call test_fld_implicit_limit(ntests,npass)
 
 end subroutine test_fld
 
@@ -353,10 +355,11 @@ subroutine test_diffusion_rate(ntests,npass)
  use testutils,       only:checkval,update_test_scores
  use unifdis,         only:set_unifdis
  use units,           only:set_units,unit_density,unit_ergg
- use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,get_k_fld,duFLD
+ use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,get_k_fld,duFLD,fld_mode
  use part,            only:init_part,npart,npartoftype,massoftype,xyzh,vxyzu,hfact, &
                            iphase,isetphase,igas,rhoh
  integer, intent(inout) :: ntests,npass
+ integer :: fld_mode_old
  integer :: ierr,i,ieos_old,icooling_old
  real    :: gamma_old,psep,rho_cgs,totmass,T,u_cgs
  logical :: doFLD_old,cooling_in_step_old
@@ -405,7 +408,9 @@ subroutine test_diffusion_rate(ntests,npass)
     vxyzu(4,i) = u_cgs/unit_ergg
  enddo
  call get_derivs_global()            ! lambda from a converged density pass
- call get_derivs_global(dt=1.)       ! the FLD pair sum runs only when dt > 0
+ fld_mode_old = fld_mode; fld_mode = 1
+ call get_derivs_global(dt=1.)       ! the explicit FLD pair sum (do FLD = 1) runs only when dt > 0
+ fld_mode = fld_mode_old
 
  wk2 = (2.*pi/dxbound)**2
  n = 0; rsum = 0.; rmin = huge(0.); rmax = -huge(0.)
@@ -447,10 +452,11 @@ subroutine test_fld_conservation(ntests,npass)
  use testutils,       only:checkval,update_test_scores
  use unifdis,         only:set_unifdis
  use units,           only:set_units,unit_density,unit_ergg
- use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,duFLD
+ use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,duFLD,fld_mode
  use part,            only:init_part,npart,npartoftype,massoftype,xyzh,vxyzu,hfact, &
                            iphase,isetphase,igas
  integer, intent(inout) :: ntests,npass
+ integer :: fld_mode_old
  integer :: ierr,i,ieos_old,icooling_old
  real    :: gamma_old,psep,rho_cgs,totmass,T,u_cgs
  logical :: doFLD_old,cooling_in_step_old
@@ -502,7 +508,9 @@ subroutine test_fld_conservation(ntests,npass)
     vxyzu(4,i) = u_cgs/unit_ergg
  enddo
  call get_derivs_global()
+ fld_mode_old = fld_mode; fld_mode = 1   ! the explicit pair term
  call get_derivs_global(dt=1.)
+ fld_mode = fld_mode_old
 
  ! equal particle masses, so sum_i m_i du_i is proportional to sum_i du_i
  esum = sum(duFLD(1:npart))
@@ -839,11 +847,12 @@ end subroutine test_fld_implicit_step
 subroutine test_fld_implicit_explicit_limit(ntests,npass)
  use deriv,           only:get_derivs_global
  use dim,             only:mhd
- use eos_stamatellos, only:duFLD
+ use eos_stamatellos, only:duFLD,fld_mode
  use io,              only:id,master
  use part,            only:npart
  use testutils,       only:checkval,update_test_scores
  integer, intent(inout) :: ntests,npass
+ integer :: fld_mode_old
  integer :: nfail(2)
  real    :: dt,errmax,dumax
  real, allocatable :: du_explicit(:)
@@ -855,7 +864,9 @@ subroutine test_fld_implicit_explicit_limit(ntests,npass)
  endif
  if (.not. fld_box('sine',0.01)) return
  dt = 1.e-8
+ fld_mode_old = fld_mode; fld_mode = 1
  call get_derivs_global(dt=dt)          ! the explicit pair sum
+ fld_mode = fld_mode_old
  du_explicit = duFLD(1:npart)
  call solve_at(dt)
  dumax  = maxval(abs(du_explicit))
@@ -1231,5 +1242,94 @@ real function pair_energy(b1,b2,sum12)
 end function pair_energy
 
 end subroutine test_fld_implicit_owed
+
+!-----------------------------------------------------------------------
+! do FLD = 2 through derivs: the solve runs after the density pass (its
+! du_FLD is the direct solve's), the force pass leaves du_FLD alone, T
+! stays bounded at dt = 10 t_cell, and a corrector repeat (icall = 2)
+! keeps du_FLD as it was
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_derivs(ntests,npass)
+ use deriv,           only:get_derivs_global
+ use eos_stamatellos, only:duFLD,fld_mode
+ use fld_implicit,    only:fld_nsweeps
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(4),fld_mode_old,nsweeps
+ real    :: dt,err,Tmin,Tmax
+ real, allocatable :: du_direct(:),du_first(:),du_repeat(:)
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: do FLD = 2 runs the solve in derivs'
+ if (.not. fld_box('step',1.)) return
+ fld_mode_old = fld_mode; fld_mode = 2
+ dt = 10.*t_cell()                       ! no splitting, so the two solves take the same path
+ call solve_at(dt)                       ! sets dtmax = dt and bin 0, as derivs will see them
+ duFLD(1:npart) = 0.; fld_nsweeps = 0
+ call get_derivs_global(dt=dt)
+ nsweeps = fld_nsweeps
+ du_first = duFLD(1:npart)
+ call T_range(dt,Tmin,Tmax)
+ call get_derivs_global(dt=dt,icall=2)
+ du_repeat = duFLD(1:npart)
+ call solve_at(dt)                       ! the direct solve, with the lambda this density pass left
+ du_direct = duFLD(1:npart)
+ err = maxval(abs(du_first - du_direct))/maxval(abs(du_direct))
+ if (id==master) write(*,"(a,i6,a,es10.3,a,2(1x,f9.4))") '  derivs: sweeps ',nsweeps, &
+    '  max |du - du_direct|/max |du_direct| ',err,'  T min max',Tmin,Tmax
+ nfail(:) = 0
+ call checkval(nsweeps > 0,.true.,nfail(1),'derivs runs the implicit solve')
+ call checkval(err,0.,1.e-3,nfail(2),'derivs du_FLD = the direct solve (force pass leaves it)')
+ call checkval(Tmin >= 30.*(1.-1.e-6) .and. Tmax <= 60.*(1.+1.e-6),.true.,nfail(3), &
+               'derivs at dt = 10 t_cell: T within the old extremes')
+ call checkval(all(du_repeat == du_first),.true.,nfail(4),'corrector repeat (icall = 2) keeps du_FLD')
+ fld_mode = fld_mode_old
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_derivs
+
+!-----------------------------------------------------------------------
+! do FLD = 2 through derivs at small dt matches the continuum rate
+! (1/rho) div(k grad T) for a sine wave, as test_diffusion_rate checks
+! for do FLD = 1
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_limit(ntests,npass)
+ use boundary,        only:dxbound
+ use deriv,           only:get_derivs_global
+ use dim,             only:periodic
+ use eos_stamatellos, only:duFLD,get_k_fld,fld_mode
+ use io,              only:id,master
+ use part,            only:npart,xyzh,vxyzu,massoftype,igas,rhoh
+ use physcon,         only:pi
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(1),i,n,fld_mode_old
+ real    :: wk2,rhoi,ki,Ti,expected,rsum,dt
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: do FLD = 2 at small dt matches (1/rho) div(k grad T)'
+ if (.not. fld_box('sine',0.01)) return
+ fld_mode_old = fld_mode; fld_mode = 2
+ dt = 1.e-3*t_cell()
+ call get_derivs_global(dt=dt)
+ wk2 = (2.*pi/dxbound)**2
+ n = 0; rsum = 0.
+ do i=1,npart
+    if (.not.(periodic .or. all(abs(xyzh(1:3,i)) < 0.25))) cycle
+    if (abs(sin(2.*pi*xyzh(1,i)/dxbound)) < 0.5) cycle
+    rhoi = rhoh(xyzh(4,i),massoftype(igas))
+    call get_k_fld(rhoi,vxyzu(4,i),i,ki,Ti)
+    expected = -(ki/rhoi)*wk2*(Ti - 30.)
+    n = n + 1; rsum = rsum + duFLD(i)/expected
+ enddo
+ if (id==master) write(*,"(a,i6,a,es12.5)") '  particles ',n,'  du_FLD/continuum mean ',rsum/max(n,1)
+ nfail(:) = 0
+ call checkval(rsum/max(n,1),1.,0.05,nfail(1),'do FLD = 2 at small dt matches (1/rho) div(k grad T)')
+ fld_mode = fld_mode_old
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_limit
 
 end module testfld
