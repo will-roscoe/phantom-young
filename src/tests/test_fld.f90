@@ -781,14 +781,14 @@ real function T_after(i,dt)
 end function T_after
 
 !-----------------------------------------------------------------------
-! a temperature step. At dt >> t_diff the sweep cap is reached, but T'
-! stays within the old extremes (no new extrema). At a dt where the
-! solve converges, sum m du / sum m |du| with every particle active is
-! of order fld_tol x dt/t_diff, and fld_leak reports it
+! a temperature step. At dt = 1e3 t_cell, beyond the diffusion time of
+! the box, T' stays within the old extremes (no new extrema). At a dt
+! of a few cell diffusion times the solve converges and fld_leak reports
+! sum m du / sum m |du|
 !-----------------------------------------------------------------------
 subroutine test_fld_implicit_step(ntests,npass)
  use eos_stamatellos, only:duFLD
- use fld_implicit,    only:fld_leak,fld_nsweeps,fld_maxchange,fld_sweep_cap,fld_tol
+ use fld_implicit,    only:fld_leak,fld_nsweeps,fld_nsplits,fld_resid,fld_tol
  use io,              only:id,master
  use part,            only:npart,massoftype,igas
  use testutils,       only:checkval,update_test_scores
@@ -798,7 +798,7 @@ subroutine test_fld_implicit_step(ntests,npass)
 
  if (id==master) write(*,"(/,a)") '--> FLD implicit: temperature step'
  if (.not. fld_box('step',1.)) return    ! 30 K and 60 K halves
- dt = 1.e6                                ! far beyond the diffusion time of the box
+ dt = 1.e3*t_cell()                       ! beyond the diffusion time of the box
  call solve_at(dt)
  leak_big = fld_leak
  Tmin = huge(0.); Tmax = -huge(0.)
@@ -806,8 +806,8 @@ subroutine test_fld_implicit_step(ntests,npass)
     Tnew = T_after(i,dt)
     Tmin = min(Tmin,Tnew); Tmax = max(Tmax,Tnew)
  enddo
- if (id==master) write(*,"(a,es9.2,a,i4,a,es10.3,a,2(1x,f9.4),a,es10.3)") '  dt ',dt,'  sweeps ',fld_nsweeps, &
-    '  max dT/T ',fld_maxchange,'  T min max',Tmin,Tmax,'  leak ',leak_big
+ if (id==master) write(*,"(a,es9.2,a,i6,a,i4,a,es10.3,a,2(1x,f9.4),a,es10.3)") '  dt ',dt,'  sweeps ',fld_nsweeps, &
+    '  splits ',fld_nsplits,'  residual ',fld_resid,'  T min max',Tmin,Tmax,'  leak ',leak_big
  nfail(:) = 0
  call checkval(Tmin >= 30.*(1.-1.e-6),.true.,nfail(1),'step at dt >> t_diff: no T below the cold side')
  call checkval(Tmax <= 60.*(1.+1.e-6),.true.,nfail(2),'step at dt >> t_diff: no T above the hot side')
@@ -818,9 +818,9 @@ subroutine test_fld_implicit_step(ntests,npass)
  do i=1,npart
     dsum = dsum + massoftype(igas)*duFLD(i); dabs = dabs + massoftype(igas)*abs(duFLD(i))
  enddo
- if (id==master) write(*,"(a,es9.2,a,i4,a,es10.3,a,es10.3)") '  dt ',dt,'  sweeps ',fld_nsweeps, &
-    '  max dT/T ',fld_maxchange,'  leak ',fld_leak
- call checkval(fld_nsweeps < fld_sweep_cap,.true.,nfail(3),'step at a few t_diff: converged')
+ if (id==master) write(*,"(a,es9.2,a,i6,a,es10.3,a,es10.3)") '  dt ',dt,'  sweeps ',fld_nsweeps, &
+    '  residual ',fld_resid,'  leak ',fld_leak
+ call checkval(fld_resid < fld_tol,.true.,nfail(3),'step at a few t_diff: converged')
  call checkval(abs(fld_leak - dsum/dabs) < 1.e-12,.true.,nfail(4),'fld_leak = sum m du_FLD / sum m |du_FLD|')
  call checkval(abs(fld_leak) < 100.*fld_tol,.true.,nfail(5),'global timesteps, converged: |leak| < 100 fld_tol')
  call update_test_scores(ntests,nfail,npass)
@@ -879,7 +879,7 @@ subroutine test_fld_implicit_zero_lambda(ntests,npass)
  if (id==master) write(*,"(/,a)") '--> FLD implicit: a particle with lambda = 0'
  if (.not. fld_box('step',1.)) return
  lambda_FLD(1) = 0.        ! a derivs call would recompute lambda, so call the solve directly
- call solve_at(1.e3)
+ call solve_at(1.e-1)
  nfail(:) = 0
  call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(1),'lambda = 0: no NaN in du_FLD')
  call checkval(duFLD(1),0.,1.e-30,nfail(2),'lambda = 0: no exchange for that particle')
@@ -939,36 +939,77 @@ subroutine test_fld_implicit_fixed_boundary(ntests,npass)
 end subroutine test_fld_implicit_fixed_boundary
 
 !-----------------------------------------------------------------------
-! a sweep cap too small to converge: warn, keep a bounded iterate
+! a sweep cap of 5 at dt = 100 t_cell: the step is split until it
+! converges, with T' bounded. With splitting off as well, and one sweep
+! at dt >> t_diff: warn, and the flux-limited exchange keeps T' within the old
+! extremes, with no NaN
 !-----------------------------------------------------------------------
 subroutine test_fld_implicit_capped(ntests,npass)
  use eos_stamatellos, only:duFLD
- use fld_implicit,    only:fld_sweep_cap
+ use fld_implicit,    only:fld_sweep_cap,fld_split_depth,fld_nsplits,fld_resid,fld_tol
  use io,              only:id,master
  use part,            only:npart
  use testutils,       only:checkval,update_test_scores
  integer, intent(inout) :: ntests,npass
- integer :: nfail(2),cap_old,i
+ integer :: nfail(6),cap_old,depth_old
  real    :: dt,Tmin,Tmax
 
  if (id==master) write(*,"(/,a)") '--> FLD implicit: sweep cap reached'
  if (.not. fld_box('step',1.)) return
- cap_old = fld_sweep_cap
- fld_sweep_cap = 1
- dt = 1.e6
+ cap_old = fld_sweep_cap; depth_old = fld_split_depth
+ dt = 100.*t_cell()
+ fld_sweep_cap = 5
  call solve_at(dt)
- fld_sweep_cap = cap_old
- Tmin = huge(0.); Tmax = -huge(0.)
- do i=1,npart
-    Tmin = min(Tmin,T_after(i,dt)); Tmax = max(Tmax,T_after(i,dt))
- enddo
+ call T_range(dt,Tmin,Tmax)
+ if (id==master) write(*,"(a,i5,a,es10.3,a,2(1x,f9.4))") '  cap 5: splits ',fld_nsplits,'  residual ',fld_resid, &
+    '  T min max',Tmin,Tmax
  nfail(:) = 0
- call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(1),'one sweep at dt >> t_diff: finite du_FLD')
+ call checkval(fld_nsplits > 0 .and. fld_resid < fld_tol,.true.,nfail(1),'cap 5 at dt = 100 t_cell: converges by splitting')
  call checkval(Tmin >= 30.*(1.-1.e-6) .and. Tmax <= 60.*(1.+1.e-6),.true.,nfail(2), &
+               'cap 5 at dt = 100 t_cell: T within the old extremes')
+ call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(3),'cap 5 at dt = 100 t_cell: finite du_FLD')
+
+ dt = 1.e6
+ fld_sweep_cap = 1; fld_split_depth = 0
+ call solve_at(dt)
+ call T_range(dt,Tmin,Tmax)
+ if (id==master) write(*,"(a,es10.3,a,2(1x,f9.4))") '  one sweep, no splits: residual ',fld_resid,'  T min max',Tmin,Tmax
+ call checkval(fld_resid > fld_tol,.true.,nfail(4),'one sweep at dt >> t_diff: not converged')
+ call checkval(all(duFLD(1:npart) == duFLD(1:npart)),.true.,nfail(5),'one sweep at dt >> t_diff: finite du_FLD')
+ call checkval(Tmin >= 30.*(1.-1.e-6) .and. Tmax <= 60.*(1.+1.e-6),.true.,nfail(6), &
                'one sweep at dt >> t_diff: T within the old extremes')
+ fld_sweep_cap = cap_old; fld_split_depth = depth_old
  call update_test_scores(ntests,nfail,npass)
  call fld_box_done()
 
 end subroutine test_fld_implicit_capped
+
+!-----------------------------------------------------------------------
+! the lowest and highest temperature the particles reach after dt
+!-----------------------------------------------------------------------
+subroutine T_range(dt,Tmin,Tmax)
+ use part, only:npart
+ real, intent(in)  :: dt
+ real, intent(out) :: Tmin,Tmax
+ integer :: i
+
+ Tmin = huge(0.); Tmax = -huge(0.)
+ do i=1,npart
+    Tmin = min(Tmin,T_after(i,dt)); Tmax = max(Tmax,T_after(i,dt))
+ enddo
+
+end subroutine T_range
+
+!-----------------------------------------------------------------------
+! the shortest cell diffusion time, min_i c_v,i / sum_j K_ij, of the
+! current box (code time)
+!-----------------------------------------------------------------------
+real function t_cell()
+ use fld_implicit, only:fld_tcell
+
+ call solve_at(1.e-8)
+ t_cell = fld_tcell
+
+end function t_cell
 
 end module testfld
