@@ -352,7 +352,7 @@ energy (``maxvxyzu ≥ 4``).
      - ``beta_cool``, ``T0``
    * - 9
      - Radiative approximation (Lombardi et al.)
-     - ``EOS_file``, ``OD method``, ``Lstar``, ``do FLD``, ``Tfloor``
+     - ``EOS_file``, ``OD method``, ``Lstar``, ``do FLD``, ``fld_solver``, ``Tfloor``
    * - 10
      - Full molecular/atomic network
      - ``ufloor``, network files
@@ -391,6 +391,12 @@ Parameters active when ``icooling = 9``:
        ``1`` stops the run at start-up unless the environment variable
        ``I_WILL_NOT_PUBLISH_CRAP`` is true (``1``, ``true``, ``yes`` or ``on``),
        when it only warns.
+   * - ``fld_solver``
+     - int
+     - 1
+     - Linear solver of the implicit FLD step (``do FLD = 2``): ``1``
+       Gauss-Seidel, ``2`` Jacobi-preconditioned conjugate gradients. Both
+       stop on the same residual; other values stop the run at start-up.
    * - ``Tfloor``
      - real
      - 5.0
