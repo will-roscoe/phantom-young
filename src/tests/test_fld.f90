@@ -26,7 +26,7 @@ module testfld
 
  ! settings fld_box changes, restored by fld_box_done
  integer :: box_ieos,box_icooling
- real    :: box_gamma,box_dtmax
+ real    :: box_gamma,box_dtmax,box_substep
  logical :: box_doFLD,box_cooling_in_step
 
 contains
@@ -47,7 +47,7 @@ subroutine test_fld(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
  call test_relaxation_inf_guard(ntests,npass)
- call test_fld_solver_option(ntests,npass)
+ call test_fld_substep_option(ntests,npass)
  solver_old = fld_solver
  do isolver=1,2
     fld_solver = isolver
@@ -65,6 +65,7 @@ subroutine test_fld(ntests,npass)
     call test_fld_implicit_derivs(ntests,npass)
     call test_fld_implicit_limit(ntests,npass)
     call test_fld_implicit_run_counts(ntests,npass)
+    call test_fld_implicit_substep(ntests,npass)
  enddo
  fld_solver = solver_old
  call test_fld_implicit_cg(ntests,npass)
@@ -310,62 +311,75 @@ subroutine test_fld_switch(ntests,npass)
 end subroutine test_fld_switch
 
 !-----------------------------------------------------------------------
-! fld_solver in the .in selects the implicit solver: 1 Gauss-Seidel
-! (also when the key is absent), 2 Jacobi-PCG; any other value is a read
-! error, which stops the run at start-up
+! fld_substep_stiff in the .in sets the largest stiffness of one implicit
+! sub-step: 400 when the key is absent, 0 accepted (no sub-stepping), a
+! negative value is a read error, which stops the run at start-up; the
+! solver is not a .in option
 !-----------------------------------------------------------------------
-subroutine test_fld_solver_option(ntests,npass)
+subroutine test_fld_substep_option(ntests,npass)
  use cooling_radapprox, only:read_options_cooling_radapprox,write_options_cooling_radapprox
- use eos_stamatellos,   only:fld_solver
+ use eos_stamatellos,   only:fld_substep_stiff
  use infile_utils,      only:inopts,open_db_from_file,close_db,write_inopt
  use testutils,         only:checkval,update_test_scores
  integer, intent(inout) :: ntests,npass
  type(inopts), allocatable :: db(:)
- integer :: nfail(7),solver_old,nerr,iopt
- character(len=*), parameter :: fname = 'test_fld_solver.tmp'
+ integer :: nfail(7),nerr,lu
+ real    :: s_old
+ character(len=*), parameter :: fname = 'test_fld_substep.tmp'
+ character(len=200) :: line
+ logical :: has_solver
 
  nfail(:) = 0
- solver_old = fld_solver
- do iopt=1,2
-    nerr = read_solver(iopt)
-    call checkval(fld_solver,iopt,0,nfail(iopt),'fld_solver = '//achar(48+iopt)//' is read')
-    call checkval(nerr,0,0,nfail(2+iopt),'fld_solver = '//achar(48+iopt)//' is accepted')
+ s_old = fld_substep_stiff
+ nerr = read_substep(100.)
+ call checkval(fld_substep_stiff,100.,0.,nfail(1),'fld_substep_stiff = 100 is read')
+ call checkval(nerr,0,0,nfail(2),'fld_substep_stiff = 100 is accepted')
+ nerr = read_substep(0.)
+ call checkval(nerr == 0 .and. fld_substep_stiff == 0.,.true.,nfail(3),'fld_substep_stiff = 0 (no sub-stepping) is accepted')
+ nerr = read_substep(-2.)
+ call checkval(fld_substep_stiff,400.,0.,nfail(4),'fld_substep_stiff absent defaults to 400')
+ call checkval(read_substep(-1.) > 0,.true.,nfail(5),'a negative fld_substep_stiff is a read error')
+ ! the value written to the .in is read back, and no solver option is written
+ fld_substep_stiff = 50.
+ open(newunit=lu,file=fname,status='replace',form='formatted')
+ call write_options_cooling_radapprox(lu)
+ rewind(lu)
+ has_solver = .false.
+ do
+    read(lu,"(a)",end=10) line
+    if (index(line,'fld_solver') > 0) has_solver = .true.
  enddo
- nerr = read_solver(-1)
- call checkval(fld_solver,1,0,nfail(5),'fld_solver absent defaults to 1 (Gauss-Seidel)')
- call checkval(read_solver(0) > 0 .and. read_solver(3) > 0,.true.,nfail(6),'fld_solver = 0 or 3 is a read error')
- ! the value written to the .in is read back
- fld_solver = 2
- open(newunit=iopt,file=fname,status='replace',form='formatted')
- call write_options_cooling_radapprox(iopt)
- close(iopt)
- fld_solver = -1
+10 close(lu)
+ fld_substep_stiff = -1.
  nerr = 0
- call open_db_from_file(db,fname,78,iopt)
+ call open_db_from_file(db,fname,78,lu)
  call read_options_cooling_radapprox(db,nerr)
  call close_db(db)
- call checkval(fld_solver,2,0,nfail(7),'fld_solver written to the .in and read back')
- fld_solver = solver_old
+ call checkval(fld_substep_stiff,50.,0.,nfail(6),'fld_substep_stiff written to the .in and read back')
+ call checkval(has_solver,.false.,nfail(7),'no fld_solver option in the .in')
+ open(newunit=lu,file=fname,status='old')
+ close(lu,status='delete')
+ fld_substep_stiff = s_old
  call update_test_scores(ntests,nfail,npass)
 
 contains
 
-! read a .in with fld_solver = val (no key when val < 0); returns the error count
-integer function read_solver(val)
- integer, intent(in) :: val
- integer :: lu,ierr
+! read a .in with fld_substep_stiff = val (no key when val = -2); returns the error count
+integer function read_substep(val)
+ real, intent(in) :: val
+ integer :: ierr
  open(newunit=lu,file=fname,status='replace',form='formatted')
  call write_inopt('eos_lom.dat','EOS_file','table',lu)
- if (val >= 0) call write_inopt(val,'fld_solver','solver',lu)
+ if (val > -2.) call write_inopt(val,'fld_substep_stiff','stiffness',lu)
  close(lu)
- fld_solver = -1
- read_solver = 0
+ fld_substep_stiff = -1.
+ read_substep = 0
  call open_db_from_file(db,fname,78,ierr)
- call read_options_cooling_radapprox(db,read_solver)
+ call read_options_cooling_radapprox(db,read_substep)
  call close_db(db)
-end function read_solver
+end function read_substep
 
-end subroutine test_fld_solver_option
+end subroutine test_fld_substep_option
 
 !-----------------------------------------------------------------------
 ! do FLD = 1 and RADIATION=yes + icooling 9 are refused at start-up unless
@@ -756,7 +770,7 @@ logical function fld_box(profile,amp)
  use deriv,           only:get_derivs_global
  use dim,             only:maxp,maxphase,periodic,ind_timesteps
  use eos,             only:ieos,icooling,init_eos,gamma
- use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep
+ use eos_stamatellos, only:eos_file,doFLD,getintenerg_opdep,fld_substep_stiff
  use io,              only:id,master
  use part,            only:init_part,npart,npartoftype,massoftype,xyzh,vxyzu,hfact,iphase,isetphase,igas,ibin
  use physcon,         only:solarm,au,pi
@@ -777,6 +791,7 @@ logical function fld_box(profile,amp)
  endif
  box_ieos = ieos; box_icooling = icooling; box_doFLD = doFLD; box_gamma = gamma
  box_cooling_in_step = cooling_in_step; box_dtmax = dtmax
+ box_substep = fld_substep_stiff; fld_substep_stiff = 0.
  ieos = 24; icooling = 9; doFLD = .true.; gamma = 5./3.; cooling_in_step = .true.
  call set_units(mass=solarm,dist=au,G=1.d0)
  call init_eos(ieos,ierr)
@@ -814,7 +829,7 @@ subroutine fld_box_done(finish)
  use cooling,  only:cooling_in_step
  use dim,      only:maxp,maxphase
  use eos,      only:ieos,icooling,finish_eos,gamma
- use eos_stamatellos, only:doFLD
+ use eos_stamatellos, only:doFLD,fld_substep_stiff
  use part,     only:npart,iphase,isetphase,igas
  use timestep, only:dtmax
  logical, intent(in), optional :: finish   ! .false. if init_eos failed
@@ -827,6 +842,7 @@ subroutine fld_box_done(finish)
  if (do_finish) call finish_eos(ieos,ierr)
  ieos = box_ieos; icooling = box_icooling; doFLD = box_doFLD; gamma = box_gamma
  cooling_in_step = box_cooling_in_step; dtmax = box_dtmax
+ fld_substep_stiff = box_substep
 
 end subroutine fld_box_done
 
@@ -1256,6 +1272,53 @@ subroutine test_fld_implicit_split(ntests,npass)
  call fld_box_done()
 
 end subroutine test_fld_implicit_split
+
+!-----------------------------------------------------------------------
+! sub-stepping by stiffness at dt = 50 t_cell: one backward-Euler step
+! against 20 and 1000 sub-steps of the same frozen-K system. With 20 the
+! answer is much closer to the 1000-sub-step one than a single step is
+! (first-order convergence); the number of sub-steps is
+! ceiling(fld_stiff/fld_substep_stiff), at most fld_max_substeps
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_substep(ntests,npass)
+ use eos_stamatellos, only:duFLD,fld_substep_stiff
+ use fld_implicit,    only:fld_stiff,fld_nsub,fld_max_substeps,fld_leak
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(5),nsub1
+ real    :: dt,stiff,e1,e20,dmax
+ real, allocatable :: du1(:),du20(:)
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: sub-stepping by stiffness (dt = 50 t_cell)'
+ if (.not. fld_box('sine',0.01)) return
+ dt = 50.*t_cell()
+ call solve_at(dt)
+ du1 = duFLD(1:npart); nsub1 = fld_nsub; stiff = fld_stiff
+ fld_substep_stiff = stiff/20.
+ call solve_at(dt)
+ du20 = duFLD(1:npart)
+ nfail(:) = 0
+ call checkval(fld_nsub,ceiling(stiff/fld_substep_stiff),0,nfail(2),'sub-steps = ceiling(fld_stiff/fld_substep_stiff)')
+ fld_substep_stiff = stiff/1000.
+ call solve_at(dt)
+ dmax = maxval(abs(duFLD(1:npart)))
+ e1  = maxval(abs(du1  - duFLD(1:npart)))/dmax
+ e20 = maxval(abs(du20 - duFLD(1:npart)))/dmax
+ if (id==master) write(*,"(a,es10.3,a,i6,a,es10.3,a,es10.3,a,es10.3)") '  stiffness ',stiff,'  sub-steps ',fld_nsub, &
+    '  max |du - du_1000|/max |du_1000|: 1 step ',e1,'  20 sub-steps ',e20,'  leak ',fld_leak
+ call checkval(nsub1,1,0,nfail(1),'fld_substep_stiff = 0: one step')
+ call checkval(e20 < 0.1*e1,.true.,nfail(3),'20 sub-steps: much closer to the converged answer than one step')
+ call checkval(abs(fld_leak) < 1.e-12,.true.,nfail(4),'1000 sub-steps: energy conserved to round-off')
+ fld_substep_stiff = stiff*1.e-9
+ call solve_at(dt)
+ call checkval(fld_nsub,fld_max_substeps,0,nfail(5),'the number of sub-steps is capped at fld_max_substeps')
+ fld_substep_stiff = 0.
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_substep
 
 !-----------------------------------------------------------------------
 ! splitting off and one sweep at dt = 1e3 t_cell: far from converged,
