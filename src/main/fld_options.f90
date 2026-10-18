@@ -9,7 +9,8 @@ module fld_options
 ! Start-up checks on the flux-limited diffusion options of the Forgan et
 ! al. (2009) hybrid (icooling = 9): do FLD = 1 (explicit) and RADIATION=yes
 ! with the radiation module's gas coupling on are refused unless the
-! environment variable I_WILL_NOT_PUBLISH_CRAP is true, when they warn
+! environment variable I_WILL_NOT_PUBLISH_CRAP is true, when they warn;
+! do FLD = 2 on MPI or APR builds is always refused
 !
 ! :References: Forgan et al. (2009), MNRAS 394, 882
 !
@@ -54,14 +55,18 @@ end function env_is_true
 !-----------------------------------------------------------------------
 !+
 !  checks on the FLD options; ierr 0 fine, ierr_fld_warn, ierr_fld_fatal.
-!  bypass (the environment variable is true) turns fatal into warn
+!  bypass (the environment variable is true) turns fatal into warn,
+!  except for do FLD = 2 with mpi_on or apr_on (default .false.), which is
+!  always fatal: the implicit solve has no MPI exchange and assumes equal
+!  gas masses
 !+
 !-----------------------------------------------------------------------
-subroutine check_fld_options(mode,radiation_on,exchange_on,implicit_on,bypass,ierr,msg)
+subroutine check_fld_options(mode,radiation_on,exchange_on,implicit_on,bypass,ierr,msg,mpi_on,apr_on)
  integer,          intent(in)  :: mode
  logical,          intent(in)  :: radiation_on,exchange_on,implicit_on,bypass
  integer,          intent(out) :: ierr
  character(len=*), intent(out) :: msg
+ logical, optional, intent(in) :: mpi_on,apr_on
 
  ierr = 0
  msg  = ''
@@ -75,6 +80,20 @@ subroutine check_fld_options(mode,radiation_on,exchange_on,implicit_on,bypass,ie
     ierr = ierr_fld_fatal
  endif
  if (ierr == ierr_fld_fatal .and. bypass) ierr = ierr_fld_warn
+ if (mode == 2) then
+    if (present(mpi_on)) then
+       if (mpi_on) then
+          msg = 'do FLD = 2 is not supported with MPI (no exchange across domains); run without MPI'
+          ierr = ierr_fld_fatal
+       endif
+    endif
+    if (present(apr_on)) then
+       if (apr_on) then
+          msg = 'do FLD = 2 is not supported with APR (it assumes equal gas masses)'
+          ierr = ierr_fld_fatal
+       endif
+    endif
+ endif
 
 end subroutine check_fld_options
 
@@ -86,7 +105,7 @@ end subroutine check_fld_options
 !+
 !-----------------------------------------------------------------------
 subroutine check_fld_at_startup()
- use dim,             only:do_radiation
+ use dim,             only:do_radiation,mpi,use_apr
  use eos_stamatellos, only:fld_mode
  use io,              only:fatal,warning
  use radiation_utils, only:exchange_radiation_energy,implicit_radiation
@@ -97,7 +116,7 @@ subroutine check_fld_at_startup()
  call get_environment_variable(fld_bypass_env,envval,status=istat)
  if (istat /= 0) envval = ''
  call check_fld_options(fld_mode,do_radiation,exchange_radiation_energy,implicit_radiation, &
-                        env_is_true(envval),ierr,msg)
+                        env_is_true(envval),ierr,msg,mpi_on=mpi,apr_on=use_apr)
  if (ierr == ierr_fld_fatal) call fatal('read_infile',trim(msg))
  if (ierr == ierr_fld_warn)  call warning('read_infile',trim(msg))
 
