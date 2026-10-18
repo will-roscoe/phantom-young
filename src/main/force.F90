@@ -927,7 +927,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  use nicil,       only:nimhd_get_jcbcb,nimhd_get_dBdt
  use eos,         only:ieos,eos_is_non_ideal,icooling
  use eos_stamatellos, only:gradP_cool,getopac_opdep
- use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,get_k_fld
+ use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,get_k_fld,fld_mode
 #ifdef GRAVITY
  use kernel,      only:kernel_softening
  use ptmass,      only:use_regnbody
@@ -1223,7 +1223,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
     gradP_cooli=0.
     gradP_coolj=0.
     Gpot_cool(i) = 0.
-    if (doFLD) then
+    if (doFLD .and. fld_mode == 1) then   ! do FLD = 2 sets duFLD in derivs (fld_implicit)
        duFLD(i) = 0.
        kfldi = 0.
        kfldj = 0.
@@ -1231,7 +1231,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
     diffterm = 0.
     Ti=0.
     Tj=0.
-    if (doFLD .and. dt > 0.) then
+    if (doFLD .and. fld_mode == 1 .and. dt > 0.) then
        call get_k_fld(rhoi,eni,i,kfldi,Ti)
     endif
  endif
@@ -1613,7 +1613,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
              gradP_coolj = 0.
              if (usej) then
                 gradp_coolj = pmassj*prj*rho1j*rho1j*grkernj
-                if (doFLD .and. dt > 0.) then
+                if (doFLD .and. fld_mode == 1 .and. dt > 0.) then
                    if (n > maxcellcache) then
                       call get_k_fld(rhoj,enj,j,kfldj,Tj)
                    else
@@ -2533,7 +2533,7 @@ subroutine compute_cell(cell,listneigh,nneigh,Bevol,xyzh,vxyzu,fxyzu, &
  use part,            only:get_partinfo,iamgas,mhd,igas,isink,maxphase,massoftype,aprmassoftype
  use viscosity,       only:irealvisc,bulkvisc
  use eos,             only:iresistive_heating,icooling
- use eos_stamatellos, only:doFLD
+ use eos_stamatellos, only:doFLD,fld_mode
  use shock_capturing, only:beta,alphau,alphaB
 
  type(cellforce), intent(inout)  :: cell
@@ -2584,7 +2584,7 @@ subroutine compute_cell(cell,listneigh,nneigh,Bevol,xyzh,vxyzu,fxyzu, &
 
  realviscosity    = (irealvisc > 0)
  useresistiveheat = (iresistive_heating > 0)
- if (icooling == 9 .and. doFLD) kfldcache(:,1:min(nneigh,maxcellcache)) = -1.
+ if (icooling == 9 .and. doFLD .and. fld_mode == 1) kfldcache(:,1:min(nneigh,maxcellcache)) = -1.
 
  over_parts: do ip = 1,cell%npcell
 

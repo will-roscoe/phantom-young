@@ -352,7 +352,7 @@ energy (``maxvxyzu ≥ 4``).
      - ``beta_cool``, ``T0``
    * - 9
      - Radiative approximation (Lombardi et al.)
-     - ``EOS_file``, ``OD method``, ``Lstar``, ``do FLD``, ``Tfloor``
+     - ``EOS_file``, ``OD method``, ``Lstar``, ``do FLD``, ``fld_substep_stiff``, ``Tfloor``
    * - 10
      - Full molecular/atomic network
      - ``ufloor``, network files
@@ -386,8 +386,20 @@ Parameters active when ``icooling = 9``:
        0 = no irradiation.
    * - ``do FLD``
      - int
-     - 1
-     - Enable flux-limited diffusion: ``1`` yes, ``0`` no.
+     - 2
+     - Flux-limited diffusion: ``0`` off, ``1`` explicit, ``2`` implicit.
+       ``1`` stops the run at start-up unless the environment variable
+       ``I_WILL_NOT_PUBLISH_CRAP`` is true (``1``, ``true``, ``yes`` or ``on``),
+       when it only warns.
+   * - ``fld_substep_stiff``
+     - real
+     - 400
+     - Implicit FLD (``do FLD = 2``): the largest stiffness, in cell
+       diffusion times, of one backward-Euler sub-step. Each solve is cut
+       into ``ceiling(stiffness/fld_substep_stiff)`` equal sub-steps (at
+       most 10000); smaller values follow the time evolution more closely
+       and cost more. ``0`` takes the whole step at once; negative values
+       stop the run at start-up.
    * - ``Tfloor``
      - real
      - 5.0

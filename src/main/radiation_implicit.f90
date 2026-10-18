@@ -44,7 +44,7 @@ module radiation_implicit
  character(len=*), parameter :: label = 'radiation_implicit'
 
  private
- public :: do_radiation_implicit,ierr_failed_to_converge
+ public :: do_radiation_implicit,ierr_failed_to_converge,get_compacted_neighbour_list
  public :: tol_rad ! so that use radiation_implicit, only:tol_rad works
 
 contains

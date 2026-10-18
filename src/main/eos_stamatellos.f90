@@ -22,8 +22,12 @@ module eos_stamatellos
  real, allocatable, public :: gradP_cool(:)!gradP_cool=gradP/rho
  real, allocatable, public :: ttherm_store(:),ueqi_store(:),tau_store(:),du_store(:),duSPH(:)
  real, allocatable, public :: Gpot_cool(:),duFLD(:),lambda_FLD(:),urad_FLD(:)
+ real, allocatable, public :: owed_FLD(:)   ! do FLD = 2: energy per unit mass owed by neighbours (code units)
  character(len=25), public :: eos_file= 'eos_lom.dat' !default name of tabulated EOS file
  logical, public :: doFLD = .True.
+ integer, public :: fld_mode = 2   ! 0 off, 1 explicit, 2 implicit
+ integer, public :: fld_solver = 2 ! implicit solve: 2 Jacobi-preconditioned CG; 1 Gauss-Seidel (tests only, not a .in option)
+ real,    public :: fld_substep_stiff = 400. ! do FLD = 2: largest stiffness of one sub-step (0: one step)
  logical, public :: floor_energy = .False.
  integer, public :: iunitst=19
  integer,save :: nx,ny ! dimensions of optable read in
@@ -103,6 +107,10 @@ subroutine copy_coolra_stores(src,dst)
  if (allocated(lambda_FLD))   lambda_FLD(dst)   = lambda_FLD(src)
  if (allocated(urad_FLD))     urad_FLD(dst)     = urad_FLD(src)
  if (allocated(gradP_cool))   gradP_cool(dst)   = gradP_cool(src)
+ if (allocated(owed_FLD)) then   ! energy in transit: moved, not duplicated
+    owed_FLD(dst) = owed_FLD(src)
+    if (dst /= src) owed_FLD(src) = 0.
+ endif
 
 end subroutine copy_coolra_stores
 
@@ -120,6 +128,7 @@ subroutine init_coolra()
  call allocate_array('duSPH',duSPH,np)
  call allocate_array('Gpot_cool',Gpot_cool,np)
  call allocate_array('duFLD',duFLD,np)
+ call allocate_array('owed_FLD',owed_FLD,np)
  call allocate_array('lambda_fld',lambda_fld,np)
  call allocate_array('urad_FLD',urad_FLD,np)
  ! allocates and zeroes only if nothing has already populated them
@@ -130,6 +139,7 @@ subroutine init_coolra()
  Gpot_cool(:) = 0d0
  urad_FLD(:) = 0d0
  duFLD(:) = 0d0
+ owed_FLD(:) = 0d0
  if (doFLD) then
     print *, "Using Forgan+ 2009 hybrid cooling method (FLD)"
  else
@@ -149,6 +159,7 @@ subroutine finish_coolra()
  if (allocated(duSPH)) deallocate(duSPH)
  if (allocated(Gpot_cool)) deallocate(Gpot_cool)
  if (allocated(duFLD)) deallocate(duFLD)
+ if (allocated(owed_FLD)) deallocate(owed_FLD)
  if (allocated(lambda_fld)) deallocate(lambda_fld)
  if (allocated(urad_FLD)) deallocate(urad_FLD)
 ! close(iunitst)
@@ -373,8 +384,7 @@ end function search_table
 ! Calculate factor for FLD
 !
 subroutine get_k_fld(rhoi,eni,i,ki,Ti)
- use physcon,  only:c,fourpi
- use units,    only:unit_density,unit_ergg,unit_opacity,get_radconst_code
+ use units,    only:unit_density,unit_ergg,unit_opacity,get_radconst_code,get_c_code
  real,intent(in)    :: rhoi,eni
  integer,intent(in) :: i
  real               :: kappaBar,gmwi,kappaPart,eni_ergg,rhoi_g
@@ -387,8 +397,8 @@ subroutine get_k_fld(rhoi,eni,i,ki,Ti)
     rhoi_g = rhoi*unit_density
     call getopac_opdep(eni_ergg,rhoi_g,kappaBar,kappaPart,Ti,gmwi)
    kappaPart = kappaPart/unit_opacity
-    ! steboltz constant = 4pi/c * arad
-    ki = 16d0*(fourpi/c)*get_radconst_code()*lambda_FLD(i)*Ti**3 /rhoi/kappaPart
+    ! k = 16 sigma lambda T^3/(kappa rho) with sigma = a c/4, all in code units
+    ki = 4d0*get_c_code()*get_radconst_code()*lambda_FLD(i)*Ti**3 /rhoi/kappaPart
     if (isnan(ki)) then
        print *, "WARNING k isnan, lambda_FLDi,Ti,rhoi,kappaPart", &
              lambda_FLD(i), Ti, rhoi,kappaPart

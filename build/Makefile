@@ -505,13 +505,13 @@ SOURCES= physcon.f90 ${CONFIG} ${SRCKERNEL} io.F90 units.f90 \
          utils_sort.f90 utils_tables.f90 utils_gravwave.f90 \
          utils_sphNG.f90 utils_vectors.f90 utils_orbits.f90 utils_subgroup.f90 utils_datafiles.f90 datafiles.f90 \
          gitinfo.f90 random.f90 ${SRCEOS} ${SRCNIMHD} ${SRCGR} checkoptions.F90 io_control.f90 stopcond.f90 radial_stability.f90 \
-         viscosity.f90 damping.f90 shock_capturing.f90 mcfost_utils.f90 radiation_utils.f90 options.f90 \
+         viscosity.f90 damping.f90 shock_capturing.f90 mcfost_utils.f90 radiation_utils.f90 options.f90 fld_options.f90 \
          cons2primsolver.f90 cons2prim.f90 \
          centreofmass.f90 ${SRCPOT} evolve_massloading.f90 checkconserved.f90 \
          utils_filenames.f90 utils_summary.F90 ${SRCCHEM} ${SRCDUST} \
          mpi_memory.f90 mpi_derivs.F90 mpi_tree.F90 kdtree.F90 neigh_kdtree.f90 utils_healpix.f90 utils_raytracer.f90 \
          partinject.f90 utils_inject.f90 dust_formation.f90 ptmass_radiation.f90 ptmass_heating.f90 ptmass_tree.f90 \
-         utils_deriv.f90 utils_implicit.f90 radiation_implicit.f90 ${SRCTURB} \
+         utils_deriv.f90 utils_implicit.f90 radiation_implicit.f90 fld_implicit.f90 ${SRCTURB} \
          grids_for_setup.f90\
          ${SRCINJECT_DEPS} wind_equations.f90 wind.F90  \
          ${SRCKROME} memory.f90 ${SRCRW_DUMPS} ${SRCINJECT} injection.f90 \
