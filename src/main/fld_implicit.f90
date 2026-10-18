@@ -31,8 +31,11 @@ module fld_implicit
  real,    public :: fld_leak    = 0.    ! (Delta U + Delta owed)/(sum of |energy moved|), last solve
  real,    public :: fld_tcell   = 0.    ! min over solved particles of c_v,i / sum_j K_ij (code time)
  real,    public :: fld_stiff   = 0.    ! max over solved particles of sum_j K_ij dt_ij / c_v,i (dt_ij as solved)
+ integer, public :: fld_nsolves_run  = 0  ! solves since the start of this run
+ integer, public :: fld_nlimited_run = 0  ! of those, solves that reached the flux limiter
+ real,    public :: fld_resid_limited = 0. ! largest residual of a limited solve this run
  real, parameter, public :: fld_tol = 1.e-6
- public :: do_fld_implicit,fld_pair_asymmetry
+ public :: do_fld_implicit,fld_pair_asymmetry,fld_summary
 
  private
 
@@ -180,6 +183,11 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
 
  edep = 0.; edep_abs = 0.; unconverged = .false.
  call solve_step(1.,0,ncompact)
+ fld_nsolves_run = fld_nsolves_run + 1
+ if (unconverged) then
+    fld_nlimited_run = fld_nlimited_run + 1
+    fld_resid_limited = max(fld_resid_limited,fld_resid)
+ endif
  if (unconverged) call warning('fld_implicit','not converged at the maximum split depth; exchange from '// &
                                'the last iterate, flux-limited to keep T bounded',var='residual',val=fld_resid)
 
@@ -202,6 +210,22 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
     '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell)),'  stiffness ',fld_stiff
 
 end subroutine do_fld_implicit
+
+!-----------------------------------------------------------------------
+!+
+!  end-of-run line: the number of implicit solves and how many reached
+!  the flux limiter (not converged at the maximum split depth), with the
+!  worst residual among those; writes nothing if there were no solves
+!+
+!-----------------------------------------------------------------------
+subroutine fld_summary(iunit)
+ integer, intent(in) :: iunit
+
+ if (fld_nsolves_run <= 0) return
+ write(iunit,"(a,i10,a,i8,a,es10.3)") ' FLD implicit: solves ',fld_nsolves_run, &
+    '  flux-limited ',fld_nlimited_run,'  worst limited residual ',fld_resid_limited
+
+end subroutine fld_summary
 
 !-----------------------------------------------------------------------
 !+
