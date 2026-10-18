@@ -124,6 +124,8 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
  use extern_gr,      only:get_grforce_all
  use cooling,        only:ufloor,cooling_in_step,Tfloor
  use cooling_radapprox,only:radcool_evolve_ui
+ use eos_stamatellos, only:duFLD,fld_mode
+ use fld_implicit,   only:fld_du_over
  use timing,         only:increment_timer,get_timings,itimer_substep
  use growth,         only:check_dustprop
  use porosity,       only:get_filfac
@@ -475,7 +477,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
 !$omp shared(xyzmh_ptmass,vxyz_ptmass,fxyz_ptmass,nptmass,massoftype) &
 !$omp shared(dtsph,ufloor,icooling,Tfloor) &
 !$omp shared(ibin,ibin_old,twas,timei,ibin_wake) &
-!$omp shared(ibin_dts,nbinmax,u_half) &
+!$omp shared(ibin_dts,nbinmax,u_half,duFLD,fld_mode) &
 !$omp private(dti,hdti) &
 !$omp shared(rad,radpred,drad)&
 !$omp private(i,vxi,vyi,vzi) &
@@ -503,6 +505,7 @@ subroutine step(npart,nactive,t,dtsph,dtextforce,dtnew)
                 else
                    if (icooling == 9) then
                       vxyzu(1:3,i) = vxyzu(1:3,i) + dti*fxyzu(1:3,i)
+                      if (fld_mode == 2) duFLD(i) = fld_du_over(i,dti)   ! the energy the solve booked, over dti
                       call radcool_evolve_ui(vxyzu(4,i),dti,i,Tfloor,xyzh(4,i))
                    else
                       vxyzu(:,i) = vxyzu(:,i) + dti*fxyzu(:,i)

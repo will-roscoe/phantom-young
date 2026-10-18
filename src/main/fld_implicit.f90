@@ -39,7 +39,7 @@ module fld_implicit
  real,    public :: fld_resid_limited = 0. ! largest residual of a limited solve this run
  integer, public :: fld_ncapped_run  = 0  ! solves whose sub-steps were capped at fld_max_substeps this run
  real, parameter, public :: fld_tol = 1.e-6
- public :: do_fld_implicit,fld_pair_asymmetry,fld_summary
+ public :: do_fld_implicit,fld_pair_asymmetry,fld_summary,fld_du_over
 
  private
 
@@ -197,6 +197,7 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
        fld_nsub = max(1,ceiling(fld_stiff/fld_substep_stiff))
     endif
  endif
+ pcg(:) = 0.   ! CG: p_j of particles not solved must read as 0 in the product; only solved rows are written
  do isub=1,fld_nsub
     call solve_step(1./fld_nsub,0,ncompact)
  enddo
@@ -227,6 +228,26 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
     '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell)),'  stiffness ',fld_stiff
 
 end subroutine do_fld_implicit
+
+!-----------------------------------------------------------------------
+!+
+!  the du_FLD that delivers, over dti, the energy the last solve booked for
+!  particle i (owed applied plus exchange); duFLD(i) itself if i was not
+!  solved. With individual timesteps the corrector applies the rate over
+!  half the old step plus half the new one, not the step solved over
+!+
+!-----------------------------------------------------------------------
+real function fld_du_over(i,dti)
+ use eos_stamatellos, only:duFLD
+ integer, intent(in) :: i
+ real,    intent(in) :: dti
+
+ fld_du_over = duFLD(i)
+ if (.not.allocated(isol) .or. dti <= 0.) return
+ if (i > size(isol)) return
+ if (isol(i)) fld_du_over = (owapp(i) + Ein(i))/dti
+
+end function fld_du_over
 
 !-----------------------------------------------------------------------
 !+
@@ -365,7 +386,6 @@ subroutine solve_cg(f,ncompact,converged,resid)
  real    :: rz,rznew,pq,alpha,beta,rpre,s,q
 
  converged = .false.
- pcg(:) = 0.   ! p_j of particles not solved must read as 0 in the product
  !$omp parallel do default(none) shared(nsol,iord,ivar,Tnew,Tstar,Kij,dcg,cv,f) private(m,n,i,k)
  do m=1,nsol
     n = iord(m); i = ivar(3,n)

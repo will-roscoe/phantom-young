@@ -66,6 +66,7 @@ subroutine test_fld(ntests,npass)
     call test_fld_implicit_limit(ntests,npass)
     call test_fld_implicit_run_counts(ntests,npass)
     call test_fld_implicit_substep(ntests,npass)
+    call test_fld_implicit_bin_change(ntests,npass)
  enddo
  fld_solver = solver_old
  call test_fld_implicit_cg(ntests,npass)
@@ -389,7 +390,7 @@ subroutine test_fld_options(ntests,npass)
  use fld_options, only:env_is_true,check_fld_options,ierr_fld_warn,ierr_fld_fatal
  use testutils,   only:checkval,update_test_scores
  integer, intent(inout) :: ntests,npass
- integer :: nfail(13),ierr
+ integer :: nfail(18),ierr
  character(len=200) :: msg
 
  nfail(:) = 0
@@ -418,6 +419,16 @@ subroutine test_fld_options(ntests,npass)
  call checkval(ierr,ierr_fld_fatal,0,nfail(12),'implicit_radiation on with icooling 9 is fatal')
  call check_fld_options(2,.true.,.true.,.true.,.true.,ierr,msg)
  call checkval(ierr,ierr_fld_warn,0,nfail(13),'radiation keys on with the env var only warn')
+
+ ! do FLD = 2 on MPI or APR builds would run with wrong answers: always fatal
+ call check_fld_options(2,.false.,.false.,.false.,.true.,ierr,msg,mpi_on=.true.)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(14),'mode 2 on an MPI build is fatal, even with the env var')
+ call checkval(index(msg,'MPI') > 0,.true.,nfail(15),'MPI message names MPI')
+ call check_fld_options(2,.false.,.false.,.false.,.true.,ierr,msg,apr_on=.true.)
+ call checkval(ierr,ierr_fld_fatal,0,nfail(16),'mode 2 with APR is fatal, even with the env var')
+ call checkval(index(msg,'APR') > 0,.true.,nfail(17),'APR message names APR')
+ call check_fld_options(0,.false.,.false.,.false.,.false.,ierr,msg,mpi_on=.true.,apr_on=.true.)
+ call checkval(ierr,0,0,nfail(18),'mode 0 on MPI/APR builds is fine')
  call update_test_scores(ntests,nfail,npass)
 
 end subroutine test_fld_options
@@ -1319,6 +1330,48 @@ subroutine test_fld_implicit_substep(ntests,npass)
  call fld_box_done()
 
 end subroutine test_fld_implicit_substep
+
+!-----------------------------------------------------------------------
+! individual timesteps: the corrector applies du_FLD over half the old
+! step plus half the new one, which differ when the bin changes after the
+! solve. fld_du_over(i,dti) is the rate that delivers the energy the solve
+! booked over dti, so the exchange still sums to zero whatever the new bins
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_bin_change(ntests,npass)
+ use dim,             only:ind_timesteps
+ use eos_stamatellos, only:duFLD
+ use fld_implicit,    only:fld_du_over
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ use timestep,        only:dtmax
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2),i
+ real    :: dti,eraw,efix,eabs
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: energy delivered when the bin changes after the solve'
+ if (.not. ind_timesteps) then
+    if (id==master) write(*,"(a)") '  --> skipping (needs individual timesteps)'
+    return
+ endif
+ if (.not. fld_box('step',1.)) return
+ call solve_at(10.*t_cell())
+ eraw = 0.; efix = 0.; eabs = 0.
+ do i=1,npart
+    dti = 0.5*dtmax + 0.5*dtmax/2.**mod(i,3)   ! old bin 0; new bins 0, 1, 2
+    eraw = eraw + duFLD(i)*dti
+    efix = efix + fld_du_over(i,dti)*dti
+    eabs = eabs + abs(fld_du_over(i,dti)*dti)
+ enddo
+ if (id==master) write(*,"(a,es10.3,a,es10.3)") '  sum du dt / sum |du dt|: du_FLD as solved ',eraw/eabs, &
+    '  fld_du_over ',efix/eabs
+ nfail(:) = 0
+ call checkval(abs(eraw)/eabs > 1.e-3,.true.,nfail(1),'the solved rate over the corrector interval does not conserve')
+ call checkval(abs(efix)/eabs < 1.e-12,.true.,nfail(2),'fld_du_over delivers the booked energy: conserved')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_bin_change
 
 !-----------------------------------------------------------------------
 ! splitting off and one sweep at dt = 1e3 t_cell: far from converged,
