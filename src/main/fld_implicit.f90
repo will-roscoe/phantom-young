@@ -8,9 +8,10 @@ module fld_implicit
 !
 ! Implicit (backward-Euler) flux-limited diffusion for the Forgan et al.
 ! (2009) hybrid, do FLD = 2: an implicit diffusion solve produces duFLD,
-! which the T_eq relaxation in cooling_radapprox uses unchanged. The
-! linear solve is Gauss-Seidel (fld_solver = 1) or Jacobi-preconditioned
-! conjugate gradients (fld_solver = 2).
+! which the T_eq relaxation in cooling_radapprox uses unchanged. The step
+! is cut into sub-steps of stiffness at most fld_substep_stiff, and each
+! linear solve is by Jacobi-preconditioned conjugate gradients
+! (fld_solver = 2; Gauss-Seidel, fld_solver = 1, is kept for the tests).
 !
 ! :References: Forgan et al. (2009), MNRAS 394, 882
 !
@@ -27,6 +28,8 @@ module fld_implicit
  integer, public :: fld_split_depth = 10    ! maximum number of times a step may be halved
  integer, public :: fld_nsweeps = 0     ! sweeps (or CG iterations) used by the last solve, all sub-steps together
  integer, public :: fld_nsplits = 0     ! step splits in the last solve
+ integer, public :: fld_nsub    = 0     ! sub-steps of the last solve, ceiling(fld_stiff/fld_substep_stiff)
+ integer, parameter, public :: fld_max_substeps = 10000   ! most sub-steps one solve may take
  real,    public :: fld_resid   = 0.    ! max_i |r_i|/(c_v,i T'_i) of the last solve (largest over its sub-steps)
  real,    public :: fld_leak    = 0.    ! (Delta U + Delta owed)/(sum of |energy moved|), last solve
  real,    public :: fld_tcell   = 0.    ! min over solved particles of c_v,i / sum_j K_ij (code time)
@@ -34,6 +37,7 @@ module fld_implicit
  integer, public :: fld_nsolves_run  = 0  ! solves since the start of this run
  integer, public :: fld_nlimited_run = 0  ! of those, solves that reached the flux limiter
  real,    public :: fld_resid_limited = 0. ! largest residual of a limited solve this run
+ integer, public :: fld_ncapped_run  = 0  ! solves whose sub-steps were capped at fld_max_substeps this run
  real, parameter, public :: fld_tol = 1.e-6
  public :: do_fld_implicit,fld_pair_asymmetry,fld_summary
 
@@ -59,8 +63,10 @@ contains
 !    c_v,i (T'_i - T*_i) = sum_j K_ij dt_ij (T'_j - T'_i),
 !
 !  with inactive neighbours fixed at T'_j = T_j and T*_i = T_i +
-!  owed_FLD(i)/c_v,i (owed_FLD(i) is then zeroed), solved by Gauss-Seidel
-!  or, with fld_solver = 2, Jacobi-PCG. The exchange is applied
+!  owed_FLD(i)/c_v,i (owed_FLD(i) is then zeroed), over fld_nsub equal
+!  sub-steps (ceiling(fld_stiff/fld_substep_stiff), at most
+!  fld_max_substeps), each solved by Jacobi-PCG (Gauss-Seidel with
+!  fld_solver = 1). The exchange is applied
 !  pairwise, E_ij = K_ij dt_ij (T'_j - T'_i) to i and -E_ij to j (to
 !  owed_FLD(j) when j is not solved), so it conserves energy to round-off
 !  whatever the residual. If the sweep (iteration) cap is reached the step is halved
@@ -77,7 +83,7 @@ contains
 !-----------------------------------------------------------------------
 subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  use dim,                only:ind_timesteps
- use eos_stamatellos,    only:duFLD,owed_FLD
+ use eos_stamatellos,    only:duFLD,owed_FLD,fld_substep_stiff
  use io,                 only:warning,iverbose,id,master
  use part,               only:massoftype,igas,rhoh,ibin
  use radiation_implicit, only:get_compacted_neighbour_list
@@ -87,10 +93,10 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  real,    intent(in) :: dt
  integer, intent(in) :: npart
  real,    intent(in) :: xyzh(:,:),vxyzu(:,:)
- integer :: n,i,j,k,ncompact,ncompactlocal,istart,nneigh
+ integer :: n,i,j,k,ncompact,ncompactlocal,istart,nneigh,isub
  real    :: pmass,rhoi,dtij,rate,srate,sk,stiff,tcell,elost,dsum,dabs,ei
 
- fld_nsweeps = 0; fld_nsplits = 0; fld_resid = 0.; fld_leak = 0.; fld_tcell = 0.; fld_stiff = 0.
+ fld_nsweeps = 0; fld_nsplits = 0; fld_resid = 0.; fld_leak = 0.; fld_tcell = 0.; fld_stiff = 0.; fld_nsub = 0
  if (dt <= 0.) return
  call ensure_size(npart)
  call get_compacted_neighbour_list(xyzh,ivar,ijvar,ncompact,ncompactlocal)
@@ -182,7 +188,18 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  fld_tcell = tcell; fld_stiff = stiff
 
  edep = 0.; edep_abs = 0.; unconverged = .false.
- call solve_step(1.,0,ncompact)
+ fld_nsub = 1
+ if (fld_substep_stiff > 0.) then
+    if (fld_stiff > fld_max_substeps*fld_substep_stiff) then
+       fld_nsub = fld_max_substeps
+       fld_ncapped_run = fld_ncapped_run + 1
+    else
+       fld_nsub = max(1,ceiling(fld_stiff/fld_substep_stiff))
+    endif
+ endif
+ do isub=1,fld_nsub
+    call solve_step(1./fld_nsub,0,ncompact)
+ enddo
  fld_nsolves_run = fld_nsolves_run + 1
  if (unconverged) then
     fld_nlimited_run = fld_nlimited_run + 1
@@ -205,33 +222,35 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  !$omp end parallel do
  dsum = dsum + edep - elost; dabs = dabs + edep_abs + abs(elost)
  if (dabs > 0.) fld_leak = dsum/dabs
- if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i4,a,es10.3,a,es10.3,a,es10.3,a,es10.3)") &
-    ' fld_implicit: sweeps ',fld_nsweeps,'  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak, &
+ if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i6,a,i4,a,es10.3,a,es10.3,a,es10.3,a,es10.3)") &
+    ' fld_implicit: sweeps ',fld_nsweeps,'  sub-steps ',fld_nsub,'  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak, &
     '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell)),'  stiffness ',fld_stiff
 
 end subroutine do_fld_implicit
 
 !-----------------------------------------------------------------------
 !+
-!  end-of-run line: the number of implicit solves and how many reached
-!  the flux limiter (not converged at the maximum split depth), with the
-!  worst residual among those; writes nothing if there were no solves
+!  end-of-run line: the number of implicit solves, how many reached the
+!  flux limiter (not converged at the maximum split depth) with the worst
+!  residual among those, and how many had their sub-steps capped at
+!  fld_max_substeps; writes nothing if there were no solves
 !+
 !-----------------------------------------------------------------------
 subroutine fld_summary(iunit)
  integer, intent(in) :: iunit
 
  if (fld_nsolves_run <= 0) return
- write(iunit,"(a,i10,a,i8,a,es10.3)") ' FLD implicit: solves ',fld_nsolves_run, &
-    '  flux-limited ',fld_nlimited_run,'  worst limited residual ',fld_resid_limited
+ write(iunit,"(a,i10,a,i8,a,es10.3,a,i8)") ' FLD implicit: solves ',fld_nsolves_run, &
+    '  flux-limited ',fld_nlimited_run,'  worst limited residual ',fld_resid_limited, &
+    '  sub-steps capped ',fld_ncapped_run
 
 end subroutine fld_summary
 
 !-----------------------------------------------------------------------
 !+
 !  advance the solved particles from Tstar over f times each pair's
-!  dt_ij: solve (Gauss-Seidel, or CG with fld_solver = 2), and if the
-!  sweep cap is reached solve two halves in
+!  dt_ij: solve (CG, or Gauss-Seidel with fld_solver = 1), and if the
+!  iteration cap is reached solve two halves in
 !  turn (to fld_split_depth); then apply the exchange, which leaves the
 !  end temperature in Tstar
 !+
