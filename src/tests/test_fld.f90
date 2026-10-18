@@ -32,8 +32,10 @@ module testfld
 contains
 
 subroutine test_fld(ntests,npass)
- use io, only:id,master
+ use eos_stamatellos, only:fld_solver
+ use io,              only:id,master
  integer, intent(inout) :: ntests,npass
+ integer :: isolver,solver_old
 
  if (id==master) write(*,"(/,a,/)") '--> TESTING FLUX-LIMITED DIFFUSION LAMBDA'
  call test_limiter(ntests,npass)
@@ -45,19 +47,28 @@ subroutine test_fld(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
  call test_relaxation_inf_guard(ntests,npass)
- call test_fld_implicit_step(ntests,npass)
- call test_fld_implicit_explicit_limit(ntests,npass)
- call test_fld_implicit_zero_lambda(ntests,npass)
- call test_fld_implicit_fixed_boundary(ntests,npass)
- call test_fld_implicit_capped(ntests,npass)
- call test_fld_implicit_residual(ntests,npass)
- call test_fld_implicit_split(ntests,npass)
- call test_fld_implicit_conserve_unconverged(ntests,npass)
- call test_fld_implicit_owed(ntests,npass)
- call test_fld_implicit_derivs(ntests,npass)
- call test_fld_implicit_limit(ntests,npass)
+ call test_fld_solver_option(ntests,npass)
+ solver_old = fld_solver
+ do isolver=1,2
+    fld_solver = isolver
+    if (id==master) write(*,"(/,a,i1,a)") '--> implicit FLD tests with fld_solver = ',isolver, &
+                                           trim(merge(' (Gauss-Seidel)',' (Jacobi-PCG)  ',isolver==1))
+    call test_fld_implicit_step(ntests,npass)
+    call test_fld_implicit_explicit_limit(ntests,npass)
+    call test_fld_implicit_zero_lambda(ntests,npass)
+    call test_fld_implicit_fixed_boundary(ntests,npass)
+    call test_fld_implicit_capped(ntests,npass)
+    call test_fld_implicit_residual(ntests,npass)
+    call test_fld_implicit_split(ntests,npass)
+    call test_fld_implicit_conserve_unconverged(ntests,npass)
+    call test_fld_implicit_owed(ntests,npass)
+    call test_fld_implicit_derivs(ntests,npass)
+    call test_fld_implicit_limit(ntests,npass)
+    call test_fld_implicit_run_counts(ntests,npass)
+ enddo
+ fld_solver = solver_old
+ call test_fld_implicit_cg(ntests,npass)
  call test_fld_implicit_stiffness(ntests,npass)
- call test_fld_implicit_run_counts(ntests,npass)
 
 end subroutine test_fld
 
@@ -297,6 +308,64 @@ subroutine test_fld_switch(ntests,npass)
  call update_test_scores(ntests,nfail,npass)
 
 end subroutine test_fld_switch
+
+!-----------------------------------------------------------------------
+! fld_solver in the .in selects the implicit solver: 1 Gauss-Seidel
+! (also when the key is absent), 2 Jacobi-PCG; any other value is a read
+! error, which stops the run at start-up
+!-----------------------------------------------------------------------
+subroutine test_fld_solver_option(ntests,npass)
+ use cooling_radapprox, only:read_options_cooling_radapprox,write_options_cooling_radapprox
+ use eos_stamatellos,   only:fld_solver
+ use infile_utils,      only:inopts,open_db_from_file,close_db,write_inopt
+ use testutils,         only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ type(inopts), allocatable :: db(:)
+ integer :: nfail(7),solver_old,nerr,iopt
+ character(len=*), parameter :: fname = 'test_fld_solver.tmp'
+
+ nfail(:) = 0
+ solver_old = fld_solver
+ do iopt=1,2
+    nerr = read_solver(iopt)
+    call checkval(fld_solver,iopt,0,nfail(iopt),'fld_solver = '//achar(48+iopt)//' is read')
+    call checkval(nerr,0,0,nfail(2+iopt),'fld_solver = '//achar(48+iopt)//' is accepted')
+ enddo
+ nerr = read_solver(-1)
+ call checkval(fld_solver,1,0,nfail(5),'fld_solver absent defaults to 1 (Gauss-Seidel)')
+ call checkval(read_solver(0) > 0 .and. read_solver(3) > 0,.true.,nfail(6),'fld_solver = 0 or 3 is a read error')
+ ! the value written to the .in is read back
+ fld_solver = 2
+ open(newunit=iopt,file=fname,status='replace',form='formatted')
+ call write_options_cooling_radapprox(iopt)
+ close(iopt)
+ fld_solver = -1
+ nerr = 0
+ call open_db_from_file(db,fname,78,iopt)
+ call read_options_cooling_radapprox(db,nerr)
+ call close_db(db)
+ call checkval(fld_solver,2,0,nfail(7),'fld_solver written to the .in and read back')
+ fld_solver = solver_old
+ call update_test_scores(ntests,nfail,npass)
+
+contains
+
+! read a .in with fld_solver = val (no key when val < 0); returns the error count
+integer function read_solver(val)
+ integer, intent(in) :: val
+ integer :: lu,ierr
+ open(newunit=lu,file=fname,status='replace',form='formatted')
+ call write_inopt('eos_lom.dat','EOS_file','table',lu)
+ if (val >= 0) call write_inopt(val,'fld_solver','solver',lu)
+ close(lu)
+ fld_solver = -1
+ read_solver = 0
+ call open_db_from_file(db,fname,78,ierr)
+ call read_options_cooling_radapprox(db,read_solver)
+ call close_db(db)
+end function read_solver
+
+end subroutine test_fld_solver_option
 
 !-----------------------------------------------------------------------
 ! do FLD = 1 and RADIATION=yes + icooling 9 are refused at start-up unless
@@ -1135,7 +1204,7 @@ subroutine test_fld_implicit_run_counts(ntests,npass)
 10 close(iu)
  if (id==master) write(*,"(a,a)") '  summary: ',trim(line)
  call checkval(index(line,'flux-limited') > 0,.true.,nfail(4),'fld_summary reports the limited solves')
- fld_nsolves_run = 0; fld_nlimited_run = 0
+ fld_nsolves_run = 0; fld_nlimited_run = 0; fld_resid_limited = 0.
  open(newunit=iu,status='scratch',action='readwrite')
  call fld_summary(iu)
  rewind(iu)
@@ -1420,5 +1489,69 @@ subroutine test_fld_implicit_limit(ntests,npass)
  call fld_box_done()
 
 end subroutine test_fld_implicit_limit
+
+!-----------------------------------------------------------------------
+! the step at dt/t_cell = 1, 10, 100, 1000 with each solver: CG converges
+! without splitting, in under a quarter of the Gauss-Seidel sweeps at
+! 1000 (iterations ~ sqrt(dt/t_cell) against ~ dt/t_cell), to the same T' (each solve is within fld_tol T_hi of the exact
+! T' in max norm, and its exchange within fld_tol T_hi more, so the two
+! differ by at most 4 fld_tol T_hi); and a repeated CG solve is bitwise
+! identical
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_cg(ntests,npass)
+ use eos_stamatellos, only:duFLD,fld_solver
+ use fld_implicit,    only:fld_nsweeps,fld_nsplits,fld_resid,fld_leak,fld_tol
+ use io,              only:id,master
+ use part,            only:npart
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(5),m,i,solver_old,nsw(2,0:3)
+ real    :: tc,dt,dTmax,dTworst,resid_cg
+ real, allocatable :: T_gs(:),du_cg(:)
+ logical :: cg_clean
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: Jacobi-PCG against Gauss-Seidel'
+ if (.not. fld_box('step',1.)) return    ! 30 K and 60 K halves
+ solver_old = fld_solver
+ tc = t_cell()
+ allocate(T_gs(npart))
+ cg_clean = .true.; dTworst = 0.; resid_cg = 0.
+ do m=0,3
+    dt = 10.**m*tc
+    fld_solver = 1
+    call solve_at(dt)
+    nsw(1,m) = fld_nsweeps
+    do i=1,npart
+       T_gs(i) = T_after(i,dt)
+    enddo
+    fld_solver = 2
+    call solve_at(dt)
+    nsw(2,m) = fld_nsweeps
+    cg_clean = cg_clean .and. fld_nsplits == 0 .and. fld_resid < fld_tol
+    resid_cg = max(resid_cg,fld_resid)
+    dTmax = 0.
+    do i=1,npart
+       dTmax = max(dTmax,abs(T_after(i,dt) - T_gs(i)))
+    enddo
+    dTworst = max(dTworst,dTmax)
+    if (id==master) write(*,"(a,es8.1,a,i7,a,i6,a,i4,a,es10.3,a,es10.3,a,es10.3)") '  dt/t_cell ',10.**m, &
+       '  GS sweeps ',nsw(1,m),'  CG iterations ',nsw(2,m),'  splits ',fld_nsplits,'  residual ',fld_resid, &
+       '  leak ',fld_leak,'  max |T_CG - T_GS| (K) ',dTmax
+ enddo
+ dt = 100.*tc
+ call solve_at(dt)
+ du_cg = duFLD(1:npart)
+ call solve_at(dt)
+ nfail(:) = 0
+ call checkval(cg_clean,.true.,nfail(1),'CG: converged without splitting at dt/t_cell = 1 to 1000')
+ call checkval(dTworst <= 4.*fld_tol*60.,.true.,nfail(2),'CG: T'' = the Gauss-Seidel T'' within 4 fld_tol T_hi')
+ call checkval(4*nsw(2,3) < nsw(1,3),.true.,nfail(3),'CG: < 1/4 the Gauss-Seidel sweeps at 1000 t_cell')
+ call checkval(all(nsw(2,:) > 0),.true.,nfail(4),'CG: iterations counted in fld_nsweeps')
+ call checkval(all(duFLD(1:npart) == du_cg),.true.,nfail(5),'CG: a repeated solve is bitwise identical')
+ fld_solver = solver_old
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_cg
 
 end module testfld

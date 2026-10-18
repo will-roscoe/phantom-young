@@ -8,7 +8,9 @@ module fld_implicit
 !
 ! Implicit (backward-Euler) flux-limited diffusion for the Forgan et al.
 ! (2009) hybrid, do FLD = 2: an implicit diffusion solve produces duFLD,
-! which the T_eq relaxation in cooling_radapprox uses unchanged.
+! which the T_eq relaxation in cooling_radapprox uses unchanged. The
+! linear solve is Gauss-Seidel (fld_solver = 1) or Jacobi-preconditioned
+! conjugate gradients (fld_solver = 2).
 !
 ! :References: Forgan et al. (2009), MNRAS 394, 882
 !
@@ -16,13 +18,14 @@ module fld_implicit
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: boundary, dim, eos_stamatellos, io, kernel, part,
+! :Dependencies: boundary, dim, eos_stamatellos, io, kernel, omputils, part,
 !   radiation_implicit, timestep, timestep_ind, units
 !
+ use omputils, only:omp_thread_num
  implicit none
- integer, public :: fld_sweep_cap   = 20000   ! Gauss-Seidel sweeps allowed per (sub-)step before it is split
+ integer, public :: fld_sweep_cap   = 20000   ! sweeps (or CG iterations) allowed per (sub-)step before it is split
  integer, public :: fld_split_depth = 10    ! maximum number of times a step may be halved
- integer, public :: fld_nsweeps = 0     ! sweeps used by the last solve, all sub-steps together
+ integer, public :: fld_nsweeps = 0     ! sweeps (or CG iterations) used by the last solve, all sub-steps together
  integer, public :: fld_nsplits = 0     ! step splits in the last solve
  real,    public :: fld_resid   = 0.    ! max_i |r_i|/(c_v,i T'_i) of the last solve (largest over its sub-steps)
  real,    public :: fld_leak    = 0.    ! (Delta U + Delta owed)/(sum of |energy moved|), last solve
@@ -37,12 +40,13 @@ module fld_implicit
  private
 
  ! compacted neighbour list (as radiation_implicit), pair coefficients K_ij dt_ij, per-particle state
- integer, allocatable, save :: ivar(:,:),ijvar(:),irow(:)
+ integer, allocatable, save :: ivar(:,:),ijvar(:),irow(:),iord(:)
  real,    allocatable, save :: Kij(:),Told(:),Tstar(:),Tnew(:),kfld(:),cv(:),dtp(:),Ein(:),owapp(:),Rp(:),Rm(:),u0(:),rhoc(:)
  logical, allocatable, save :: need(:),solve(:),isol(:)
+ real,    allocatable, save :: rcg(:),zcg(:),pcg(:),qcg(:),dcg(:),psum(:)   ! CG vectors, diag(A), per-thread sums
  real,    save :: edep,edep_abs    ! energy per unit mass put into owed_FLD (sum, sum of moduli)
  logical, save :: unconverged
- integer, save :: ncompact_last = 0
+ integer, save :: ncompact_last = 0, nsol = 0   ! nsol rows of solved particles, iord(1:nsol), in particle order
 
 contains
 
@@ -55,10 +59,11 @@ contains
 !    c_v,i (T'_i - T*_i) = sum_j K_ij dt_ij (T'_j - T'_i),
 !
 !  with inactive neighbours fixed at T'_j = T_j and T*_i = T_i +
-!  owed_FLD(i)/c_v,i (owed_FLD(i) is then zeroed). The exchange is applied
+!  owed_FLD(i)/c_v,i (owed_FLD(i) is then zeroed), solved by Gauss-Seidel
+!  or, with fld_solver = 2, Jacobi-PCG. The exchange is applied
 !  pairwise, E_ij = K_ij dt_ij (T'_j - T'_i) to i and -E_ij to j (to
 !  owed_FLD(j) when j is not solved), so it conserves energy to round-off
-!  whatever the residual. If the sweep cap is reached the step is halved
+!  whatever the residual. If the sweep (iteration) cap is reached the step is halved
 !  and solved twice, recursively, up to fld_split_depth; beyond that it
 !  warns and applies the last iterate's exchange, flux-limited so that
 !  every T stays within the range of start temperatures. Writes
@@ -116,6 +121,14 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
        j = ijvar(ivar(2,n)+k)
        if (is_live_gas(j,xyzh)) need(j) = .true.
     enddo
+ enddo
+
+ ! the rows of the solved particles in particle order (the compact list's order depends on the threads)
+ nsol = 0
+ do i=1,npart
+    if (.not.isol(i)) cycle
+    nsol = nsol + 1
+    iord(nsol) = irow(i)
  enddo
 
  ! T and k (one table lookup per particle); for the solved ones c_v, dt_i and the owed energy
@@ -217,18 +230,24 @@ end subroutine fld_summary
 !-----------------------------------------------------------------------
 !+
 !  advance the solved particles from Tstar over f times each pair's
-!  dt_ij: solve, and if the sweep cap is reached solve two halves in
+!  dt_ij: solve (Gauss-Seidel, or CG with fld_solver = 2), and if the
+!  sweep cap is reached solve two halves in
 !  turn (to fld_split_depth); then apply the exchange, which leaves the
 !  end temperature in Tstar
 !+
 !-----------------------------------------------------------------------
 recursive subroutine solve_step(f,depth,ncompact)
+ use eos_stamatellos, only:fld_solver
  real,    intent(in) :: f
  integer, intent(in) :: depth,ncompact
  logical :: converged
  real    :: resid
 
- call solve_linear(f,ncompact,converged,resid)
+ if (fld_solver == 2) then
+    call solve_cg(f,ncompact,converged,resid)
+ else
+    call solve_linear(f,ncompact,converged,resid)
+ endif
  if (.not.converged .and. depth < fld_split_depth) then
     fld_nsplits = fld_nsplits + 1
     call solve_step(0.5*f,depth+1,ncompact)
@@ -305,10 +324,157 @@ end subroutine solve_linear
 
 !-----------------------------------------------------------------------
 !+
-!  max_i |r_i|/(c_v,i T'_i), r_i = c_v,i (T'_i - Tstar_i) - sum_j f Kij
-!  (T'_j - T'_i): the energy imbalance as a fraction of c_v,i T'_i, a
-!  heat content that is positive for every particle (T' > 0, c_v > 0)
-!  and does not depend on dt or on how strongly i is coupled
+!  the same linear solve as solve_linear, A T' = b over the solved
+!  particles with A_ii = c_v,i + sum_j f Kij, A_ij = -f Kij for solved j
+!  and b_i = c_v,i Tstar_i + sum_{j not solved} f Kij T_j (A is
+!  symmetric positive definite), by conjugate gradients preconditioned
+!  with diag(A), from T' = Tstar. Converged on the same criterion
+!  (residual_max < fld_tol), checked once the recurrence residual is
+!  below fld_tol; if the check fails the recurrence restarts from the
+!  true residual. The iterates are not bounded (no maximum principle).
+!  Each iteration counts as one sweep in fld_nsweeps. The sums are taken
+!  per thread in a fixed order, so for a fixed thread count the result
+!  is bitwise reproducible
+!+
+!-----------------------------------------------------------------------
+subroutine solve_cg(f,ncompact,converged,resid)
+ real,    intent(in)  :: f
+ integer, intent(in)  :: ncompact
+ logical, intent(out) :: converged
+ real,    intent(out) :: resid
+ integer :: m,n,i,k,istart,nneigh,it,ith
+ real    :: rz,rznew,pq,alpha,beta,rpre,s,q
+
+ converged = .false.
+ pcg(:) = 0.   ! p_j of particles not solved must read as 0 in the product
+ !$omp parallel do default(none) shared(nsol,iord,ivar,Tnew,Tstar,Kij,dcg,cv,f) private(m,n,i,k)
+ do m=1,nsol
+    n = iord(m); i = ivar(3,n)
+    Tnew(i) = Tstar(i)
+    dcg(i) = cv(i)
+    do k=1,ivar(1,n)
+       dcg(i) = dcg(i) + f*Kij(ivar(2,n)+k)
+    enddo
+ enddo
+ !$omp end parallel do
+ call cg_restart(f,ncompact,rz,rpre)
+ if (rpre < fld_tol) then
+    resid = residual_max(f,ncompact)
+    converged = (resid < fld_tol)
+    if (converged) return
+ endif
+ do it=1,fld_sweep_cap
+    ! q = A p and p.q
+    psum(:) = 0.
+    !$omp parallel default(none) shared(nsol,iord,ivar,ijvar,Kij,dcg,pcg,qcg,f,psum) &
+    !$omp private(m,n,i,k,istart,nneigh,q,s,ith)
+    s = 0.
+    !$omp do schedule(static)
+    do m=1,nsol
+       n = iord(m); i = ivar(3,n); nneigh = ivar(1,n); istart = ivar(2,n)
+       q = dcg(i)*pcg(i)
+       do k=1,nneigh
+          q = q - f*Kij(istart+k)*pcg(ijvar(istart+k))
+       enddo
+       qcg(i) = q
+       s = s + pcg(i)*q
+    enddo
+    !$omp end do
+    ith = omp_thread_num() + 1
+    psum(ith) = s
+    !$omp end parallel
+    pq = sum(psum)
+    if (.not.(pq > 0.)) exit
+    alpha = rz/pq
+    ! T' += alpha p, r -= alpha q, z = r/diag(A), r.z and the scaled max |r|
+    psum(:) = 0.; rpre = 0.
+    !$omp parallel default(none) shared(nsol,iord,ivar,Tnew,pcg,qcg,rcg,zcg,dcg,cv,alpha,psum,rpre) &
+    !$omp private(m,n,i,s,ith)
+    s = 0.
+    !$omp do schedule(static) reduction(max:rpre)
+    do m=1,nsol
+       n = iord(m); i = ivar(3,n)
+       Tnew(i) = Tnew(i) + alpha*pcg(i)
+       rcg(i)  = rcg(i) - alpha*qcg(i)
+       zcg(i)  = rcg(i)/dcg(i)
+       s = s + rcg(i)*zcg(i)
+       rpre = max(rpre,abs(rcg(i))/(cv(i)*abs(Tnew(i))))
+    enddo
+    !$omp end do
+    ith = omp_thread_num() + 1
+    psum(ith) = s
+    !$omp end parallel
+    rznew = sum(psum)
+    fld_nsweeps = fld_nsweeps + 1
+    if (rpre < fld_tol) then
+       resid = residual_max(f,ncompact)
+       if (resid < fld_tol) then
+          converged = .true.
+          return
+       endif
+       call cg_restart(f,ncompact,rz,rpre)   ! the recurrence has drifted from the true residual
+       cycle
+    endif
+    beta = rznew/rz
+    rz = rznew
+    !$omp parallel do default(none) shared(nsol,iord,ivar,pcg,zcg,beta) private(m,n,i) schedule(static)
+    do m=1,nsol
+       n = iord(m); i = ivar(3,n)
+       pcg(i) = zcg(i) + beta*pcg(i)
+    enddo
+    !$omp end parallel do
+ enddo
+ resid = residual_max(f,ncompact)
+ converged = (resid < fld_tol)
+
+end subroutine solve_cg
+
+!-----------------------------------------------------------------------
+!+
+!  (re)start CG at the current Tnew: r = b - A T' (minus the residual of
+!  residual_max), z = p = r/diag(A); returns r.z (summed per thread in a
+!  fixed order) and max_i |r_i|/(c_v,i |T'_i|)
+!+
+!-----------------------------------------------------------------------
+subroutine cg_restart(f,ncompact,rz,rmax)
+ real,    intent(in)  :: f
+ integer, intent(in)  :: ncompact
+ real,    intent(out) :: rz,rmax
+ integer :: m,n,i,k,istart,nneigh,ith
+ real    :: r,s
+
+ psum(:) = 0.; rmax = 0.
+ !$omp parallel default(none) shared(nsol,iord,ivar,ijvar,Kij,cv,Tstar,Tnew,f,rcg,zcg,pcg,dcg,psum,rmax) &
+ !$omp private(m,n,i,k,istart,nneigh,r,s,ith)
+ s = 0.
+ !$omp do schedule(static) reduction(max:rmax)
+ do m=1,nsol
+    n = iord(m); i = ivar(3,n); nneigh = ivar(1,n); istart = ivar(2,n)
+    r = cv(i)*(Tstar(i) - Tnew(i))
+    do k=1,nneigh
+       r = r + f*Kij(istart+k)*(Tnew(ijvar(istart+k)) - Tnew(i))
+    enddo
+    rcg(i) = r
+    zcg(i) = r/dcg(i)
+    pcg(i) = zcg(i)
+    s = s + r*zcg(i)
+    rmax = max(rmax,abs(r)/(cv(i)*abs(Tnew(i))))
+ enddo
+ !$omp end do
+ ith = omp_thread_num() + 1
+ psum(ith) = s
+ !$omp end parallel
+ rz = sum(psum)
+
+end subroutine cg_restart
+
+!-----------------------------------------------------------------------
+!+
+!  max_i |r_i|/(c_v,i |T'_i|), r_i = c_v,i (T'_i - Tstar_i) - sum_j f
+!  Kij (T'_j - T'_i): the energy imbalance as a fraction of c_v,i T'_i, a
+!  heat content that is positive for every particle (T' > 0, c_v > 0;
+!  |T'| so that a negative CG iterate cannot pass) and does not depend
+!  on dt or on how strongly i is coupled
 !+
 !-----------------------------------------------------------------------
 real function residual_max(f,ncompact)
@@ -327,7 +493,7 @@ real function residual_max(f,ncompact)
     do k=1,nneigh
        r = r - f*Kij(istart+k)*(Tnew(ijvar(istart+k)) - Tnew(i))
     enddo
-    rmax = max(rmax,abs(r)/(cv(i)*Tnew(i)))
+    rmax = max(rmax,abs(r)/(cv(i)*abs(Tnew(i))))
  enddo
  !$omp end parallel do
  residual_max = rmax
@@ -566,7 +732,8 @@ end function heat_capacity
 !-----------------------------------------------------------------------
 !+
 !  work arrays for n particles, grown (with 10% headroom) as npart grows;
-!  the neighbour list is sized as radiation_implicit sizes its own
+!  the neighbour list is sized as radiation_implicit sizes its own, and
+!  the per-thread sums to the current maximum thread count
 !+
 !-----------------------------------------------------------------------
 subroutine ensure_size(n)
@@ -574,18 +741,27 @@ subroutine ensure_size(n)
  use part,    only:hfact
  use physcon, only:pi
  integer, intent(in) :: n
- integer :: nalloc,nneigh_average,icompactmax
+ integer :: nalloc,nneigh_average,icompactmax,nthreads
+ !$ integer, external :: omp_get_max_threads
 
+ nthreads = 1
+ !$ nthreads = omp_get_max_threads()
+ if (allocated(psum)) then
+    if (size(psum) < nthreads) deallocate(psum)
+ endif
+ if (.not.allocated(psum)) allocate(psum(nthreads))
  if (allocated(ivar)) then
     if (size(ivar,2) >= n) return
-    deallocate(ivar,ijvar,irow,Kij,Told,Tstar,Tnew,kfld,cv,dtp,Ein,owapp,Rp,Rm,u0,rhoc,need,solve,isol)
+    deallocate(ivar,ijvar,irow,iord,Kij,Told,Tstar,Tnew,kfld,cv,dtp,Ein,owapp,Rp,Rm,u0,rhoc,need,solve,isol)
+    deallocate(rcg,zcg,pcg,qcg,dcg)
  endif
  nalloc = n + n/10
  nneigh_average = int(4./3.*pi*(radkern*hfact)**3) + 1
  icompactmax = int(min(1.2*10.*nneigh_average*real(nalloc),real(huge(0))))
- allocate(ivar(3,nalloc),ijvar(icompactmax),Kij(icompactmax),irow(nalloc))
+ allocate(ivar(3,nalloc),ijvar(icompactmax),Kij(icompactmax),irow(nalloc),iord(nalloc))
  allocate(Told(nalloc),Tstar(nalloc),Tnew(nalloc),kfld(nalloc),cv(nalloc),dtp(nalloc),Ein(nalloc),owapp(nalloc))
  allocate(Rp(nalloc),Rm(nalloc),u0(nalloc),rhoc(nalloc),need(nalloc),solve(nalloc),isol(nalloc))
+ allocate(rcg(nalloc),zcg(nalloc),pcg(nalloc),qcg(nalloc),dcg(nalloc))
 
 end subroutine ensure_size
 

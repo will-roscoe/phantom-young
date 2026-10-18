@@ -26,6 +26,7 @@ module eos_stamatellos
  character(len=25), public :: eos_file= 'eos_lom.dat' !default name of tabulated EOS file
  logical, public :: doFLD = .True.
  integer, public :: fld_mode = 2   ! 0 off, 1 explicit, 2 implicit
+ integer, public :: fld_solver = 1 ! implicit solve: 1 Gauss-Seidel, 2 Jacobi-preconditioned CG
  logical, public :: floor_energy = .False.
  integer, public :: iunitst=19
  integer,save :: nx,ny ! dimensions of optable read in
