@@ -64,11 +64,11 @@ subroutine test_fld(ntests,npass)
     call test_fld_implicit_owed(ntests,npass)
     call test_fld_implicit_derivs(ntests,npass)
     call test_fld_implicit_limit(ntests,npass)
+    call test_fld_implicit_run_counts(ntests,npass)
  enddo
  fld_solver = solver_old
  call test_fld_implicit_cg(ntests,npass)
  call test_fld_implicit_stiffness(ntests,npass)
- call test_fld_implicit_run_counts(ntests,npass)
 
 end subroutine test_fld
 
@@ -1204,7 +1204,7 @@ subroutine test_fld_implicit_run_counts(ntests,npass)
 10 close(iu)
  if (id==master) write(*,"(a,a)") '  summary: ',trim(line)
  call checkval(index(line,'flux-limited') > 0,.true.,nfail(4),'fld_summary reports the limited solves')
- fld_nsolves_run = 0; fld_nlimited_run = 0
+ fld_nsolves_run = 0; fld_nlimited_run = 0; fld_resid_limited = 0.
  open(newunit=iu,status='scratch',action='readwrite')
  call fld_summary(iu)
  rewind(iu)
