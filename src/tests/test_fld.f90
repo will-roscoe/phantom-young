@@ -57,6 +57,7 @@ subroutine test_fld(ntests,npass)
  call test_fld_implicit_derivs(ntests,npass)
  call test_fld_implicit_limit(ntests,npass)
  call test_fld_implicit_stiffness(ntests,npass)
+ call test_fld_implicit_run_counts(ntests,npass)
 
 end subroutine test_fld
 
@@ -1094,6 +1095,58 @@ subroutine test_fld_implicit_stiffness(ntests,npass)
  call fld_box_done()
 
 end subroutine test_fld_implicit_stiffness
+
+!-----------------------------------------------------------------------
+! the run totals for the end-of-run summary: every solve is counted,
+! and a solve that reaches the limiter is counted as limited with its
+! residual; fld_summary reports them
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_run_counts(ntests,npass)
+ use fld_implicit, only:fld_sweep_cap,fld_split_depth,fld_resid,fld_summary, &
+                        fld_nsolves_run,fld_nlimited_run,fld_resid_limited
+ use io,           only:id,master
+ use testutils,    only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(5),ns,nl,cap_old,depth_old,iu
+ real    :: tc
+ character(len=200) :: line
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: run totals for the end-of-run summary'
+ if (.not. fld_box('step',1.)) return
+ tc = t_cell()
+ nfail(:) = 0
+ ns = fld_nsolves_run; nl = fld_nlimited_run
+ call solve_at(10.*tc)
+ call checkval(fld_nsolves_run == ns+1 .and. fld_nlimited_run == nl,.true.,nfail(1), &
+               'a converged solve is counted, not as limited')
+ cap_old = fld_sweep_cap; depth_old = fld_split_depth
+ fld_sweep_cap = 1; fld_split_depth = 0
+ call solve_at(1.e3*tc)
+ fld_sweep_cap = cap_old; fld_split_depth = depth_old
+ call checkval(fld_nsolves_run == ns+2 .and. fld_nlimited_run == nl+1,.true.,nfail(2), &
+               'a solve that reaches the limiter is counted as limited')
+ call checkval(fld_resid_limited >= fld_resid .and. fld_resid_limited > 0.,.true.,nfail(3), &
+               'the worst limited residual is kept')
+ open(newunit=iu,status='scratch',action='readwrite')
+ call fld_summary(iu)
+ rewind(iu)
+ line = ''
+ read(iu,"(a)",end=10) line
+10 close(iu)
+ if (id==master) write(*,"(a,a)") '  summary: ',trim(line)
+ call checkval(index(line,'flux-limited') > 0,.true.,nfail(4),'fld_summary reports the limited solves')
+ fld_nsolves_run = 0; fld_nlimited_run = 0
+ open(newunit=iu,status='scratch',action='readwrite')
+ call fld_summary(iu)
+ rewind(iu)
+ line = ''
+ read(iu,"(a)",end=20) line
+20 close(iu)
+ call checkval(len_trim(line) == 0,.true.,nfail(5),'fld_summary is silent when nothing was solved')
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_run_counts
 
 !-----------------------------------------------------------------------
 ! a sweep cap of 5 at dt = 10 t_cell: the solve converges by splitting
