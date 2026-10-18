@@ -30,6 +30,7 @@ module fld_implicit
  real,    public :: fld_resid   = 0.    ! max_i |r_i|/(c_v,i T'_i) of the last solve (largest over its sub-steps)
  real,    public :: fld_leak    = 0.    ! (Delta U + Delta owed)/(sum of |energy moved|), last solve
  real,    public :: fld_tcell   = 0.    ! min over solved particles of c_v,i / sum_j K_ij (code time)
+ real,    public :: fld_stiff   = 0.    ! max over solved particles of sum_j K_ij dt_ij / c_v,i (dt_ij as solved)
  real, parameter, public :: fld_tol = 1.e-6
  public :: do_fld_implicit,fld_pair_asymmetry
 
@@ -65,7 +66,7 @@ contains
 !  every T stays within the range of start temperatures. Writes
 !  duFLD(i) = (owed applied + sum_j E_ij)/dt_i for the solved particles
 !  (others' duFLD is left as it was), and sets fld_nsweeps, fld_nsplits,
-!  fld_resid, fld_leak and fld_tcell. owed_FLD of particles no longer
+!  fld_resid, fld_leak, fld_tcell and fld_stiff. owed_FLD of particles no longer
 !  live gas is dropped and counted in fld_leak. Needs the tree and
 !  lambda_FLD from the density pass of the same step; all gas particles
 !  must have the same mass.
@@ -84,9 +85,9 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  integer, intent(in) :: npart
  real,    intent(in) :: xyzh(:,:),vxyzu(:,:)
  integer :: n,i,j,k,ncompact,ncompactlocal,istart,nneigh
- real    :: pmass,rhoi,dtij,rate,srate,tcell,elost,dsum,dabs,ei
+ real    :: pmass,rhoi,dtij,rate,srate,sk,stiff,tcell,elost,dsum,dabs,ei
 
- fld_nsweeps = 0; fld_nsplits = 0; fld_resid = 0.; fld_leak = 0.; fld_tcell = 0.
+ fld_nsweeps = 0; fld_nsplits = 0; fld_resid = 0.; fld_leak = 0.; fld_tcell = 0.; fld_stiff = 0.
  if (dt <= 0.) return
  call ensure_size(npart)
  call get_compacted_neighbour_list(xyzh,ivar,ijvar,ncompact,ncompactlocal)
@@ -152,14 +153,14 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  !$omp end parallel do
 
  ! pair coefficients K_ij dt_ij, and the shortest cell diffusion time c_v,i/sum_j K_ij
- tcell = huge(0.)
+ tcell = huge(0.); stiff = 0.
  !$omp parallel do default(none) &
  !$omp shared(ncompact,ivar,ijvar,solve,need,isol,xyzh,pmass,Kij,dtp,cv) &
- !$omp private(n,i,j,k,istart,nneigh,dtij,rate,srate) reduction(min:tcell)
+ !$omp private(n,i,j,k,istart,nneigh,dtij,rate,srate,sk) reduction(min:tcell) reduction(max:stiff)
  do n=1,ncompact
     if (.not.solve(n)) cycle
     i = ivar(3,n); nneigh = ivar(1,n); istart = ivar(2,n)
-    srate = 0.
+    srate = 0.; sk = 0.
     do k=1,nneigh
        Kij(istart+k) = 0.
        j = ijvar(istart+k)
@@ -169,11 +170,13 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
        if (isol(j)) dtij = min(dtp(i),dtp(j))   ! an inactive neighbour always has the longer step
        Kij(istart+k) = rate*dtij
        srate = srate + rate
+       sk = sk + Kij(istart+k)
     enddo
     if (srate > 0.) tcell = min(tcell,cv(i)/srate)
+    stiff = max(stiff,sk/cv(i))
  enddo
  !$omp end parallel do
- fld_tcell = tcell
+ fld_tcell = tcell; fld_stiff = stiff
 
  edep = 0.; edep_abs = 0.; unconverged = .false.
  call solve_step(1.,0,ncompact)
@@ -194,9 +197,9 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  !$omp end parallel do
  dsum = dsum + edep - elost; dabs = dabs + edep_abs + abs(elost)
  if (dabs > 0.) fld_leak = dsum/dabs
- if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i4,a,es10.3,a,es10.3,a,es10.3)") &
+ if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i4,a,es10.3,a,es10.3,a,es10.3,a,es10.3)") &
     ' fld_implicit: sweeps ',fld_nsweeps,'  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak, &
-    '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell))
+    '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell)),'  stiffness ',fld_stiff
 
 end subroutine do_fld_implicit
 

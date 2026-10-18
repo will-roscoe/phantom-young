@@ -67,6 +67,7 @@ subroutine test_fld(ntests,npass)
  enddo
  fld_solver = solver_old
  call test_fld_implicit_cg(ntests,npass)
+ call test_fld_implicit_stiffness(ntests,npass)
 
 end subroutine test_fld
 
@@ -1127,6 +1128,41 @@ subroutine test_fld_implicit_residual(ntests,npass)
  call fld_box_done()
 
 end subroutine test_fld_implicit_residual
+
+!-----------------------------------------------------------------------
+! the stiffness max_i sum_j K_ij dt_ij / c_v,i uses each particle's own
+! step: dt/t_cell when every particle is on the step passed in, and
+! dt_i/t_cell when (individual timesteps) the particles are on a longer one
+!-----------------------------------------------------------------------
+subroutine test_fld_implicit_stiffness(ntests,npass)
+ use dim,          only:ind_timesteps
+ use fld_implicit, only:do_fld_implicit,fld_stiff,fld_tcell
+ use io,           only:id,master
+ use part,         only:npart,xyzh,vxyzu,ibin
+ use testutils,    only:checkval,update_test_scores
+ use timestep,     only:dtmax
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2)
+ real    :: tc
+
+ if (id==master) write(*,"(/,a)") '--> FLD implicit: stiffness diagnostic'
+ if (.not. fld_box('step',1.)) return
+ tc = t_cell()
+ nfail(:) = 0
+ call solve_at(10.*tc)
+ if (id==master) write(*,"(a,es12.5)") '  dt = 10 t_cell: stiffness ',fld_stiff
+ call checkval(fld_stiff,10.*tc/fld_tcell,1.e-12,nfail(1),'stiffness = dt/t_cell, all on the step')
+ if (ind_timesteps) then
+    dtmax = 10.*tc; ibin(1:npart) = 0
+    call do_fld_implicit(0.25*dtmax,npart,xyzh,vxyzu)
+    if (id==master) write(*,"(a,es12.5,a,es12.5)") '  bin 0, dt passed dtmax/4: stiffness ',fld_stiff, &
+       '  dt/t_cell ',0.25*dtmax/fld_tcell
+    call checkval(fld_stiff,dtmax/fld_tcell,1.e-12,nfail(2),'stiffness uses dt_i, not the dt passed in')
+ endif
+ call update_test_scores(ntests,nfail,npass)
+ call fld_box_done()
+
+end subroutine test_fld_implicit_stiffness
 
 !-----------------------------------------------------------------------
 ! a sweep cap of 5 at dt = 10 t_cell: the solve converges by splitting
