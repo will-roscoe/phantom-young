@@ -940,6 +940,7 @@ subroutine endrun
  use part,     only:nptmass
  use eos,      only:ieos,finish_eos
  use ptmass,   only:finish_ptmass
+ use fld_implicit, only:fld_summary
  integer           :: ierr
  character(len=10) :: finishdate, finishtime
 
@@ -954,6 +955,7 @@ subroutine endrun
  finishdate = finishdate(7:8)//'/'//finishdate(5:6)//'/'//finishdate(1:4)
  finishtime = finishtime(1:2)//':'//finishtime(3:4)//':'//finishtime(5:)
  write(iprint,"(/,' Run finished on ',a,' at ',a,/)") finishdate,finishtime
+ call fld_summary(iprint)
 !
 !--print out total code timings:
 !
