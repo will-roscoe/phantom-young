@@ -47,6 +47,7 @@ subroutine test_fld(ntests,npass)
  call test_fld_conservation(ntests,npass)
  call test_lambda_inactive(ntests,npass)
  call test_relaxation_inf_guard(ntests,npass)
+ call test_relaxation_floor(ntests,npass)
  call test_fld_substep_option(ntests,npass)
  solver_old = fld_solver
  do isolver=1,2
@@ -305,6 +306,8 @@ subroutine test_fld_switch(ntests,npass)
  call read_options_cooling_radapprox(db,nerr)
  call close_db(db)
  call checkval(fld_mode,2,0,nfail(7),'do FLD absent defaults to 2')
+ open(newunit=lu,file=fname,status='old')
+ close(lu,status='delete')
  doFLD = doFLD_old
  fld_mode = fld_mode_old
  call update_test_scores(ntests,nfail,npass)
@@ -758,7 +761,7 @@ subroutine test_relaxation_inf_guard(ntests,npass)
  ueqi_store(1)   = 1.
  u0 = 2.
  u  = u0
- call radcool_evolve_ui(u,-1.e3,1,1.e4,1.)   ! dt/t_therm = -1e6; floor (10 K) far below u0
+ call radcool_evolve_ui(u,-1.e3,1,10.,1.)   ! dt/t_therm = -1e6; floor (10 K) far below u0
 
  nfail(:) = 0
  call checkval(u <= huge(u) .and. u == u,.true.,nfail(1),'backward relaxation stays finite')
@@ -769,6 +772,57 @@ subroutine test_relaxation_inf_guard(ntests,npass)
  ieos = ieos_old
 
 end subroutine test_relaxation_inf_guard
+
+!-----------------------------------------------------------------------
+! a forward relaxation towards u_eq below the floor stops at u(Tfloor),
+! with Tfloor the floor temperature in K
+!-----------------------------------------------------------------------
+subroutine test_relaxation_floor(ntests,npass)
+ use cooling_radapprox, only:radcool_evolve_ui
+ use datafiles,         only:find_phantom_datafile
+ use eos,               only:ieos,init_eos,finish_eos
+ use eos_stamatellos,   only:eos_file,ttherm_store,ueqi_store,getintenerg_opdep
+ use io,                only:id,master
+ use part,              only:massoftype,igas,rhoh
+ use physcon,           only:solarm,au
+ use testutils,         only:checkval,update_test_scores
+ use units,             only:set_units,unit_density,unit_ergg
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(1),ierr,ieos_old
+ real    :: u,ufloor_cgs,massoftype_old
+ real, parameter :: Tfloor = 10.
+ character(len=120) :: pdir
+
+ if (id==master) write(*,"(/,a)") '--> relaxation below the floor stops at u(Tfloor)'
+ call get_environment_variable('PHANTOM_DIR',pdir)
+ if (len_trim(pdir) == 0 .or. len_trim(find_phantom_datafile(eos_file,'eos/lombardi')) == 0) then
+    if (id==master) write(*,"(a)") '  --> skipping relaxation floor test (no opacity table)'
+    return
+ endif
+ ieos_old = ieos; ieos = 24
+ call set_units(mass=solarm,dist=au,G=1.d0)
+ call init_eos(ieos,ierr)
+ if (ierr /= 0) then
+    if (id==master) write(*,"(a)") '  --> skipping relaxation floor test (init_eos failed)'
+    ieos = ieos_old
+    return
+ endif
+ massoftype_old = massoftype(igas)
+ massoftype(igas) = 1.e-6   ! with h = 1: rho ~ 1e-12 g/cm^3, inside the table
+ call getintenerg_opdep(Tfloor,rhoh(1.,massoftype(igas))*unit_density,ufloor_cgs)
+ ttherm_store(1) = 1.e-3
+ ueqi_store(1)   = 1.e-3*ufloor_cgs/unit_ergg
+ u = 2.
+ call radcool_evolve_ui(u,1.e3,1,Tfloor,1.)   ! dt/t_therm = 1e6: u -> u_eq, below the floor
+
+ nfail(:) = 0
+ call checkval(u,ufloor_cgs/unit_ergg,1.e-12,nfail(1),'u stops at u(Tfloor)')
+ call update_test_scores(ntests,nfail,npass)
+ massoftype(igas) = massoftype_old
+ call finish_eos(ieos,ierr)
+ ieos = ieos_old
+
+end subroutine test_relaxation_floor
 ! a 24^3 box (periodic in periodic builds) at rho = 1e-12 g/cc with the
 ! FLD hybrid on, T(x) a 30 K / 30(1+amp) K step or 30(1 + amp sin) K, and
 ! lambda from a density pass. Returns .false. (the test skips) without the
