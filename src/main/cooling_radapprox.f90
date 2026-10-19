@@ -86,7 +86,7 @@ subroutine radcool_evolve_ui(ui,dt,i,Tfloor,h,uout)
  ueqi = ueqi_store(i)
  utemp = ui
  rhoi_cgs = rhoh(h,massoftype(igas))*unit_density
- call getintenerg_opdep(Tfloor**(1.0/4.0),rhoi_cgs,ufloor_cgs)
+ call getintenerg_opdep(Tfloor,rhoi_cgs,ufloor_cgs)
 
  if (tthermi > epsilon(tthermi) .and. ui /= ueqi) then
     if (dt > 0.) then

@@ -224,7 +224,8 @@ subroutine do_fld_implicit(dt,npart,xyzh,vxyzu)
  dsum = dsum + edep - elost; dabs = dabs + edep_abs + abs(elost)
  if (dabs > 0.) fld_leak = dsum/dabs
  if (iverbose > 2 .and. id == master) write(*,"(a,i7,a,i6,a,i4,a,es10.3,a,es10.3,a,es10.3,a,es10.3)") &
-    ' fld_implicit: sweeps ',fld_nsweeps,'  sub-steps ',fld_nsub,'  splits ',fld_nsplits,'  residual ',fld_resid,'  leak ',fld_leak, &
+    ' fld_implicit: sweeps ',fld_nsweeps,'  sub-steps ',fld_nsub,'  splits ',fld_nsplits,'  residual ',fld_resid, &
+    '  leak ',fld_leak, &
     '  dt/t_cell ',dt/max(fld_tcell,tiny(fld_tcell)),'  stiffness ',fld_stiff
 
 end subroutine do_fld_implicit

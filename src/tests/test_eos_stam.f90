@@ -66,7 +66,7 @@ subroutine test_interp_optab(nfail,npass)
  character(len=30) :: label
  label = 'eos_stamatellos interpolation'
  xi = 0.; yi = 0.; zi = 0. !These aren't used but needed for eos call
- ndiff = 0; ncheck = 0; nfail = 0
+ ndiff = 0; ncheck = 0; nfail = 0; errmax = 0.
  tol = 0.001 !tolerance
  call checkvalbuf_start(label)
  ! create temperature array and rho array
