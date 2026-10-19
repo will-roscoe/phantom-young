@@ -10,8 +10,8 @@ module radial_stability
 ! at every dump, so a running disc can be read for why it is or is not
 ! fragmenting without reading a dump.
 !
-! Definitions follow the sph-dev analysis (toomreQsimple and
-! ratio_cooling_orbital_time) so the two can be compared directly:
+! Definitions follow the standard single-snapshot Toomre Q and cooling-time to
+! orbital-time ratio, so post-processing of a dump can be compared directly:
 !
 !   Sigma = N m / (pi (R_out^2 - R_in^2))            per annulus
 !   M_enc = m (particles in earlier bins + those at R <= R_mid) + M_star

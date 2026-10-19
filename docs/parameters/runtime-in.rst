@@ -576,7 +576,19 @@ Particle injection and removal
    * - ``rkill``
      - real
      - -1.0
-     - Deactivate (kill) particles beyond this radius.  ``< 0`` = disabled.
+     - Deactivate (kill) particles beyond this radius (code units, from the
+       origin).  ``< 0`` = disabled.  Killed gas leaves the simulation without
+       being accreted by a sink, so its mass and angular momentum are removed
+       and, with mass loading on, the conservation checks do not report it.
+       Use it when escaped particles with very large smoothing lengths become
+       neighbours of the whole disc and force every particle onto a short
+       timestep through the timestep limiter. Choose a radius beyond which the
+       gas is unbound (Bernoulli parameter about the host, including the
+       enclosed disc mass); around a low-mass host the outer disc can be only
+       marginally bound, and a radius that is too small then removes gas that
+       would have returned to the disc. ``rkill`` is read from the ``.in`` at
+       each restart, so it can be changed between restart links but not while
+       a link is running.
 
 ----
 

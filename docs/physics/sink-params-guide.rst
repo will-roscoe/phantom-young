@@ -385,6 +385,24 @@ the same way:
 
 ----
 
+Forcing creation in hot cores (``f_crit_override``)
+---------------------------------------------------
+
+Sink creation requires the gas to pass the energy checks, which are evaluated
+on the sphere of radius :math:`2h` around the densest particle. When that sphere
+is a hot, pressure-supported core, the thermal-to-gravitational energy ratio can
+be well above 1 and the test fails even though the fragment is bound on larger
+scales. ``f_crit_override`` (default ``0``, off) creates a sink unconditionally
+once the density exceeds ``f_crit_override * rho_crit_cgs``. For example,
+``f_crit_override = 10`` creates a sink at ten times the creation density
+whether or not the energy checks pass.
+
+Before relying on the override, check that the gas around the new sinks is
+bound (total energy negative inside the Hill radius) and that the sink mass
+matches the bound mass just before creation.
+
+----
+
 When to change ``h_soft_*``, ``r_merge_*``, and ``f_acc``
 -----------------------------------------------------------
 
