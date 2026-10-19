@@ -14,8 +14,8 @@ module viscosity
 !
 ! :Runtime parameters:
 !   - bulkvisc   : *magnitude of bulk viscosity*
-!   - irealvisc  : *physical viscosity type (0=none,1=const,2=Shakura/Sunyaev)*
-!   - shearparam : *magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2)*
+!   - irealvisc  : *physical viscosity type (0=none,1=const,2=Shakura/Sunyaev,4=Shakura/Sunyaev about sink 1)*
+!   - shearparam : *magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2,4)*
 !
 ! :Dependencies: dim, eos, infile_utils, io, part, timestep
 !
@@ -54,7 +54,7 @@ end subroutine set_defaults_viscosity
 !+
 !----------------------------------------------------------------
 real function shearfunc(xi,yi,zi,spsoundi)
- use part,   only:xyzmh_ptmass
+ use part,   only:xyzmh_ptmass,nptmass
  use eos,    only:polyk,qfacdisc
  real, intent(in) :: xi,yi,zi,spsoundi
  real :: rsph2,omega1,H,r1,r2
@@ -72,6 +72,19 @@ real function shearfunc(xi,yi,zi,spsoundi)
     rsph2 = xi*xi + yi*yi + zi*zi
     omega1 = rsph2**0.75  ! omega1 = 1/omega
     shearfunc = shearparam*omega1*spsoundi**2
+
+ case(4)
+!
+!--Shakura & Sunyaev disc viscosity, nu = alpha*cs**2/Omega, with Omega
+!  Keplerian about the first sink particle (the host) rather than about
+!  the origin with G*M = 1 as in case(2)
+!
+    if (nptmass > 0) then
+       r2 = (xi - xyzmh_ptmass(1,1))**2 + (yi - xyzmh_ptmass(2,1))**2 + (zi - xyzmh_ptmass(3,1))**2
+       shearfunc = shearparam*spsoundi**2*r2**0.75/sqrt(xyzmh_ptmass(4,1))
+    else
+       shearfunc = 0.
+    endif
 
  case(1)
 !
@@ -139,6 +152,8 @@ subroutine viscinfo(ivisc,iprint)
  integer, intent(in) :: ivisc,iprint
 
  select case(ivisc)
+ case(4)
+    write(iprint,"(a,es10.3)") ' Shakura-Sunyaev viscosity about sink 1, alpha_SS = ',shearparam
  case(3)
     write(iprint,"(a,es10.3)") ' Shakura-Sunyaev viscosity for binary systems, alpha_SS = ',shearparam
  case(2)
@@ -169,8 +184,8 @@ subroutine write_options_viscosity(iwritein)
  integer, intent(in) :: iwritein
 
  write(iwritein,"(/,a)") '# options controlling physical viscosity'
- call write_inopt(irealvisc,'irealvisc','physical viscosity type (0=none,1=const,2=Shakura/Sunyaev)',iwritein)
- call write_inopt(shearparam,'shearparam','magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2)',iwritein)
+ call write_inopt(irealvisc,'irealvisc','physical viscosity type (0=none,1=const,2=Shakura/Sunyaev,4=Shakura/Sunyaev about sink 1)',iwritein)
+ call write_inopt(shearparam,'shearparam','magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2,4)',iwritein)
  call write_inopt(bulkvisc,'bulkvisc','magnitude of bulk viscosity',iwritein)
 
 end subroutine write_options_viscosity
@@ -190,7 +205,7 @@ subroutine read_options_viscosity(db,nerr)
  call read_inopt(irealvisc,'irealvisc',db,errcount=nerr,min=0,max=12,default=0)
  call read_inopt(shearparam,'shearparam',db,errcount=nerr,min=0.,default=0.1)
  call read_inopt(bulkvisc,'bulkvisc',db,errcount=nerr,default=0.0,min=0.)
- if (irealvisc==2 .and. shearparam > 1) call error(label,'alpha > 1 for shakura-sunyaev viscosity')
+ if ((irealvisc==2 .or. irealvisc==4) .and. shearparam > 1) call error(label,'alpha > 1 for shakura-sunyaev viscosity')
 
 end subroutine read_options_viscosity
 

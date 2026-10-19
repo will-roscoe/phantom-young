@@ -138,6 +138,13 @@ The main-sequence mass–luminosity relation used for the default
 for 10–70 M\ :sub:`J`, about 100 times below the luminosity of a young brown dwarf,
 so set ``L_star`` explicitly for substellar hosts.
 
+With ``lumdisc=3``, :math:`q = 1/4` and :math:`R_0 \to 0`, ``nprof = 4`` is
+exactly :math:`\sigma T^4 = L_\star/(16\pi R^2) + \sigma T_\infty^4`, so
+stellar and background heating add as fluxes. ``nprof = 2`` is not an energy sum
+and heats the outer disc more. At fixed Toomre :math:`Q` a colder outer disc
+needs less mass, so the two choices change a solved disc mass by roughly
+10 per cent.
+
 Each key is written to the ``.setup`` only in the modes that read it, so a file
 never carries a value that has no effect. ``T0`` appears only with
 ``lumdisc=2``; with ``lumdisc=3`` the derived value is in the dump header as
@@ -155,6 +162,36 @@ replacing any value an existing ``.in`` held:
 
 ``qprofile`` is left out of the ``.in`` in modes 2 and 3, since the run takes the
 slope from the dump header.
+
+Choosing the disc mass for a target Toomre Q
+--------------------------------------------
+
+For :math:`\Sigma \propto R^{-1}` between :math:`R_{\rm in}` and
+:math:`R_{\rm out}`, a disc with a chosen :math:`Q(R_{\rm out})` has mass
+
+.. math::
+
+   M_{\rm disc} = \frac{2\,c_s\,\Omega\,R_{\rm out}(R_{\rm out}-R_{\rm in})}
+   {G\,Q_{\rm out}},
+   \qquad Q = \frac{c_s\,\Omega}{\pi G\,\Sigma}.
+
+Evaluate :math:`c_s` on the floored :math:`T(R)` that the run actually uses, and
+take :math:`\Omega` from :math:`M_\star + M_{\rm disc}`. :math:`Q` then depends
+on the disc mass through both :math:`\Sigma` and :math:`\Omega`, so the
+equation must be solved iteratively. The disc-mass option of ``phantomsetup``
+that targets a minimum :math:`Q` (``isetgas = 4``) evaluates :math:`c_s` from the
+unfloored power law and :math:`\Omega` from the star alone; with a floored
+profile the resulting :math:`Q` is wrong by an amount that grows with
+:math:`R_{\rm out}/R_{\rm ref}`, because the real outer disc sits on the floor
+and is hotter than the power law. Solve the mass externally and pass it with
+``isetgas = 0``.
+
+The disc mass is only meaningful together with the profile it was solved for.
+For example, at :math:`R_{\rm in} = 5` AU and :math:`p = 1`, the tapered
+inner edge (``ismoothgas = true``, factor :math:`1-\sqrt{R_{\rm in}/R}`) gives
+a :math:`Q(R_{\rm out})` of 0.78-0.83 times the untapered value for
+:math:`R_{\rm out} = 60`-120 AU, so a mass solved for one edge and used with the
+other misses the intended :math:`Q`.
 
 Restart safety (dump-header propagation)
 ----------------------------------------

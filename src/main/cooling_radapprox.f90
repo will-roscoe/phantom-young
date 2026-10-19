@@ -22,7 +22,7 @@ module cooling_radapprox
   implicit none
   integer, public :: od_method = 4 ! default = Modified Lombardi method (Young et al. 2024)
   real  :: Lstar = 0. ! in units of L_sun
-  integer :: fld_opt = 1 ! by default FLD is switched on
+  integer :: fld_opt = 2 ! 0 off, 1 explicit, 2 implicit (default)
  integer :: isink_star ! index of sink to use as illuminating star
  public :: radcool_update_du,write_options_cooling_radapprox,read_options_cooling_radapprox
  public :: init_star,radcool_evolve_ui
@@ -86,7 +86,7 @@ subroutine radcool_evolve_ui(ui,dt,i,Tfloor,h,uout)
  ueqi = ueqi_store(i)
  utemp = ui
  rhoi_cgs = rhoh(h,massoftype(igas))*unit_density
- call getintenerg_opdep(Tfloor**(1.0/4.0),rhoi_cgs,ufloor_cgs)
+ call getintenerg_opdep(Tfloor,rhoi_cgs,ufloor_cgs)
 
  if (tthermi > epsilon(tthermi) .and. ui /= ueqi) then
     if (dt > 0.) then
@@ -94,13 +94,16 @@ subroutine radcool_evolve_ui(ui,dt,i,Tfloor,h,uout)
        expdtonttherm = exp(-dt/tthermi)
        utemp = ui*expdtonttherm + ueqi*(1.-expdtonttherm)
     elseif (dt < 0.) then
-       ! i.e. for the backwards step in the leapfrog integrator
+       ! i.e. for the backwards step in the leapfrog integrator;
+       ! with |dt| >> tthermi the division would overflow, so ui is kept
        expdtonttherm = exp(dt/tthermi)
-       utemp = (ui - ueqi*(1.-expdtonttherm))/expdtonttherm
+       if (abs(ui - ueqi*(1.-expdtonttherm)) < huge(ui)*expdtonttherm) then
+          utemp = (ui - ueqi*(1.-expdtonttherm))/expdtonttherm
+       endif
     endif
 
     ! if tthermi ==0 or dt/thermi is neglible then ui doesn't change
-    if (isnan(utemp) .or. utemp < epsilon(utemp)) then
+    if (isnan(utemp) .or. abs(utemp) > huge(utemp) .or. utemp < epsilon(utemp)) then
        utemp = ui
     endif
  endif
@@ -254,7 +257,7 @@ end subroutine radcool_update_du
 
 subroutine write_options_cooling_radapprox(iunit)
  use infile_utils, only:write_inopt
- use eos_stamatellos, only:eos_file,qprofile,iprofile,L_star_prof
+ use eos_stamatellos, only:eos_file,qprofile,iprofile,L_star_prof,fld_substep_stiff
  integer, intent(in) :: iunit
 
  !N.B. Tfloor handled in cooling.F90
@@ -268,14 +271,16 @@ subroutine write_options_cooling_radapprox(iunit)
  endif
  call write_inopt(od_method,'od_method',&
       'Method for estimating optical depth:(1)Stamatellos (2)Lombardi (3)combined (4)modified Lombardi',iunit)
- call write_inopt(FLD_opt,'do FLD','Do FLD? (1) yes (0) no',iunit)
+ call write_inopt(FLD_opt,'do FLD','Do FLD? (0) no (1) explicit (2) implicit',iunit)
+ call write_inopt(fld_substep_stiff,'fld_substep_stiff',&
+      'do FLD = 2: largest stiffness (cell diffusion times) of one implicit sub-step; 0 = one step',iunit)
  if (iprofile /= 2) call write_inopt(qprofile,'qprofile',&
       'q index for T profile (lumdisc=1): 0=standard qindex=0.25, otherwise use specified qindex',iunit)
 end subroutine write_options_cooling_radapprox
 
 subroutine read_options_cooling_radapprox(db,nerr)
  use io,              only:fatal
- use eos_stamatellos, only:eos_file,qprofile,doFLD
+ use eos_stamatellos, only:eos_file,qprofile,doFLD,fld_mode,fld_substep_stiff
  use infile_utils,    only:inopts,read_inopt
  type(inopts), intent(inout) :: db(:)
  integer,      intent(inout) :: nerr
@@ -285,8 +290,10 @@ subroutine read_options_cooling_radapprox(db,nerr)
  call read_inopt(eos_file,'EOS_file',db,errcount=nerr)
  call read_inopt(ieosread,'ieos',db,errcount=nerr,min=1,default=24)
  call read_inopt(od_method,'od_method',db,errcount=nerr,min=1,max=4,default=4)
- call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=1,default=1)
- doFLD = (FLD_opt == 1)
+ call read_inopt(FLD_opt,'do FLD',db,errcount=nerr,min=0,max=2,default=2)
+ fld_mode = FLD_opt
+ doFLD = (FLD_opt > 0)
+ call read_inopt(fld_substep_stiff,'fld_substep_stiff',db,errcount=nerr,min=0.,default=400.)
  call read_inopt(qprofile,'qprofile',db,errcount=nerr,min=0.,default=0.)
 
  if (ieosread /= 24) call fatal('ieosread','For icooling=9, you need ieos=24')

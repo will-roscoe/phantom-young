@@ -14,8 +14,8 @@ module testpart
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: boundary, io, kernel, mpidomain, part, physcon, testutils,
-!   unifdis
+! :Dependencies: boundary, eos_stamatellos, io, kernel, mpidomain, part,
+!   physcon, testutils, unifdis
 !
  use testutils, only:update_test_scores,checkval
  implicit none
@@ -37,6 +37,7 @@ subroutine test_part(ntests,npass)
  if (id==master) write(*,"(/,a,/)") '--> TESTING PART MODULE'
 
  call test_accrete_and_kill_routines(ntests, npass)
+ call test_shuffle_moves_coolra_stores(ntests, npass)
 
  if (id==master) write(*,"(/,a)") '<-- PART MODULE TEST COMPLETE'
 
@@ -130,5 +131,61 @@ subroutine test_accrete_and_kill_routines(ntests, npass)
  call update_test_scores(ntests,nfailed,npass)
 
 end subroutine test_accrete_and_kill_routines
+
+!----------------------------------------------------------
+!+
+!  test that shuffle_part carries the per-particle stores of the
+!  Stamatellos/Forgan cooling (eos_stamatellos) with the particle
+!+
+!----------------------------------------------------------
+subroutine test_shuffle_moves_coolra_stores(ntests, npass)
+ use io,              only:id,master
+ use part,            only:xyzh,npartoftype,npart,init_part,shuffle_part,kill_particle,&
+                           igas,isetphase,iphase,maxphase,maxp
+ use eos_stamatellos, only:init_coolra,finish_coolra,ttherm_store,ueqi_store,tau_store,&
+                           du_store,duSPH,Gpot_cool,duFLD,lambda_FLD,urad_FLD,gradP_cool,owed_FLD
+ integer, intent(inout) :: ntests,npass
+ integer, parameter :: n = 10, ikill = 3
+ integer :: nfailed(12),i
+
+ if (id==master) write(*,"(/,a)") '--> testing shuffle_part moves the cooling stores'
+
+ call init_part()
+ npart = n
+ npartoftype(:) = 0
+ npartoftype(igas) = n
+ do i=1,n
+    xyzh(:,i) = (/real(i),0.,0.,1./)
+ enddo
+ if (maxphase==maxp) iphase(1:n) = isetphase(igas,.true.)
+ call init_coolra()
+ do i=1,n
+    ttherm_store(i) = 1.*i; ueqi_store(i) = 2.*i; tau_store(i) = 3.*i; du_store(i) = 4.*i
+    duSPH(i) = 5.*i; Gpot_cool(i) = 6.*i; duFLD(i) = 7.*i; lambda_FLD(i) = 8.*i
+    urad_FLD(i) = 9.*i; gradP_cool(i) = 10.*i; owed_FLD(i) = 11.*i
+ enddo
+
+ call kill_particle(ikill,npartoftype)
+ call shuffle_part(npart)   ! particle n moves into slot ikill
+
+ nfailed = 0
+ call checkval(ttherm_store(ikill),1.*n,0.,nfailed(1),'ttherm_store moved')
+ call checkval(ueqi_store(ikill),2.*n,0.,nfailed(2),'ueqi_store moved')
+ call checkval(tau_store(ikill),3.*n,0.,nfailed(3),'tau_store moved')
+ call checkval(du_store(ikill),4.*n,0.,nfailed(4),'du_store moved')
+ call checkval(duSPH(ikill),5.*n,0.,nfailed(5),'duSPH moved')
+ call checkval(Gpot_cool(ikill),6.*n,0.,nfailed(6),'Gpot_cool moved')
+ call checkval(duFLD(ikill),7.*n,0.,nfailed(7),'duFLD moved')
+ call checkval(lambda_FLD(ikill),8.*n,0.,nfailed(8),'lambda_FLD moved')
+ call checkval(urad_FLD(ikill),9.*n,0.,nfailed(9),'urad_FLD moved')
+ call checkval(gradP_cool(ikill),10.*n,0.,nfailed(10),'gradP_cool moved')
+ ! owed_FLD is energy in transit: it moves, and the vacated slot holds none
+ call checkval(owed_FLD(ikill),11.*n,0.,nfailed(11),'owed_FLD moved')
+ call checkval(owed_FLD(n),0.,0.,nfailed(12),'owed_FLD cleared in the vacated slot')
+ call update_test_scores(ntests,nfailed,npass)
+
+ call finish_coolra()
+
+end subroutine test_shuffle_moves_coolra_stores
 
 end module testpart

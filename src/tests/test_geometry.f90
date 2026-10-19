@@ -14,7 +14,7 @@ module testgeometry
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: geometry, io, testutils
+! :Dependencies: geometry, icosahedron, io, testutils
 !
  use testutils, only:checkval,update_test_scores
  use io,        only:id,master
@@ -86,8 +86,45 @@ subroutine test_geometry(ntests,npass)
  enddo
  call update_test_scores(ntests,ndiff,npass)
 
+ call test_icosahedron(ntests,npass)
+
  if (id==master) write(*,"(/,a)") '<-- GEOMETRY TEST COMPLETE'
 
 end subroutine test_geometry
+
+!--------------------------------------------
+!+
+!  The 20 icosahedron face matrices are rotations
+!  and pixel2vector returns unit vectors
+!+
+!--------------------------------------------
+subroutine test_icosahedron(ntests,npass)
+ use icosahedron, only:compute_matrices,compute_corners,pixel2vector
+ integer, intent(inout) :: ntests,npass
+ real    :: R(0:19,3,3),v(0:11,3),M(3,3),ident(3,3),vec(3),errmax(2)
+ integer :: n,i,ipix,ndiff(2)
+ integer, parameter :: ires = 4
+
+ if (id==master) write(*,"(/,a)") '--> checking icosahedron rotation matrices are orthogonal'
+ call compute_matrices(R)
+ call compute_corners(v)
+ ident = 0.
+ do i=1,3
+    ident(i,i) = 1.
+ enddo
+ errmax = 0.
+ do n=0,19
+    M = R(n,:,:)
+    errmax(1) = max(errmax(1),maxval(abs(matmul(M,transpose(M)) - ident)))
+ enddo
+ do ipix=0,20*2*ires*(ires-1)+11
+    call pixel2vector(ipix,ires,R,v,vec)
+    errmax(2) = max(errmax(2),abs(sqrt(dot_product(vec,vec)) - 1.))
+ enddo
+ call checkval(errmax(1),0.,1.e-12,ndiff(1),'max |R R^T - I|')
+ call checkval(errmax(2),0.,1.e-12,ndiff(2),'max ||pixel2vector| - 1|')
+ call update_test_scores(ntests,ndiff,npass)
+
+end subroutine test_icosahedron
 
 end module testgeometry

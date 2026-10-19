@@ -44,7 +44,7 @@ module radiation_implicit
  character(len=*), parameter :: label = 'radiation_implicit'
 
  private
- public :: do_radiation_implicit,ierr_failed_to_converge
+ public :: do_radiation_implicit,ierr_failed_to_converge,get_compacted_neighbour_list
  public :: tol_rad ! so that use radiation_implicit, only:tol_rad works
 
 contains
@@ -331,7 +331,7 @@ subroutine get_compacted_neighbour_list(xyzh,ivar,ijvar,ncompact,ncompactlocal)
     call get_neighbour_list(icell,listneigh,nneigh_trial,xyzh,xyzcache,maxcellcache,getj=.true.)
 
     over_parts: do ip = inoderange(1,icell),inoderange(2,icell)
-       i = inodeparts(ip)
+       i = abs(inodeparts(ip))
 
        if (i > maxpsph) cycle over_parts
 

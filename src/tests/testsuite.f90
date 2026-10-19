@@ -54,6 +54,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  use testexternf,  only:test_externf
  use testindtstep, only:test_indtstep
  use testmassloading, only:test_massloading
+ use testrealvisc, only:test_realvisc
  use teststopcond, only:test_stopcond
  use testqbeta,    only:test_qbeta
  use testrwdump,   only:test_rwdump
@@ -87,7 +88,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  logical :: dosetdisc,dosetstar,doeos,doflooredprof,dofld,docooling,dodust,donimhd,docorotate,doany,dogrowth
  logical :: dogr,doradiation,dopart,dopoly,dompi,dohier,dodamp,dowind
  logical :: doiorig,doapr,dounits,dolum,dosinktree,doorbits,dolinalg
- logical :: domassloading,dostopcond,doqbeta
+ logical :: domassloading,dostopcond,doqbeta,dorealvisc
  real(kind=4) :: twall1,tcpu1,twall2,tcpu2
 
  call summary_initialise
@@ -150,6 +151,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
  doorbits    = .false.
  dolinalg    = .false.
  domassloading = .false.
+ dorealvisc  = .false.
  dostopcond  = .false.
  doqbeta     = .false.
 
@@ -207,6 +209,8 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     doindtstep = .true.
  case('massloading','massload')
     domassloading = .true.
+ case('realvisc','shearvisc')
+    dorealvisc = .true.
  case('stopcond','stop')
     dostopcond = .true.
  case('qbeta','toomre')
@@ -381,6 +385,13 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
 !
  if (domassloading.or.testall) then
     call test_massloading(ntests,npass)
+    call set_default_options_testsuite(iverbose) ! restore defaults
+ endif
+!
+!--test of the Shakura-Sunyaev physical viscosity
+!
+ if (dorealvisc.or.testall) then
+    call test_realvisc(ntests,npass)
     call set_default_options_testsuite(iverbose) ! restore defaults
  endif
 !
