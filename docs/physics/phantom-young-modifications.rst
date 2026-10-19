@@ -119,6 +119,27 @@ Mode derivations:
 - Mode 2 (:math:`\beta`): ``mloadfactor = iload`` (:math:`\beta`),
   ``dm_load = 0``
 
+Restart behaviour
+^^^^^^^^^^^^^^^^^
+
+The loading state is fixed at setup and carried across restarts, so the loading
+rate does not depend on how a run is split into restart links. The initial
+particle count :math:`n_{p,0}`, particle mass :math:`m_{p,0}` and host mass
+:math:`M_{\star,0}` are written to the dump header from the setup dump onward
+and read back at every restart. The interval :math:`T` is evaluated once, from
+:math:`M_{\star,0}` and the loading radius, so the closed forms below hold
+exactly: a host that accretes during the run does not re-rate mass that has
+already been loaded, and particles removed with ``kill_particle`` (for example
+through ``rkill``) do not change :math:`n_{p,0}`. The loading interval is
+derived on the first sub-step of a fresh or restarted run, so loading is active
+from the first step of every link.
+
+Because the interval uses :math:`M_{\star,0}`, a loading rate set through
+:math:`\chi` or :math:`\xi` is the nominal rate for the starting host. The
+switches ``torb_mstar0`` and ``np0_initial`` select the older behaviour
+(interval from the current host mass, particle count recounted at restart) for
+reproducing runs made with earlier versions of the code.
+
 Each particle's mass is evaluated directly from :math:`m_{p,0}` plus elapsed
 time at every binstep (no accumulation of round-off). Negative :math:`\xi` /
 :math:`\beta` is allowed and drains mass.
@@ -425,9 +446,9 @@ where :math:`M_{\rm enc}` is the gas mass in earlier annuli plus that at
 :math:`P/\rho = (k_B/m_H)\langle T\rangle/\langle\mu\rangle` and
 :math:`\gamma = 1 + (P/\rho)/\langle u\rangle`. With ``icooling = 9``,
 :math:`\beta = \langle t_{\rm therm}\sqrt{M_\star/R^3}\rangle`. These are the
-definitions of the sph-dev analysis (``toomreQsimple``,
-``ratio_cooling_orbital_time``); on the same dump the two agree to the printed
-precision. Particles outside the profile range are ignored, including in
+standard single-snapshot definitions of the Toomre parameter and of the ratio
+of cooling time to orbital time, so a post-processing script that applies them
+to the same dump agrees to the printed precision. Particles outside the profile range are ignored, including in
 :math:`M_{\rm enc}`.
 
 Output
