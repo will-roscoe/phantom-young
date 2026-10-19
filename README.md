@@ -31,9 +31,10 @@ Phantom is a 3D Smoothed Particle Hydrodynamics and Magnetohydrodynamics code fo
 Status
 ------
 
-[![build](https://github.com/will-roscoe/phantom-young/actions/workflows/build.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/build.yml)
-[![test](https://github.com/will-roscoe/phantom-young/actions/workflows/test.yml/badge.svg)](https://github.com/danieljprice/phantom/actions/workflows/test.yml)
+[![build](https://github.com/will-roscoe/phantom-young/actions/workflows/build.yml/badge.svg)](https://github.com/will-roscoe/phantom-young/actions/workflows/build.yml)
+[![test](https://github.com/will-roscoe/phantom-young/actions/workflows/test.yml/badge.svg)](https://github.com/will-roscoe/phantom-young/actions/workflows/test.yml)
 
+[![Documentation (this fork)](https://img.shields.io/badge/docs-phantom--young-blue)](https://will-roscoe.github.io/phantom-young/)
 [![Documentation (Main Repo)](https://readthedocs.org/projects/phantomsph/badge/?version=latest)](https://phantomsph.readthedocs.io/en/latest/?badge=latest)
 
 
