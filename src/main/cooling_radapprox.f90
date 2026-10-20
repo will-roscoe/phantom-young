@@ -182,7 +182,6 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
     coldensi = coldensi*umass/udist/udist ! physical units
  case (4)
     ! Modified Lombardi method
-    HLom  = presi/abs(gradP_cool(i))/rhoi
     cs2 = presi/rhoi
     if (isink_star > 0 .and. ri2 > 0.) then
        Om2 = xyzmh_ptmass(4,isink_star)/(ri2**(1.5)) !NB we are using spherical radius here
@@ -190,7 +189,12 @@ subroutine radcool_update_du(i,xi,yi,zi,rhoi,ui,duhydro,Tfloor)
        Om2 = 0.
     endif
     Hmod2 = cs2 * piontwo / (Om2 + 8.*rpiontwo*rhoi)
-    Hcomb = 1./sqrt((1./HLom)**2 + (1./Hmod2))
+    if (abs(gradP_cool(i)) > 0.) then
+       HLom  = presi/abs(gradP_cool(i))/rhoi
+       Hcomb = 1./sqrt((1./HLom)**2 + (1./Hmod2))
+    else
+       Hcomb = sqrt(Hmod2) ! limit HLom -> infinity
+    endif
     coldensi = 1.014 * Hcomb *rhoi*umass/udist/udist ! physical units
  case default
     call warning("In radapprox cooling","cooling method not recognised",ival=od_method)

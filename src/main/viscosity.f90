@@ -184,7 +184,8 @@ subroutine write_options_viscosity(iwritein)
  integer, intent(in) :: iwritein
 
  write(iwritein,"(/,a)") '# options controlling physical viscosity'
- call write_inopt(irealvisc,'irealvisc','physical viscosity type (0=none,1=const,2=Shakura/Sunyaev,4=Shakura/Sunyaev about sink 1)',iwritein)
+ call write_inopt(irealvisc,'irealvisc',&
+                  'physical viscosity type (0=none,1=const,2=Shakura/Sunyaev,4=Shakura/Sunyaev about sink 1)',iwritein)
  call write_inopt(shearparam,'shearparam','magnitude of shear viscosity (irealvisc=1) or alpha_SS (irealvisc=2,4)',iwritein)
  call write_inopt(bulkvisc,'bulkvisc','magnitude of bulk viscosity',iwritein)
 
