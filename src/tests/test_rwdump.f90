@@ -332,10 +332,47 @@ subroutine test_rwdump(ntests,npass)
     endif
  enddo over_tests
 
+ call test_fulldump_coolra_unallocated(ntests,npass)
+
  call deallocate_memory
  call allocate_memory(int(maxp_old,kind=8))
  if (id==master) write(*,"(/,a)") '<-- READ/WRITE TEST COMPLETE'
 
 end subroutine test_rwdump
+
+!--------------------------------------------
+!+
+!  A full dump with icooling = 9 written before the radiative-cooling stores exist
+!  (phantomsetup for a setup that never calls init_coolra) must not crash, and must read back.
+!+
+!--------------------------------------------
+subroutine test_fulldump_coolra_unallocated(ntests,npass)
+ use options,         only:icooling
+ use eos_stamatellos, only:finish_coolra,ttherm_store
+ use readwrite_dumps, only:read_dump,write_fulldump
+ use io,              only:idisk1,id,master,iprint,nprocs
+ use testutils,       only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer :: nfail(2),ierr,icooling_was
+ real    :: tfile,hfactfile
+
+ if (id==master) write(*,"(/,a)") '--> testing full dump with icooling = 9 and no cooling stores'
+ icooling_was = icooling
+ call finish_coolra()
+ icooling = 9
+ nfail = 0
+ call checkval(allocated(ttherm_store),.false.,nfail(1),'cooling stores not allocated')
+ call write_fulldump(0.,'test_coolra.dump')
+ call read_dump('test_coolra.dump',tfile,hfactfile,idisk1,iprint,id,nprocs,ierr)
+ call checkval(ierr,0,0,nfail(2),'dump written without stores reads back')
+ call update_test_scores(ntests,nfail,npass)
+ icooling = icooling_was
+ call finish_coolra()
+ if (id==master) then
+    open(unit=idisk1,file='test_coolra.dump',status='old')
+    close(unit=idisk1,status='delete')
+ endif
+
+end subroutine test_fulldump_coolra_unallocated
 
 end module testrwdump
