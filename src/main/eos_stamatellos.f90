@@ -224,8 +224,8 @@ end subroutine getopac_opdep
 
 !
 ! As getopac_opdep, plus the Planck mean opacity kappaPl (column 7 of the table; the
-! Rosseland mean for a 6-column table). kappaPl is a required argument: an optional one
-! was written through a null address at -O3 by ifx 2022.2 when absent.
+! Rosseland mean for a 6-column table). kappaPl is required: with it optional, ifx 2022.2
+! -O3 builds crashed (SIGSEGV) in this routine when it was absent.
 !
 subroutine getopac_opdep_planck(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  use io, only:warning
