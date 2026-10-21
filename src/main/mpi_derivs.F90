@@ -314,10 +314,13 @@ subroutine recv_while_wait_dens(stack,xrecvbuf,irequestrecv,irequestsend,thread_
 
 !--signal to other OMP threads that this thread has finished sending
  thread_complete(omp_thread_num()+1) = .true.
+ !$omp flush
 
  !--continue receiving cells until all OMP threads have finished sending
+ !  (flush each pass: thread_complete is set by the other threads)
  do while (.not. all(thread_complete))
     call recv_cells(stack,xrecvbuf,irequestrecv,counters)
+    !$omp flush
  enddo
 
  !--signal to other MPI tasks that this task has finished sending
@@ -335,6 +338,7 @@ subroutine recv_while_wait_dens(stack,xrecvbuf,irequestrecv,irequestsend,thread_
     !$omp master
     call check_complete(counters,ncomplete_mpi)
     !$omp end master
+    !$omp flush
  enddo
 
  call barrier_mpi
@@ -364,10 +368,13 @@ subroutine recv_while_wait_force(stack,xrecvbuf,irequestrecv,irequestsend,thread
 
  !--signal to other OMP threads that this thread has finished sending
  thread_complete(omp_thread_num()+1) = .true.
+ !$omp flush
 
  !--continue receiving cells until all OMP threads have finished sending
+ !  (flush each pass: thread_complete is set by the other threads)
  do while (.not. all(thread_complete))
     call recv_cells(stack,xrecvbuf,irequestrecv,counters)
+    !$omp flush
  enddo
 
  !--signal to other MPI tasks that this task has finished sending
@@ -385,6 +392,7 @@ subroutine recv_while_wait_force(stack,xrecvbuf,irequestrecv,irequestsend,thread
     !$omp master
     call check_complete(counters,ncomplete_mpi)
     !$omp end master
+    !$omp flush
  enddo
 
  call barrier_mpi
