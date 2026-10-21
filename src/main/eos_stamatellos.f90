@@ -41,7 +41,7 @@ module eos_stamatellos
  real,    public :: T_bg_prof = 10.   ! K,  background floor T_inf (set = T_bg/Tfloor)
  real,    public :: L_star_prof = -1. ! Lsun, luminosity T0_prof was derived from (lumdisc=3); <0 = none
 
- public :: read_optab,getopac_opdep,init_coolra,getintenerg_opdep,finish_coolra
+ public :: read_optab,getopac_opdep,getopac_opdep_planck,init_coolra,getintenerg_opdep,finish_coolra
  public :: alloc_coolra_stores,copy_coolra_stores
  public :: get_k_fld
  public :: get_T_profile,get_T0_from_lum
@@ -213,11 +213,25 @@ end subroutine read_optab
 !
 ! Main subroutine for interpolating tables to get EOS values
 !
-subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
+subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi)
+ real, intent(in)  :: ui,rhoi
+ real, intent(out) :: kappaBar,kappaPart,Ti,gmwi
+ real :: kappaPl
+
+ call getopac_opdep_planck(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
+
+end subroutine getopac_opdep
+
+!
+! As getopac_opdep, plus the Planck mean opacity kappaPl (column 7 of the table; the
+! Rosseland mean for a 6-column table). kappaPl is required: with it optional, ifx 2022.2
+! -O3 builds crashed (SIGSEGV) in this routine when it was absent.
+!
+subroutine getopac_opdep_planck(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  use io, only:warning
  real, intent(in)  :: ui,rhoi
  real, intent(out) :: kappaBar,kappaPart,Ti,gmwi
- real, intent(out), optional :: kappaPl  ! Planck mean, for optically thin emission
+ real, intent(out) :: kappaPl  ! Planck mean, for optically thin emission
 
  integer :: irho,iu
  real :: m,c
@@ -253,11 +267,9 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  c = optable(irho,iu+1,6) - m*optable(irho,iu+1,3)
  kappa1 = m*ui + c
 
- if (present(kappaPl)) then
-    m = (optable(irho,iu,7)-optable(irho,iu+1,7))/(optable(irho,iu,3)-optable(irho,iu+1,3))
-    c = optable(irho,iu+1,7) - m*optable(irho,iu+1,3)
-    kpl1 = m*ui + c
- endif
+ m = (optable(irho,iu,7)-optable(irho,iu+1,7))/(optable(irho,iu,3)-optable(irho,iu+1,3))
+ c = optable(irho,iu+1,7) - m*optable(irho,iu+1,3)
+ kpl1 = m*ui + c
 
  m = (optable(irho,iu,2) - optable(irho,iu+1,2))/(optable(irho,iu,3)-optable(irho,iu+1,3))
  c = optable(irho,iu+1,2) - m*optable(irho,iu+1,3)
@@ -278,11 +290,9 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  c = optable(irho+1,iu+1,6) - m*optable(irho+1,iu+1,3)
  kappa2 = m*ui + c
 
- if (present(kappaPl)) then
-    m = (optable(irho+1,iu,7) - optable(irho+1,iu+1,7))/(optable(irho+1,iu,3) - optable(irho+1,iu+1,3))
-    c = optable(irho+1,iu+1,7) - m*optable(irho+1,iu+1,3)
-    kpl2 = m*ui + c
- endif
+ m = (optable(irho+1,iu,7) - optable(irho+1,iu+1,7))/(optable(irho+1,iu,3) - optable(irho+1,iu+1,3))
+ c = optable(irho+1,iu+1,7) - m*optable(irho+1,iu+1,3)
+ kpl2 = m*ui + c
 
  m = (optable(irho+1,iu,2) - optable(irho+1,iu+1,2))/(optable(irho+1,iu,3) - optable(irho+1,iu+1,3))
  c = optable(irho+1,iu+1,2) - m*optable(irho+1,iu+1,3)
@@ -296,11 +306,9 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  c = kappa2 - m*optable(irho+1,1,1)
  kappaPart = m*rhoi + c
 
- if (present(kappaPl)) then
-    m = (kpl2 - kpl1)/(optable(irho+1,1,1)-optable(irho,1,1))
-    c = kpl2 - m*optable(irho+1,1,1)
-    kappaPl = m*rhoi + c
- endif
+ m = (kpl2 - kpl1)/(optable(irho+1,1,1)-optable(irho,1,1))
+ c = kpl2 - m*optable(irho+1,1,1)
+ kappaPl = m*rhoi + c
 
  m = (kbar2 - kbar1)/(optable(irho+1,1,1)-optable(irho,1,1))
  c = kbar2 - m*optable(irho+1,1,1)
@@ -314,7 +322,7 @@ subroutine getopac_opdep(ui,rhoi,kappaBar,kappaPart,Ti,gmwi,kappaPl)
  c = gmw2 - m*optable(irho+1,1,1)
  gmwi = m*rhoi + c
 
-end subroutine getopac_opdep
+end subroutine getopac_opdep_planck
 
 subroutine getintenerg_opdep(Teqi, rhoi, ueqi)
  use io, only:warning
