@@ -18,7 +18,7 @@ module test_eos_stam
 !
 
  use testutils,     only:checkval,update_test_scores,checkvalbuf,checkvalbuf_end,checkvalbuf_start
- use eos_stamatellos, only:read_optab,getintenerg_opdep,getopac_opdep,eos_file
+ use eos_stamatellos, only:read_optab,getintenerg_opdep,getopac_opdep,getopac_opdep_planck,eos_file
  use eos_stamatellos, only:optable
  implicit none
  public :: run_test_stam
@@ -115,7 +115,7 @@ subroutine test_planck_column(ntests,npass)
  call finish_test_stam
  call read_optab(f7,ierr)
  call checkval(ierr,0,0,nfail(1),'7-column table reads')
- call getopac_opdep(1.5e10,5.e-10,kappaBar,kappaPart,Ti,mui,kappaPl=kappaPl)
+ call getopac_opdep_planck(1.5e10,5.e-10,kappaBar,kappaPart,Ti,mui,kappaPl)
  call checkval(kappaPart,2.,1.e-6,nfail(2),'Rosseland from column 6')
  call checkval(kappaPl,4.,1.e-6,nfail(3),'Planck from column 7')
 
@@ -123,7 +123,7 @@ subroutine test_planck_column(ntests,npass)
  call finish_test_stam
  call read_optab(f6,ierr)
  call checkval(ierr,0,0,nfail(4),'6-column table reads')
- call getopac_opdep(1.5e10,5.e-10,kappaBar,kappaPart,Ti,mui,kappaPl=kappaPl)
+ call getopac_opdep_planck(1.5e10,5.e-10,kappaBar,kappaPart,Ti,mui,kappaPl)
  call checkval(kappaPl,kappaPart,1.e-6,nfail(5),'6-column Planck falls back to Rosseland')
  call finish_test_stam
  open(newunit=iunit,file=f7)
