@@ -77,15 +77,26 @@ parameterisations can be directly compared.
      - ``0``
      - Modes 0/1: ``0`` = fixed rate per particle (total falls as gas is accreted), ``1`` = fixed total rate over live gas.
 
-**Dump-header persistence** — four values are written to every dump header
-so that restarts continue exactly from where the previous run left off:
-``dm_load`` (:math:`\xi`), ``r_orb``, ``mload_mp0`` (:math:`m_{p,0}`, the
-original per-particle mass), and ``mload_tinit`` (:math:`t_\mathrm{init}`,
-the simulation time when loading first fired).  On restart the formulas
-:math:`m_{p,0} + \xi(t-t_\mathrm{init})/(T n_{p,0})` and
-:math:`m_{p,0}\exp(\ln(1+\beta)(t-t_\mathrm{init})/T)` are evaluated
-directly with the correct base state — no re-derivation from the evolved
-disc mass is needed.
+**Dump-header persistence** — the loading state is written to every dump
+header so that restarts continue exactly from where the previous run left
+off: ``dm_load`` (:math:`\xi`), ``r_orb``, ``R_load``, ``mload_mp0``
+(:math:`m_{p,0}`, the original per-particle mass), ``mload_tinit``
+(:math:`t_\mathrm{init}`, the simulation time when loading first fired),
+``mload_np0``, ``mload_mstar0``, ``mload_tlast``, ``mload_total``, the
+settings in force (``mload_mode``, ``mload_iload``, ``mload_dt``,
+``mload_rref``) and the current loading segment (``mload_mseg``,
+``mload_tseg``).  On restart the formulas
+:math:`m_\mathrm{seg} + \xi(t-t_\mathrm{seg})/(T n_{p,0})` and
+:math:`m_\mathrm{seg}\exp(\ln(1+\beta)(t-t_\mathrm{seg})/T)` are evaluated
+directly with the correct base state; the first segment is
+:math:`(m_{p,0}, t_\mathrm{init})`.
+
+**Changing settings between restarts** — ``iload_factor``, ``iload``,
+``iload_dt``, ``R_load`` and ``iload_total`` may be edited in the ``.in``
+before a restart. When they differ from the header, the restart raises a
+warning naming each change and starts a new segment at the dump's particle
+mass, so the mass is continuous and the new setting applies from there
+(see :doc:`/physics/phantom-young-modifications`).
 
 **v1 compatibility check** — both ``read_options_massloading`` and
 ``read_options_massloading_setup`` contain a clearly bracketed

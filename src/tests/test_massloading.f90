@@ -20,10 +20,14 @@ module testmassloading
                          write_options_massloading_setup, read_options_massloading_setup, &
                          write_headeropts_massloading, read_headeropts_massloading,  &
                          set_massloading_r_ref,                            &
-                         reset_massloading
+                         reset_massloading, nload_changes
  implicit none
  public :: test_massloading
  private
+
+ ! shared by the restart tests
+ real,    parameter :: m0_r = 1.e-4, torb_r = 2.0
+ integer, parameter :: n0_r = 1000
 
 contains
 
@@ -51,6 +55,10 @@ subroutine test_massloading(ntests, npass)
  call test_legacy_restart_state(ntests, npass)
  call test_total_mode(ntests, npass)
  call test_loading_rate(ntests, npass)
+ call test_restart_unchanged(ntests, npass)
+ call test_restart_changes(ntests, npass)
+ call test_restart_legacy_changes(ntests, npass)
+ call test_headeropts_segment_io(ntests, npass)
 
  ! leave loading off: later suites call check_setup, which read this module's state
  call reset_massloading()
@@ -659,7 +667,7 @@ subroutine test_headeropts_io(ntests, npass)
  call reset_massloading()
  iload_factor = 1
  dm_load = 4.2e-7;  r_orb = 12.5;  t_init = 3.3;  R_load = -1.
- hdr  = allocate_header(nreal=10)
+ hdr  = allocate_header(nreal=32)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
  call checkval(ierr, 0, 0, nfailed(1), 'header write: no error')
@@ -707,7 +715,7 @@ subroutine test_headeropts_legacy(ntests, npass)
  ! build a pre-R_load header: legacy fields present, NO R_load key
  call reset_massloading()
  iload_factor = 1
- hdr  = allocate_header(nreal=10)
+ hdr  = allocate_header(nreal=32)
  ierr = 0
  call add_to_rheader(4.2e-7, 'dm_load',     hdr, ierr)
  call add_to_rheader(12.5,   'r_orb',       hdr, ierr)
@@ -754,7 +762,7 @@ subroutine test_rload_precedence(ntests, npass)
  ! seed a dump header with r_orb = 99 (set R_load = -1 in header so it is inert)
  call reset_massloading()
  iload_factor = 1;  r_orb = 99.;  R_load = -1.
- hdr = allocate_header(nreal=10)
+ hdr = allocate_header(nreal=32)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
 
@@ -920,7 +928,7 @@ subroutine test_setup_header_state(ntests, npass)
  npartoftypetot(igas) = 1000
  nptmass = 1;  xyzmh_ptmass(:,:) = 0.;  xyzmh_ptmass(4,1) = 4.0
  iload_factor = 0;  iload = 0.1;  iload_dt = -1.
- hdr  = allocate_header(nreal=10)
+ hdr  = allocate_header(nreal=32)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
  ierr = 0;  call extract('mload_np0',    val, hdr, ierr)
@@ -967,7 +975,7 @@ subroutine test_restart_np0(ntests, npass)
  dm_load = 0.;  mloadfactor = 0.
  call step_mass_loading(0., 0.1, 1.0, 1, 0_1)
  call step_mass_loading(1.0, 0.1, 1.0, 1, 0_1)
- hdr  = allocate_header(nreal=10)
+ hdr  = allocate_header(nreal=32)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
 
@@ -1068,7 +1076,7 @@ subroutine test_legacy_restart_state(ntests, npass)
  nfailed(:) = 0
  call reset_massloading()
  iload_factor = 0;  iload = chi;  iload_dt = -1.
- hdr  = allocate_header(nreal=10)
+ hdr  = allocate_header(nreal=32)
  ierr = 0
  call add_to_rheader(chi*m0*1000., 'dm_load',     hdr, ierr)
  call add_to_rheader(1.0,          'r_orb',       hdr, ierr)
@@ -1094,8 +1102,7 @@ end subroutine test_legacy_restart_state
 !   the live gas particles; iload_total = 0 (default) a fixed rate per
 !   particle, so the total falls as particles are accreted. The header must
 !   carry the time of the last update so a restart continues exactly.
-!   Not exercised: the fatal on switching iload_total 1 -> 0 at a restart
-!   (io::fatal ends the test binary).
+!   Switching iload_total at a restart is covered by test_restart_changes.
 !---------------------------------------------------------------------------
 subroutine test_total_mode(ntests, npass)
  use dump_utils, only: dump_h, allocate_header, free_header
@@ -1135,7 +1142,7 @@ subroutine test_total_mode(ntests, npass)
 
  ! restart: the header carries t_last; the next link continues from the dump's particle mass
  call load_two_steps(1, m_link1)
- hdr  = allocate_header(nreal=12)
+ hdr  = allocate_header(nreal=32)
  ierr = 0
  call write_headeropts_massloading(hdr, ierr)
  call checkval(ierr, 0, 0, nfailed(5), 'total mode: header write')
@@ -1218,5 +1225,344 @@ subroutine test_loading_rate(ntests, npass)
  dm_load = 0.;  mloadfactor = 0.
  call update_test_scores(ntests, nfailed, npass)
 end subroutine test_loading_rate
+
+!---------------------------------------------------------------------------
+! test_restart_unchanged
+!   A restart whose .in matches the dump header gives the same particle mass
+!   as an uninterrupted run, in every mode, and raises no warning.
+!---------------------------------------------------------------------------
+subroutine test_restart_unchanged(ntests, npass)
+ use part,      only: massoftype, igas
+ use io,        only: id, master
+ use testutils, only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ integer :: nfailed(8), k
+ real    :: m_ref
+ integer, parameter :: modes(4) = (/0, 1, 2, 0/), totals(4) = (/0, 0, 0, 1/)
+ real,    parameter :: vals(4) = (/0.1, 0.01, 0.05, 0.1/)
+ character(len=12), parameter :: names(4) = (/'chi        ', 'xi         ', 'beta       ', 'chi, total '/)
+
+ if (id == master) write(*,"(a)") '  --> restart with unchanged settings'
+ nfailed(:) = 0
+ call set_live_gas(400)
+ do k = 1, 4
+    call first_link(modes(k), vals(k), totals(k), 0.5)
+    call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+    call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+    m_ref = massoftype(igas)
+
+    call first_link(modes(k), vals(k), totals(k), 0.5)
+    call next_link(1.0, modes(k), vals(k), totals(k))
+    call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+    call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+    call checkval(massoftype(igas), m_ref, 1.e-14, nfailed(2*k-1), &
+                  'unchanged '//trim(names(k))//': restart = uninterrupted run')
+    call checkval(nload_changes, 0, 0, nfailed(2*k), 'unchanged '//trim(names(k))//': no warning')
+ enddo
+ call clear_live_gas()
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_restart_unchanged
+
+!---------------------------------------------------------------------------
+! test_restart_changes
+!   A setting changed in the .in at a restart starts a loading segment at the
+!   dump's particle mass: no jump at the restart, the new rate from there on,
+!   chi still a fraction of the original M_disc0, and later restarts with the
+!   same settings stay on the new segment.
+!---------------------------------------------------------------------------
+subroutine test_restart_changes(ntests, npass)
+ use part,      only: massoftype, igas, nptmass, xyzmh_ptmass
+ use io,        only: id, master
+ use testutils, only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ integer :: nfailed(27)
+ real    :: m1, m2, slope
+ real, parameter :: chi = 0.1, beta = 0.05, tol = 1.e-9, pi = acos(-1.)
+ integer, parameter :: nacc = 400
+
+ if (id == master) write(*,"(a)") '  --> restart with changed settings (loading segments)'
+ nfailed(:) = 0
+ call set_live_gas(0)
+
+ ! chi doubled
+ call first_link(0, chi, 0, 1.0)
+ m1    = massoftype(igas)
+ slope = (m1 - m0_r) / 1.0
+ call next_link(1.0, 0, 2.*chi, 0)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1, 1.e-14, nfailed(1), 'chi x2: mass continuous at the restart')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas) - m1, 2.*slope, tol, nfailed(2), 'chi x2: slope after = 2 x slope before')
+ call checkval(dm_load, 2.*chi*m0_r*real(n0_r), 1.e-14, nfailed(3), 'chi x2: dm_load from the original M_disc0')
+ call checkval(nload_changes, 1, 0, nfailed(4), 'chi x2: change detected (warning)')
+ m2 = massoftype(igas)
+ call next_link(2.0, 0, 2.*chi, 0)
+ call step_mass_loading(3.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas) - m2, 2.*slope, tol, nfailed(5), 'chi x2: a later restart stays on the segment')
+ call checkval(nload_changes, 0, 0, nfailed(6), 'chi x2: no warning at an unchanged later restart')
+
+ ! mode 0 -> 2
+ call first_link(0, chi, 0, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, 2, beta, 0)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1, 1.e-14, nfailed(7), 'mode 0->2: continuous')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1*exp(log(1.+beta)*1.0/torb_r), tol, nfailed(8), 'mode 0->2: exponential from m_p(t_r)')
+ call checkval(nload_changes > 0, .true., nfailed(9), 'mode 0->2: change detected')
+
+ ! mode 2 -> 0
+ call first_link(2, beta, 0, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, 0, chi, 0)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1, 1.e-14, nfailed(10), 'mode 2->0: continuous')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1 + chi*m0_r*1.0/torb_r, tol, nfailed(11), 'mode 2->0: chi of the original M_disc0')
+ call checkval(nload_changes > 0, .true., nfailed(12), 'mode 2->0: change detected')
+
+ ! iload_total 0 -> 1 with 400 of 1000 accreted
+ call set_live_gas(nacc)
+ call first_link(0, chi, 0, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, 0, chi, 1)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1, 1.e-14, nfailed(13), 'total 0->1: continuous')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1 + chi*m0_r*real(n0_r)*1.0/(torb_r*real(n0_r-nacc)), tol, nfailed(14), &
+               'total 0->1: total rate over the live gas')
+ call checkval(nload_changes > 0, .true., nfailed(15), 'total 0->1: change detected')
+
+ ! iload_total 1 -> 0
+ call first_link(0, chi, 1, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, 0, chi, 0)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1, 1.e-14, nfailed(16), 'total 1->0: continuous')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1 + chi*m0_r*1.0/torb_r, tol, nfailed(17), 'total 1->0: rate per particle over n_p0')
+ call checkval(nload_changes > 0, .true., nfailed(18), 'total 1->0: change detected')
+ call set_live_gas(0)
+
+ ! R_load 1 -> 4 (orbital interval, host mass 1), then back to R_ref = 1
+ nptmass = 1;  xyzmh_ptmass(:,:) = 0.;  xyzmh_ptmass(4,1) = 1.0
+ call reset_massloading()
+ massoftype(igas) = m0_r
+ call set_in(0, chi, 0)
+ iload_dt = -1.
+ call set_massloading_r_ref(1.0)
+ call step_mass_loading(0.,  0.1, torb_r, 1, 0_1)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ m1 = massoftype(igas)
+ call next_link(1.0, 0, chi, 0, dt=-1., rload=4.0)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m1, 1.e-14, nfailed(19), 'R_load 1->4: continuous')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(t_orb, 2.*pi*8., tol, nfailed(20), 'R_load 1->4: t_orb from the new radius')
+ call checkval(massoftype(igas), m1 + chi*m0_r*1.0/(2.*pi*8.), tol, nfailed(21), 'R_load 1->4: new rate after')
+ call checkval(nload_changes, 1, 0, nfailed(22), 'R_load 1->4: change detected')
+ m2 = massoftype(igas)
+ call next_link(2.0, 0, chi, 0, dt=-1., rload=-1.)
+ call step_mass_loading(3.0, 0.1, torb_r, 1, 0_1)
+ call checkval(r_orb, 1.0, tol, nfailed(23), 'R_load 4->-1: r_orb back to R_ref')
+ call checkval(massoftype(igas), m2 + chi*m0_r*1.0/(2.*pi), tol, nfailed(24), 'R_load 4->-1: rate at R_ref')
+
+ ! fixed interval changed: iload_dt 2 -> 4
+ nptmass = 0
+ call first_link(0, chi, 0, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, 0, chi, 0, dt=4.0)
+ call step_mass_loading(1.0, 0.1, 4.0, 1, 0_1)
+ call step_mass_loading(3.0, 0.1, 4.0, 1, 0_1)
+ call checkval(massoftype(igas), m1 + chi*m0_r*2.0/4.0, tol, nfailed(25), 'iload_dt 2->4: new rate after')
+ call checkval(nload_changes, 1, 0, nfailed(26), 'iload_dt 2->4: change detected')
+
+ ! loading switched off at a restart: nothing loads, no warning
+ call first_link(0, chi, 0, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, -1, chi, 0)
+ call checkval(nload_changes, 0, 0, nfailed(27), 'loading off at restart: no change processing')
+
+ call clear_live_gas()
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_restart_changes
+
+!---------------------------------------------------------------------------
+! test_restart_legacy_changes
+!   A header written before the settings and segment keys existed: unchanged
+!   settings follow the original closed form from (m_p0, t_init); a changed
+!   chi starts a segment at the dump's particle mass and its update time.
+!---------------------------------------------------------------------------
+subroutine test_restart_legacy_changes(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header, add_to_rheader
+ use part,       only: massoftype, npartoftypetot, igas
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(6), ierr
+ real    :: m_tlast
+ real, parameter :: chi = 0.2, tlast = 0.9, tol = 1.e-9
+
+ if (id == master) write(*,"(a)") '  --> restart from a legacy header (no settings or segment keys)'
+ nfailed(:) = 0
+ hdr  = allocate_header(nreal=16)
+ ierr = 0
+ call add_to_rheader(chi*m0_r*real(n0_r), 'dm_load',      hdr, ierr)
+ call add_to_rheader(1.0,                 'r_orb',        hdr, ierr)
+ call add_to_rheader(m0_r,                'mload_mp0',    hdr, ierr)
+ call add_to_rheader(0.,                  'mload_tinit',  hdr, ierr)
+ call add_to_rheader(real(n0_r),          'mload_np0',    hdr, ierr)
+ call add_to_rheader(1.0,                 'mload_mstar0', hdr, ierr)
+ call add_to_rheader(tlast,               'mload_tlast',  hdr, ierr)
+ call add_to_rheader(0.,                  'mload_total',  hdr, ierr)
+ call add_to_rheader(1.0,                 'time',         hdr, ierr)
+ m_tlast = m0_r + chi*m0_r*tlast/torb_r
+
+ ! unchanged
+ call reset_massloading()
+ call set_in(0, chi, 0)
+ massoftype(igas) = m_tlast;  npartoftypetot(igas) = n0_r - 200
+ call read_headeropts_massloading(hdr)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m0_r + chi*m0_r*2.0/torb_r, 1.e-14, nfailed(1), &
+               'legacy unchanged: original closed form')
+ call checkval(nload_changes, 0, 0, nfailed(2), 'legacy unchanged: no warning')
+
+ ! chi 0.2 -> 0.6
+ call reset_massloading()
+ call set_in(0, 3.*chi, 0)
+ massoftype(igas) = m_tlast
+ call read_headeropts_massloading(hdr)
+ call step_mass_loading(1.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m_tlast + 3.*chi*m0_r*(1.0 - tlast)/torb_r, tol, nfailed(3), &
+               'legacy chi x3: segment from the dump mass at mload_tlast')
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ call checkval(massoftype(igas), m_tlast + 3.*chi*m0_r*(2.0 - tlast)/torb_r, tol, nfailed(4), &
+               'legacy chi x3: new rate after')
+ call checkval(dm_load, 3.*chi*m0_r*real(n0_r), 1.e-14, nfailed(5), 'legacy chi x3: dm_load from the original M_disc0')
+ call checkval(nload_changes, 1, 0, nfailed(6), 'legacy chi x3: change detected')
+
+ npartoftypetot(igas) = n0_r
+ call free_header(hdr)
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_restart_legacy_changes
+
+!---------------------------------------------------------------------------
+! test_headeropts_segment_io
+!   The settings and segment keys written to the dump header.
+!---------------------------------------------------------------------------
+subroutine test_headeropts_segment_io(ntests, npass)
+ use dump_utils, only: dump_h, allocate_header, free_header, extract
+ use part,       only: massoftype, igas
+ use io,         only: id, master
+ use testutils,  only: checkval, update_test_scores
+ integer, intent(inout) :: ntests, npass
+ type(dump_h) :: hdr
+ integer :: nfailed(9), ierr
+ real    :: val, m1
+ real, parameter :: tol = 1.e-14
+
+ if (id == master) write(*,"(a)") '  --> dump-header settings and segment keys'
+ nfailed(:) = 0
+
+ call first_link(2, 0.05, 0, 1.0)
+ iload_dt = 3.0;  R_load = 7.0
+ call set_massloading_r_ref(5.0)
+ hdr  = allocate_header(nreal=32)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+ call checkval(ierr, 0, 0, nfailed(1), 'header write: no error')
+ ierr = 0;  call extract('mload_mode',  val, hdr, ierr)
+ call checkval(val, 2.,    tol, nfailed(2), 'header: mload_mode')
+ ierr = 0;  call extract('mload_iload', val, hdr, ierr)
+ call checkval(val, 0.05,  tol, nfailed(3), 'header: mload_iload')
+ ierr = 0;  call extract('mload_dt',    val, hdr, ierr)
+ call checkval(val, 3.0,   tol, nfailed(4), 'header: mload_dt')
+ ierr = 0;  call extract('mload_rref',  val, hdr, ierr)
+ call checkval(val, 5.0,   tol, nfailed(5), 'header: mload_rref')
+ ierr = 0;  call extract('mload_mseg',  val, hdr, ierr)
+ call checkval(val, m0_r,  tol, nfailed(6), 'header: mload_mseg = m_p0 before any change')
+ call free_header(hdr)
+
+ call first_link(0, 0.1, 0, 1.0)
+ m1 = massoftype(igas)
+ call next_link(1.0, 0, 0.3, 0)
+ call step_mass_loading(2.0, 0.1, torb_r, 1, 0_1)
+ hdr  = allocate_header(nreal=32)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+ ierr = 0;  call extract('mload_mseg',  val, hdr, ierr)
+ call checkval(val, m1,    tol, nfailed(7), 'header: mload_mseg = m_p at the change')
+ ierr = 0;  call extract('mload_tseg',  val, hdr, ierr)
+ call checkval(val, 1.0,   tol, nfailed(8), 'header: mload_tseg = time of the change')
+ ierr = 0;  call extract('mload_iload', val, hdr, ierr)
+ call checkval(val, 0.3,   tol, nfailed(9), 'header: mload_iload = the new value')
+ call free_header(hdr)
+
+ call update_test_scores(ntests, nfailed, npass)
+end subroutine test_headeropts_segment_io
+
+!---------------------------------------------------------------------------
+! Restart helpers. first_link loads from t = 0 with steps at 0 and t_end;
+! next_link writes that link's header with dump time t_dump and starts the
+! next link from it with the given .in settings. massoftype(igas) carries
+! over, as read_dump restores it.
+!---------------------------------------------------------------------------
+subroutine set_in(mode, val, total)
+ integer, intent(in) :: mode, total
+ real,    intent(in) :: val
+ iload_factor = mode;  iload = val;  iload_total = total;  iload_dt = torb_r
+ dm_load = 0.;  mloadfactor = 0.
+end subroutine set_in
+
+subroutine first_link(mode, val, total, t_end)
+ use part, only: massoftype, npartoftypetot, igas
+ integer, intent(in) :: mode, total
+ real,    intent(in) :: val, t_end
+ call reset_massloading()
+ massoftype(igas)     = m0_r
+ npartoftypetot(igas) = n0_r
+ call set_in(mode, val, total)
+ call step_mass_loading(0.,    0.1, torb_r, 1, 0_1)
+ call step_mass_loading(t_end, 0.1, torb_r, 1, 0_1)
+end subroutine first_link
+
+subroutine next_link(t_dump, mode, val, total, dt, rload)
+ use dump_utils, only: dump_h, allocate_header, free_header, add_to_rheader
+ real,    intent(in) :: t_dump, val
+ integer, intent(in) :: mode, total
+ real,    intent(in), optional :: dt, rload
+ type(dump_h) :: hdr
+ integer :: ierr
+ hdr  = allocate_header(nreal=32)
+ ierr = 0
+ call write_headeropts_massloading(hdr, ierr)
+ call add_to_rheader(t_dump, 'time', hdr, ierr)
+ call reset_massloading()
+ call set_in(mode, val, total)
+ if (present(dt))    iload_dt = dt
+ if (present(rload)) R_load   = rload
+ call read_headeropts_massloading(hdr)
+ call free_header(hdr)
+end subroutine next_link
+
+subroutine set_live_gas(nacc)
+ use part, only: npart, xyzh, iphase, isetphase, maxphase, igas
+ use dim,  only: maxp
+ integer, intent(in) :: nacc
+ npart = n0_r
+ xyzh(:,1:n0_r) = 0.
+ xyzh(4,1:n0_r) = 0.1
+ if (nacc > 0) xyzh(4,1:nacc) = -0.1
+ if (maxphase == maxp) iphase(1:n0_r) = isetphase(igas, iactive=.true.)
+end subroutine set_live_gas
+
+subroutine clear_live_gas()
+ use part, only: npart, xyzh
+ npart = 0
+ xyzh(4,1:n0_r) = 0.
+end subroutine clear_live_gas
 
 end module testmassloading
