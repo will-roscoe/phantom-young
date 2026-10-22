@@ -80,6 +80,18 @@ Dump-header (restart safety):
      - :math:`m_{p,0}`, the particle mass at :math:`t_{\mathrm{init}}`
    * - ``mload_tinit``
      - :math:`t_{\mathrm{init}}`, the time mass loading was (re)initialised
+   * - ``mload_np0``, ``mload_mstar0``
+     - :math:`n_{p,0}` and :math:`M_{\star,0}`
+   * - ``mload_tlast``, ``mload_total``
+     - Time of the last loading update, and ``iload_total``
+   * - ``mload_mode``, ``mload_iload``, ``mload_dt``
+     - ``iload_factor``, ``iload`` and ``iload_dt`` in force when the dump
+       was written
+   * - ``mload_rref``
+     - The disc ``R_ref``, the loading radius when ``R_load < 0``
+   * - ``mload_mseg``, ``mload_tseg``
+     - Start of the current loading segment: particle mass
+       :math:`m_\mathrm{seg}` and time :math:`t_\mathrm{seg}`
 
 Equations
 ^^^^^^^^^
@@ -143,6 +155,39 @@ reproducing runs made with earlier versions of the code.
 Each particle's mass is evaluated directly from :math:`m_{p,0}` plus elapsed
 time at every binstep (no accumulation of round-off). Negative :math:`\xi` /
 :math:`\beta` is allowed and drains mass.
+
+Changing settings at a restart
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``iload_factor``, ``iload``, ``iload_dt``, ``R_load`` and ``iload_total`` may be
+edited in the ``.in`` before a restart. The restart compares them with the
+settings recorded in the dump header and, if any differ, raises a warning
+naming each change (old -> new) and the restart time, then starts a new
+loading segment. The segment begins at the dump's particle mass
+:math:`m_\mathrm{seg}`, at the time :math:`t_\mathrm{seg}` that mass was set
+(``mload_tlast``, else the dump time), and the closed forms become
+
+.. math::
+
+   m_p(t) = m_\mathrm{seg} + \frac{\xi\,(t - t_\mathrm{seg})}{T\, n_{p,0}},
+   \qquad
+   m_p(t) = m_\mathrm{seg}\, \exp\!\left[\frac{\ln(1+\beta)\,(t-t_\mathrm{seg})}{T}\right]
+
+so the particle mass is continuous and the new setting applies from
+:math:`t_\mathrm{seg}`. :math:`m_{p,0}` and :math:`n_{p,0}` are never changed,
+so :math:`\chi` remains a fraction of the original :math:`M_{\mathrm{disc,0}}`:
+doubling :math:`\chi` doubles the rate. A mode change works the same way
+(fixed-total loading continues incrementally from :math:`t_\mathrm{seg}`). The
+segment is written to the header, so later restarts with the same settings
+continue it. Unchanged settings give the same masses as an uninterrupted run
+and no warning.
+
+Dumps written before the settings keys existed are compared through
+``dm_load`` (:math:`\chi` or :math:`\xi`, the mode taken from the ``.in``),
+``mload_total`` and ``r_orb``; a change of :math:`\beta` or ``iload_dt`` cannot
+be detected from them and is taken as unchanged. A restart that sets
+``R_load < 0`` from a dump that only records an earlier ``R_load >= 0`` (no
+``mload_rref``) stops with a fatal error, since ``R_ref`` is unknown.
 
 Files
 ^^^^^
