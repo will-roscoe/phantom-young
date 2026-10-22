@@ -70,8 +70,23 @@ module mass_loading
    !   mode 1: dm_load     = iload (user xi),   mloadfactor = iload / M_disc0
    !   mode 2: mloadfactor = iload (user beta), dm_load = 0.
    !
+   ! Changing settings between restarts: iload_factor, iload, iload_dt, R_load
+   ! and iload_total may be edited in the .in before a restart. The dump
+   ! header records the settings in force; when the .in differs, the restart
+   ! raises a warning naming each change and starts a new loading SEGMENT at
+   ! the dump's particle mass m_seg and the time t_seg it was set (the header
+   ! t_last, else the dump time). The closed forms above become
+   !       m_p(t) = m_seg + dm_load * (t - t_seg) / (T * n_p0)
+   !       m_p(t) = m_seg * exp( ln(1+beta) * (t - t_seg) / T )
+   ! so the mass is continuous and the new setting applies from t_seg.
+   ! m_p0 and n_p0 never change, so chi stays a fraction of the original
+   ! M_disc0. The first segment is (m_p0, t_init). Headers written before
+   ! the settings keys existed are compared through dm_load (chi or xi),
+   ! mload_total and r_orb; beta and iload_dt are then taken as unchanged.
+   !
    ! .in parameters:  iload_factor, iload, iload_dt, R_load, iload_total
-   ! Dump header:     dm_load, r_orb, R_load, m_p0, t_init, n_p0, M_star0, t_last, iload_total (restart safety)
+   ! Dump header:     dm_load, r_orb, R_load, m_p0, t_init, n_p0, M_star0, t_last, iload_total,
+   !                  mload_mode, mload_iload, mload_dt, mload_rref (R_ref), mload_mseg, mload_tseg
    ! Runtime-derived:          t_orb from r_orb + M_star0 (or the current M_star, see torb_mstar0)
    !
    ! n_p0, m_p0 and M_star0 are fixed when the setup dump is written and carried
@@ -123,6 +138,7 @@ module mass_loading
    ! internal switches, never in .in
    logical,            public   :: torb_mstar0    = .true.    ! .true.: T from the host mass at the start; .false.: from the current host mass
    logical,            public   :: np0_initial    = .true.    ! .true.: n_p0 from the header (setup count); .false.: recounted at each (re)start
+   integer,            public   :: nload_changes  = 0         ! settings found changed between the dump header and the .in at the last restart
    ! private state — set once at init, never in .in
    integer(kind=8),    private  :: n_p0           = 0         ! initial gas particle count
    integer(kind=8),    private  :: n_live         = 0         ! live gas count at the last sync point (iload_total = 1)
@@ -132,6 +148,20 @@ module mass_loading
    logical,            private  :: dofrac_load    = .false.   ! .true. for beta/exponential mode (iload_factor=2)
    logical,            private  :: calc_torb      = .false.   ! .true. when iload_dt<=0: compute T_orb from r_orb and M_star each sync point
    logical,            private  :: initialised    = .false.
+   real,               private  :: m_seg          = 0.        ! particle mass at the start of the current loading segment
+   real,               private  :: t_seg          = -1.       ! start time of the current loading segment; -1 = not yet set
+   real,               private  :: r_ref          = -1.       ! disc R_ref, the loading radius when R_load < 0; -1 = unknown
+   ! dump-header settings, compared with the .in when loading initialises after a restart
+   logical,            private  :: hdr_loaded     = .false.   ! a header from a run that had started loading was read
+   logical,            private  :: hdr_settings   = .false.   ! header carries mload_mode/mload_iload/mload_dt
+   logical,            private  :: hdr_has_np0    = .false.
+   integer,            private  :: hdr_mode       = -1
+   integer,            private  :: hdr_total      = 0
+   real,               private  :: hdr_iload      = 0.
+   real,               private  :: hdr_dt         = 0.
+   real,               private  :: hdr_dm_load    = 0.
+   real,               private  :: hdr_r_orb      = 0.
+   real,               private  :: hdr_time       = -1.
    private
 
 contains
@@ -160,6 +190,16 @@ contains
       endif
       m_disc0 = m_p0 * real(n_p0)
 
+      if (  hdr_loaded  ) then
+         call detect_changes(m_disc0)
+         hdr_loaded = .false.
+         if (  nload_changes > 0  ) then
+            call parse_massloading(m_disc0)
+            call start_segment()
+            return
+         endif
+      endif
+
       ! restart path: dm_load already set from dump header — back-derive mloadfactor
       if (  dm_load /= 0.  ) then
          if (  iload_factor == 0 .or. iload_factor == 1  ) then
@@ -186,7 +226,8 @@ contains
    !-----------------------------------------------------------------------
    !+
    !   Derives dm_load, mloadfactor, dofrac_load, and calc_torb from the
-   !   module-level .in parameters.  Called only on a fresh (non-restart) run.
+   !   module-level .in parameters.  Called on a fresh run, on a restart in
+   !   beta mode, and on a restart whose loading settings changed.
    !+
    !-----------------------------------------------------------------------
    subroutine parse_massloading(m_disc0)
@@ -226,6 +267,142 @@ contains
             trim(rate_string(real(n_p0), m_p0, 'Mdot_nom'))
       endif
    end subroutine parse_massloading
+
+   !-----------------------------------------------------------------------
+   !+
+   !   Compares the loading settings in the dump header with the .in and sets
+   !   nload_changes to the number that differ: mode, chi/xi/beta, iload_total,
+   !   iload_dt and the loading radius r_orb. Master raises one warning naming
+   !   each change old -> new and the restart time.
+   !   Headers without mload_mode: a non-zero dm_load means a constant mode
+   !   (taken as the .in's when that is 0 or 1) and zero means beta; beta and
+   !   iload_dt are then taken as unchanged, as is chi without mload_np0.
+   !+
+   !-----------------------------------------------------------------------
+   subroutine detect_changes(m_disc0)
+      use io, only: id, master, warning
+      real, intent(in) :: m_disc0
+      integer :: mode_old
+      real    :: dt_old, dm_new, val_old, t_restart
+      character(len=512) :: msg
+      character(len=80)  :: item
+
+      nload_changes = 0
+      msg = ''
+      if (  hdr_settings  ) then
+         mode_old = hdr_mode
+      else if (  hdr_dm_load /= 0.  ) then
+         mode_old = 0
+         if (  iload_factor == 1  ) mode_old = 1
+      else
+         mode_old = 2
+      endif
+
+      if (  mode_old /= iload_factor  ) then
+         write(item,"(a,i0,3a,i0,3a)") 'iload_factor ', mode_old, ' (', trim(mode_name(mode_old)), ') -> ', &
+            iload_factor, ' (', trim(mode_name(iload_factor)), ')'
+         call add_change(item)
+      else if (  hdr_settings  ) then
+         if (  differs(hdr_iload, iload)  ) then
+            call add_change(trim(mode_name(iload_factor))//' '//trim(num(hdr_iload))//' -> '//trim(num(iload)))
+         endif
+      else if (  iload_factor /= 2  ) then
+         dm_new = iload
+         if (  iload_factor == 0  ) dm_new = iload * m_disc0
+         if (  (iload_factor == 1 .or. (hdr_has_np0 .and. np0_initial)) .and. differs(hdr_dm_load, dm_new)  ) then
+            val_old = hdr_dm_load
+            if (  iload_factor == 0  ) val_old = hdr_dm_load / m_disc0
+            call add_change(trim(mode_name(iload_factor))//' '//trim(num(val_old))//' -> '//trim(num(iload)))
+         endif
+      endif
+
+      if (  mode_old /= 2 .and. iload_factor /= 2 .and. hdr_total /= iload_total  ) then
+         write(item,"(a,i0,a,i0)") 'iload_total ', hdr_total, ' -> ', iload_total
+         call add_change(item)
+      endif
+
+      dt_old = iload_dt
+      if (  hdr_settings  ) dt_old = hdr_dt
+      if (  ((dt_old > 0.) .neqv. (iload_dt > 0.)) .or. (iload_dt > 0. .and. differs(dt_old, iload_dt))  ) then
+         call add_change('iload_dt '//trim(num(dt_old))//' -> '//trim(num(iload_dt)))
+      else if (  iload_dt <= 0. .and. differs(hdr_r_orb, r_orb)  ) then
+         call add_change('loading radius (R_load/R_ref) '//trim(num(hdr_r_orb))//' -> '//trim(num(r_orb)))
+      endif
+
+      if (  nload_changes > 0 .and. id == master  ) then
+         t_restart = hdr_time
+         if (  t_restart < 0.  ) t_restart = t_last
+         call warning('mass_loading','loading settings changed at restart (t = '//trim(num(t_restart))//'): '//trim(msg))
+      endif
+
+   contains
+
+      subroutine add_change(str)
+         character(len=*), intent(in) :: str
+         nload_changes = nload_changes + 1
+         if (  len_trim(msg) > 0  ) msg = trim(msg)//'; '
+         msg = trim(msg)//' '//trim(str)
+         msg = adjustl(msg)
+      end subroutine add_change
+
+   end subroutine detect_changes
+
+   character(len=4) function mode_name(mode)
+      integer, intent(in) :: mode
+      select case(mode)
+      case(0)
+         mode_name = 'chi'
+      case(1)
+         mode_name = 'xi'
+      case(2)
+         mode_name = 'beta'
+      case default
+         mode_name = 'off'
+      end select
+   end function mode_name
+
+   character(len=16) function num(x)
+      real, intent(in) :: x
+      if (  x /= 0. .and. (abs(x) < 1.e-3 .or. abs(x) >= 1.e5)  ) then
+         write(num,"(es11.4)") x
+      else
+         write(num,"(f14.4)") x
+      endif
+      num = adjustl(num)
+   end function num
+
+   logical function differs(a, b)
+      real, intent(in) :: a, b
+      differs = abs(a - b) > 1.e-8 * max(abs(a), abs(b))
+   end function differs
+
+   !-----------------------------------------------------------------------
+   !+
+   !   Starts a loading segment after a restart with changed settings:
+   !   m_seg = the dump's particle mass, t_seg = the time it was set (the
+   !   header t_last, else the dump time). t_last moves there too, so
+   !   fixed-total loading continues from the same point.
+   !   Fatal if the header has neither t_last nor the dump time.
+   !+
+   !-----------------------------------------------------------------------
+   subroutine start_segment()
+      use part, only: massoftype
+      use io,   only: iprint, id, master, fatal
+
+      m_seg = massoftype(igas)
+      if (  t_last >= 0.  ) then
+         t_seg = t_last
+      else if (  hdr_time >= 0.  ) then
+         t_seg = hdr_time
+      else
+         call fatal('mass_loading','loading settings changed at restart, but the dump header has no mload_tlast or time')
+      endif
+      t_last = t_seg
+      if (  id == master  ) then
+         write(iprint,"(1x,a,es13.6,a,es13.6)") &
+            '[mass_loading] new loading segment from t =', t_seg, '  at m_p =', m_seg
+      endif
+   end subroutine start_segment
 
    !-----------------------------------------------------------------------
    !+
@@ -286,9 +463,10 @@ contains
    !-----------------------------------------------------------------------
    !+
    !   Constant loading (modes 0 and 1):
-   !       m_p(t) = m_p0 + dm_load * (t - t_init) / (T * n_p0)
-   !   Computed directly from m_p0 and elapsed time to avoid accumulating
-   !   floating-point error over many binsteps.  t_init is set on first call.
+   !       m_p(t) = m_seg + dm_load * (t - t_seg) / (T * n_p0)
+   !   Computed directly from the segment start (m_seg, t_seg) to avoid
+   !   accumulating floating-point error over many binsteps.  The first
+   !   segment is (m_p0, t_init); t_init is set on first call.
    !   Exact when T is constant (torb_mstar0 or a fixed iload_dt). With
    !   torb_mstar0 = .false. the current T is applied to the whole elapsed
    !   time, so the loaded mass is re-rated whenever the host mass changes.
@@ -310,6 +488,10 @@ contains
       if (  t_last < 0.  ) then
          t_last = time
       endif
+      if (  t_seg < 0.  ) then
+         t_seg = t_init
+         m_seg = m_p0
+      endif
 
       m_old            = massoftype(igas)
       if (  iload_total == 1  ) then
@@ -317,7 +499,7 @@ contains
             massoftype(igas) = m_old + dm_load * (time - t_last) / (t_orb * real(n_live))
          endif
       else
-         massoftype(igas) = m_p0 + dm_load * (time - t_init) / (t_orb * real(n_p0))
+         massoftype(igas) = m_seg + dm_load * (time - t_seg) / (t_orb * real(n_p0))
       endif
       t_last = time
 
@@ -338,9 +520,10 @@ contains
    !-----------------------------------------------------------------------
    !+
    !   Exponential/beta loading (mode 2):
-   !       m_p(t) = m_p0 * exp( ln(1+beta) * (t - t_init) / T )
-   !   Computed directly from m_p0 and elapsed time to avoid accumulating
-   !   floating-point error over many binsteps.  t_init is set on first call.
+   !       m_p(t) = m_seg * exp( ln(1+beta) * (t - t_seg) / T )
+   !   Computed directly from the segment start (m_seg, t_seg) to avoid
+   !   accumulating floating-point error over many binsteps.  The first
+   !   segment is (m_p0, t_init); t_init is set on first call.
    !   Exact when T is constant (torb_mstar0 or a fixed iload_dt). With
    !   torb_mstar0 = .false. the current T is applied to the whole elapsed
    !   time, so the loaded mass is re-rated whenever the host mass changes.
@@ -356,12 +539,17 @@ contains
       if (  mloadfactor == 0. .or. t_orb <= 0. .or. dt <= 0.  ) then 
          return
       endif
-      if (  t_init < 0.  ) then 
+      if (  t_init < 0.  ) then
          t_init = time
       endif
-      
+      if (  t_seg < 0.  ) then
+         t_seg = t_init
+         m_seg = m_p0
+      endif
+
       m_old            = massoftype(igas)
-      massoftype(igas) = m_p0 * exp(log(1. + mloadfactor) * (time - t_init) / t_orb)
+      massoftype(igas) = m_seg * exp(log(1. + mloadfactor) * (time - t_seg) / t_orb)
+      t_last           = time
 
       if (  id == master .and. iverbose >= 1  ) then
          if (  iverbose >= 2 .or. log_splitstep  ) then
@@ -531,7 +719,7 @@ contains
       use infile_utils, only: write_inopt
       integer, intent(in) :: iunit
 
-      write(iunit,"(/,a)") '# options for mass loading'
+      write(iunit,"(/,a)") '# options for mass loading (may be changed between restarts: loading continues from the current particle mass)'
       call write_inopt(iload_factor, 'iload_factor', &
          'loading mode: -1=off, 0=chi (fraction/orbit), 1=xi (absolute/orbit), 2=beta (exponential)', iunit)
       call write_inopt(iload,   'iload',   &
@@ -634,12 +822,19 @@ contains
       else if (  ierr == 0 .and. r_ref_tmp > 0.  ) then
          r_orb = r_ref_tmp
       endif
+      if (  ierr == 0 .and. r_ref_tmp > 0.  ) r_ref = r_ref_tmp
    end subroutine read_options_massloading_setup
 
    !-----------------------------------------------------------------------
    !+
-   !   n_p0, m_p0 and M_star0 are written from the current particles when
-   !   loading has not initialised yet, so the setup dump already fixes them.
+   !   Writes the loading state to the dump header. n_p0, m_p0 and M_star0
+   !   are taken from the current particles when loading has not initialised
+   !   yet, so the setup dump already fixes them. The active .in settings
+   !   (mload_mode, mload_iload, mload_dt, R_load, mload_total, mload_rref)
+   !   let a restart detect a change; mload_mseg and mload_tseg anchor the
+   !   current loading segment. A header read but not yet compared with the
+   !   .in is compared first (init_massloading), so a dump written before
+   !   the first step after a restart records the new segment.
    !+
    !-----------------------------------------------------------------------
    subroutine write_headeropts_massloading(hdr, ierr)
@@ -647,14 +842,21 @@ contains
       use part,       only: massoftype, npartoftypetot, nptmass, xyzmh_ptmass
       type(dump_h), intent(inout) :: hdr
       integer,      intent(inout) :: ierr
-      real :: np0_hdr, mp0_hdr, mstar0_hdr
+      real :: np0_hdr, mp0_hdr, mstar0_hdr, mseg_hdr, tseg_hdr
 
+      if (  hdr_loaded  ) call init_massloading()
       np0_hdr = real(n_p0)
       if (  n_p0 <= 0  ) np0_hdr = real(npartoftypetot(igas))
       mp0_hdr = m_p0
       if (  m_p0 <= 0.  ) mp0_hdr = massoftype(igas)
       mstar0_hdr = mstar0
       if (  mstar0 <= 0. .and. nptmass > 0  ) mstar0_hdr = xyzmh_ptmass(4, id_mstar)
+      mseg_hdr = m_seg
+      tseg_hdr = t_seg
+      if (  t_seg < 0.  ) then
+         mseg_hdr = mp0_hdr
+         tseg_hdr = -1.
+      endif
 
       call add_to_rheader(dm_load,    'dm_load',      hdr, ierr)
       call add_to_rheader(r_orb,      'r_orb',        hdr, ierr)
@@ -665,14 +867,31 @@ contains
       call add_to_rheader(mstar0_hdr, 'mload_mstar0', hdr, ierr)
       call add_to_rheader(t_last,     'mload_tlast',  hdr, ierr)
       call add_to_rheader(real(iload_total), 'mload_total', hdr, ierr)
+      call add_to_rheader(real(iload_factor), 'mload_mode', hdr, ierr)
+      call add_to_rheader(iload,      'mload_iload',  hdr, ierr)
+      call add_to_rheader(iload_dt,   'mload_dt',     hdr, ierr)
+      call add_to_rheader(r_ref,      'mload_rref',   hdr, ierr)
+      call add_to_rheader(mseg_hdr,   'mload_mseg',   hdr, ierr)
+      call add_to_rheader(tseg_hdr,   'mload_tseg',   hdr, ierr)
    end subroutine write_headeropts_massloading
 
+   !-----------------------------------------------------------------------
+   !+
+   !   Restores the loading state from the dump header (after the .in has
+   !   been read) and resolves r_orb: the .in R_load if >= 0, else R_ref,
+   !   else the header r_orb. If loading had started (mload_tinit >= 0) the
+   !   header settings are kept for init_massloading to compare with the .in.
+   !   Keys added later are optional; missing ones fall back as noted below.
+   !   Fatal if the .in sets R_load < 0 but the header only knows an earlier
+   !   R_load (no mload_rref), so R_ref cannot be recovered.
+   !+
+   !-----------------------------------------------------------------------
    subroutine read_headeropts_massloading(hdr)
       use dump_utils, only: dump_h, extract
       use io,         only: fatal
       type(dump_h), intent(in) :: hdr
       integer :: ierr
-      real    :: np0_hdr, tlast_hdr, total_hdr
+      real    :: np0_hdr, tlast_hdr, total_hdr, val, rload_hdr
 
       if (iload_factor < 0) return
       ierr = 0;  call extract('dm_load',     dm_load, hdr, ierr)
@@ -682,7 +901,8 @@ contains
       ! dumps written before n_p0/M_star0 were persisted lack these keys; both
       ! then stay unset and are taken from the particles at (re)start
       ierr = 0;  call extract('mload_np0',    np0_hdr, hdr, ierr)
-      if (  ierr == 0 .and. np0_hdr > 0.  ) then
+      hdr_has_np0 = (  ierr == 0 .and. np0_hdr > 0.  )
+      if (  hdr_has_np0  ) then
          n_p0 = nint(np0_hdr, kind=8)
       else
          call warn_legacy_header('mload_np0')
@@ -696,23 +916,72 @@ contains
       ierr = 0;  call extract('mload_tlast', tlast_hdr, hdr, ierr)
       t_last = -1.
       if (  ierr == 0  ) t_last = tlast_hdr
-      ! returning to the per-particle closed form would reset m_p from m_p0 and t_init
       ierr = 0;  call extract('mload_total', total_hdr, hdr, ierr)
-      if (  ierr == 0 .and. nint(total_hdr) == 1 .and. iload_total == 0  ) then
-         call fatal('mass_loading','dump was loaded with iload_total = 1; restarting with iload_total = 0 '// &
-                    'would reset the particle mass. Keep iload_total = 1 for this run.')
+      hdr_total = 0
+      if (  ierr == 0  ) hdr_total = nint(total_hdr)
+
+      hdr_settings = in_header('mload_mode', hdr)
+      if (  hdr_settings  ) then
+         ierr = 0;  call extract('mload_mode',  val,       hdr, ierr)
+         hdr_mode = nint(val)
+         ierr = 0;  call extract('mload_iload', hdr_iload, hdr, ierr)
+         ierr = 0;  call extract('mload_dt',    hdr_dt,    hdr, ierr)
       endif
-      ! R_load is written to the header for provenance only and is NOT read
-      ! back here: the resolved radius lives in the header 'r_orb' (restored
-      ! above), which keeps legacy dumps (no 'R_load' key) safe from extract's
-      ! missing-key default. The loading-radius choice is sourced live from
-      ! the .in via read_options_massloading.
-      ! finalise r_orb: a live .in R_load (>=0) overrides; otherwise keep the
-      ! header r_orb (seeded from R_ref at phantomsetup, or a prior R_load).
+      ! segment anchor; without it the first segment (m_p0, t_init) is set at the first step
+      m_seg = 0.
+      t_seg = -1.
+      if (  in_header('mload_tseg', hdr)  ) then
+         ierr = 0;  call extract('mload_tseg', val, hdr, ierr)
+         if (  val >= 0.  ) then
+            t_seg = val
+            ierr = 0;  call extract('mload_mseg', m_seg, hdr, ierr)
+         endif
+      endif
+      hdr_time = -1.
+      if (  in_header('time', hdr)  ) then
+         ierr = 0;  call extract('time', hdr_time, hdr, ierr)
+      endif
+
+      ! R_ref: from mload_rref; before that key existed the header r_orb is
+      ! R_ref unless the header R_load was set
+      rload_hdr = -1.
+      if (  in_header('R_load', hdr)  ) then
+         ierr = 0;  call extract('R_load', rload_hdr, hdr, ierr)
+      endif
+      val = -1.
+      if (  in_header('mload_rref', hdr)  ) then
+         ierr = 0;  call extract('mload_rref', val, hdr, ierr)
+      endif
+      if (  val > 0.  ) then
+         r_ref = val
+      else if (  rload_hdr < 0.  ) then
+         r_ref = r_orb
+      endif
+
+      hdr_dm_load = dm_load
+      hdr_r_orb   = r_orb
+      hdr_loaded  = (  t_init >= 0.  )
+
       if (  R_load >= 0.  ) then
          r_orb = R_load
+      else if (  r_ref > 0.  ) then
+         r_orb = r_ref
+      else if (  iload_dt <= 0.  ) then
+         call fatal('mass_loading','the dump header has R_load >= 0 and no mload_rref, so R_ref is unknown '// &
+                    'and the .in R_load < 0 cannot fall back to it. Set R_load explicitly in the .in.')
       endif
    end subroutine read_headeropts_massloading
+
+   logical function in_header(tag, hdr) result(found)
+      use dump_utils, only: dump_h, i_real, i_real4, i_real8
+      character(len=*), intent(in) :: tag
+      type(dump_h),     intent(in) :: hdr
+
+      found = .false.
+      if (  allocated(hdr%realtags)  ) found = any(hdr%realtags(1:hdr%nums(i_real)) == tag)
+      if (  allocated(hdr%real4tags) ) found = found .or. any(hdr%real4tags(1:hdr%nums(i_real4)) == tag)
+      if (  allocated(hdr%real8tags) ) found = found .or. any(hdr%real8tags(1:hdr%nums(i_real8)) == tag)
+   end function in_header
 
    subroutine warn_legacy_header(tag)
       use io, only: iprint, id, master
@@ -728,6 +997,7 @@ contains
       real, intent(in) :: r
       if (  r > 0.  ) then
          r_orb = r
+         r_ref = r
       endif
    end subroutine set_massloading_r_ref
 
@@ -749,6 +1019,16 @@ contains
       iload_total = 0
       t_last      = -1.
       n_live      = 0
+      m_seg       = 0.
+      t_seg       = -1.
+      r_ref       = -1.
+      hdr_loaded  = .false.
+      hdr_settings = .false.
+      hdr_has_np0 = .false.
+      hdr_mode    = -1
+      hdr_total   = 0
+      hdr_time    = -1.
+      nload_changes = 0
    end subroutine reset_massloading
 
 end module mass_loading
