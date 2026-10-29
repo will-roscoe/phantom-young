@@ -452,8 +452,8 @@ Purpose
 ^^^^^^^
 
 Writes a radially binned profile of Toomre Q and the cooling parameter
-:math:`\beta = t_{\rm cool}\Omega` to the log at every dump, so a running disc can
-be read for why it is or is not fragmenting without opening a dump.
+:math:`\beta_{\rm cool} = t_{\rm cool}\Omega` to the log at every dump, so a running
+disc can be read for why it is or is not fragmenting without opening a dump.
 
 Parameters
 ^^^^^^^^^^
@@ -490,10 +490,23 @@ where :math:`M_{\rm enc}` is the gas mass in earlier annuli plus that at
 :math:`R \le R_{\rm mid}` in this one, plus :math:`M_\star`;
 :math:`P/\rho = (k_B/m_H)\langle T\rangle/\langle\mu\rangle` and
 :math:`\gamma = 1 + (P/\rho)/\langle u\rangle`. With ``icooling = 9``,
-:math:`\beta = \langle t_{\rm therm}\sqrt{M_\star/R^3}\rangle`. These are the
-standard single-snapshot definitions of the Toomre parameter and of the ratio
-of cooling time to orbital time, so a post-processing script that applies them
-to the same dump agrees to the printed precision. Particles outside the profile range are ignored, including in
+
+.. math::
+
+   \beta_{\rm cool} = \langle t_{\rm cool}\rangle\,\Omega, \qquad
+   t_{\rm cool} = \frac{u\,\kappa}{4\sigma_{\rm SB} T^4},
+
+the time the particle's radiative loss alone (no irradiation or hydro heating)
+would take to remove its internal energy, i.e. the cooling time of the Gammie
+(2001) criterion. :math:`\kappa` is the effective opacity the radiative cooling
+uses (``tau_store``, written to dumps as ``taumean``); particles where it or
+:math:`T` is not yet positive are left out of the mean. This is not the
+thermalisation time :math:`t_{\rm therm} = |u_{\rm eq} - u| / |\dot u|` the
+cooling relaxes :math:`u` with, which is much shorter near equilibrium; logs
+before this change printed :math:`\langle t_{\rm therm}\sqrt{M_\star/R^3}\rangle`
+in a column headed ``beta``. These are standard single-snapshot definitions, so a
+post-processing script that applies them to the same dump agrees to the printed
+precision. Particles outside the profile range are ignored, including in
 :math:`M_{\rm enc}`.
 
 Output
@@ -502,13 +515,13 @@ Output
 One block per dump, every line tagged so a parser can match it exactly::
 
    >> QBETA begin  t =   2.000000E+00  nbins =   10  mstar =   3.0000E-01  (code units)
-   >> QBETA        R_mid        Sigma          c_s        Omega            Q         beta          N
+   >> QBETA        R_mid        Sigma          c_s        Omega            Q    beta_cool          N
    >> QBETA    6.1818E+00   1.2619E-05   1.7886E-02   3.5664E-02   1.6090E+01   2.5126E-01        448
    ...
    >> QBETA end
 
-An empty annulus reports Q = -1 and c_s = 0; beta is -1 wherever it is
-unavailable.
+An empty annulus reports Q = -1 and c_s = 0; ``beta_cool`` is -1 wherever it is
+unavailable (empty annulus, no central sink, or not ``icooling = 9``).
 
 Files
 ^^^^^
