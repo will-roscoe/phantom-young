@@ -472,6 +472,11 @@ Parameters
      - ``-1``
      - inner and outer radius of the profile (code units); written only when
        ``nbins_qbeta > 0``, and both must be set for a profile to be written
+   * - ``nm_spiral``
+     - ``0``
+     - azimuthal modes :math:`m = 1..` ``nm_spiral`` (at most 4) logged on the
+       same rings after the Q/beta block; ``0`` turns it off. Written only when
+       ``nbins_qbeta > 0``
 
 Equations
 ^^^^^^^^^
@@ -523,12 +528,45 @@ One block per dump, every line tagged so a parser can match it exactly::
 An empty annulus reports Q = -1 and c_s = 0; ``beta_cool`` is -1 wherever it is
 unavailable (empty annulus, no central sink, or not ``icooling = 9``).
 
+Azimuthal modes (spiral structure)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+With ``nm_spiral > 0`` a second block follows on the same rings and centre. For the
+:math:`N` gas particles in a ring, at azimuth :math:`\phi_i` about the centre,
+
+.. math::
+
+   A_m = \frac{1}{N}\Big|\sum_i e^{i m \phi_i}\Big|, \quad
+   \phi_m = \frac{1}{m}\arg\sum_i e^{i m \phi_i} \in [0, 2\pi/m), \quad
+   {\rm rms} = \sqrt{2\sum_m A_m^2}.
+
+Gas particles share one mass, so these are the mass-weighted amplitudes. A ring
+with :math:`\Sigma \propto 1 + 2A\cos m(\phi - \phi_0)` gives
+:math:`A_m = A` and :math:`\phi_m = \phi_0`, the azimuth of one density maximum,
+anticlockwise from :math:`+x`; ``rms`` is the rms of
+:math:`\delta\Sigma/\Sigma` over azimuth (Parseval) from the logged modes. A
+spiral arm shows as :math:`\phi_m` changing smoothly from ring to ring; a clump
+as a peak in a few rings with no such run. Random azimuths give
+:math:`\langle A_m\rangle = \sqrt{\pi/4N}` and
+:math:`\langle A_m^2\rangle = 1/N`, so rings with few particles are noisy. The
+cosines and sines come from powers of :math:`(x + iy)/R`, so there is no
+``atan2`` per particle; the cost is one extra pass over the particles at each
+dump and nothing when off. ::
+
+   >> SPIRAL begin  t =   2.000000E+01  nbins =   30  nm =  4  (code units, phi in radians)
+   >> SPIRAL       R_mid          N        A_1      phi_1        A_2      phi_2        A_3      phi_3        A_4      phi_4        rms
+   >> SPIRAL   1.6930E+01      32770  2.902E-11  4.399E+00  5.059E-03  5.089E-01  8.995E-11  2.955E-01  2.371E-03  1.040E+00  7.901E-03
+   ...
+   >> SPIRAL end
+
+An empty ring reports -1 for :math:`A_m`, :math:`\phi_m` and ``rms``.
+
 Files
 ^^^^^
 
 - ``src/main/radial_stability.f90``: accumulation, profile, ``.in`` options.
 - ``src/main/evolve_utils.F90``: called at each dump, beside the stop condition.
-- ``src/tests/test_qbeta.f90``: ``phantomtest qbeta``.
+- ``src/tests/test_qbeta.f90``: ``phantomtest qbeta`` (also ``spiral``).
 
 References
 ----------

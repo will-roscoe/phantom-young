@@ -280,7 +280,7 @@ subroutine write_spiral_profile(time,edges,xc,yc,iphase)
  integer, allocatable :: n(:)
  real,    allocatable :: sumc(:,:),sums(:,:),amp(:,:),phase(:,:),rms(:)
  integer :: b,m,nb,nm
- character(len=32) :: fmt
+ character(len=64) :: fmt
 
  nb = size(edges) - 1
  nm = min(nm_spiral,nm_spiral_max)
