@@ -7,6 +7,7 @@
 module testqbeta
 !
 ! Unit tests for the radially binned Toomre Q / cooling beta log profile
+! and the azimuthal Fourier (spiral) profile written beside it
 !
 ! :References: None
 !
@@ -34,6 +35,8 @@ subroutine test_qbeta(ntests,npass)
  call test_binning(ntests,npass)
  call test_profile(ntests,npass)
  call test_cooling_time(ntests,npass)
+ call test_spiral_pattern(ntests,npass)
+ call test_spiral_noise(ntests,npass)
 
 end subroutine test_qbeta
 
@@ -152,6 +155,137 @@ subroutine test_cooling_time(ntests,npass)
  call update_test_scores(ntests,nfail,npass)
 
 end subroutine test_cooling_time
+
+!-----------------------------------------------------------------------
+! an m-armed ring of known amplitude and phase gives them back, per ring,
+! including a phase that winds with R; other modes and empty rings as stated
+!-----------------------------------------------------------------------
+subroutine test_spiral_pattern(ntests,npass)
+ use physcon,          only:pi
+ use radial_stability, only:accumulate_spiral,finish_spiral
+ use testutils,        only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer, parameter :: nr = 1000, nm = 4, nb = 3
+ real, parameter :: edges3(nb+1) = (/1.,2.,4.,8./)
+ real    :: xyzh(4,nb*nr+2),sumc(nm,nb),sums(nm,nb),amp(nm,nb),phase(nm,nb),rms(nb)
+ real    :: phi0(nb),amp0
+ integer :: n(nb),nfail(10),b,np
+ integer(kind=1) :: iphase(0)
+
+ ! two-armed pattern, amplitude 0.2, phase winding as phi_0 = 0.3 + 0.9 ln(R/1.5)
+ amp0 = 0.2
+ do b=1,nb
+    phi0(b) = 0.3 + 0.9*log(0.75*(edges3(b)+edges3(b+1))/1.5)
+    call place_pattern(nr,0.5*(edges3(b)+edges3(b+1)),2,amp0,phi0(b),xyzh(:,(b-1)*nr+1:b*nr))
+ enddo
+ ! one dead particle in ring 1 and one beyond the outer edge: both ignored
+ np = nb*nr + 2
+ xyzh(:,np-1) = (/1.5,0.,0.,-1./)
+ xyzh(:,np)   = (/9.,0.,0.,0.1/)
+ call accumulate_spiral(np,xyzh,iphase,0.,0.,edges3,n,sumc,sums)
+ call finish_spiral(n,sumc,sums,amp,phase,rms)
+
+ nfail(:) = 0
+ call checkval(all(n == nr),.true.,nfail(1),'dead and out-of-range particles are not counted')
+ call checkval(nb,amp(2,:),amp0,1.e-10,nfail(2),'A_2 of a two-armed ring')
+ call checkval(nb,phase(2,:)-phi0,0.,1.e-10,nfail(3),'phi_2 follows a winding phi_0(R)')
+ call checkval(maxval(abs(amp((/1,3,4/),:))) < 1.e-10,.true.,nfail(4),'A_1, A_3, A_4 vanish')
+ call checkval(nb,rms,sqrt(2.)*amp0,1.e-10,nfail(5),'rms contrast = sqrt(2 sum A_m^2)')
+
+ ! one- and three-armed rings: m and phase in [0, 2 pi/m) come back
+ call place_pattern(nr,1.5,1,0.1,4.0,xyzh(:,1:nr))
+ call place_pattern(nr,3.0,3,0.3,1.0,xyzh(:,nr+1:2*nr))
+ call accumulate_spiral(2*nr,xyzh,iphase,0.,0.,edges3,n,sumc,sums)
+ call finish_spiral(n,sumc,sums,amp,phase,rms)
+ call checkval(abs(amp(1,1)-0.1) < 1.e-10 .and. abs(phase(1,1)-4.0) < 1.e-10,.true.,nfail(6), &
+               'one-armed ring: A_1 and phi_1')
+ call checkval(abs(amp(3,2)-0.3) < 1.e-10 .and. abs(phase(3,2)-1.0) < 1.e-10,.true.,nfail(7), &
+               'three-armed ring: A_3 and phi_3')
+ call checkval(all(phase(:,1:2) >= 0.) .and. all(phase(1,1:2) < 2.*pi) .and. all(phase(4,1:2) < 0.5*pi), &
+               .true.,nfail(8),'phi_m lies in [0, 2 pi/m)')
+ call checkval(n(3) == 0 .and. all(amp(:,3) == -1.) .and. all(phase(:,3) == -1.) .and. rms(3) == -1., &
+               .true.,nfail(9),'empty ring: A_m, phi_m and rms are -1')
+
+ ! the pattern is measured about the centre given, not the origin
+ xyzh(1,1:nr) = xyzh(1,1:nr) + 10.
+ xyzh(2,1:nr) = xyzh(2,1:nr) - 5.
+ call accumulate_spiral(nr,xyzh,iphase,10.,-5.,edges3,n,sumc,sums)
+ call finish_spiral(n,sumc,sums,amp,phase,rms)
+ call checkval(abs(amp(1,1)-0.1) < 1.e-10 .and. abs(phase(1,1)-4.0) < 1.e-10,.true.,nfail(10), &
+               'measured about (xc,yc)')
+ call update_test_scores(ntests,nfail,npass)
+
+end subroutine test_spiral_pattern
+
+!-----------------------------------------------------------------------
+! evenly spaced particles have no modes; random azimuths give the noise
+! floor <A_m> = sqrt(pi/(4N)) of a sum of N random unit vectors
+!-----------------------------------------------------------------------
+subroutine test_spiral_noise(ntests,npass)
+ use physcon,          only:pi
+ use radial_stability, only:accumulate_spiral,finish_spiral
+ use testutils,        only:checkval,update_test_scores
+ integer, intent(inout) :: ntests,npass
+ integer, parameter :: nr = 1000, nm = 4, ntrial = 400
+ real    :: xyzh(4,nr),sumc(nm,2),sums(nm,2),amp(nm,2),phase(nm,2),rms(2),phi,amean
+ integer :: n(2),nfail(2),i,k
+ integer(kind=8) :: seed
+ integer(kind=1) :: iphase(0)
+
+ do i=1,nr
+    phi = 8.*atan(1.)*(i-1)/nr     ! exact 2 pi: physcon's pi has 11 digits
+    xyzh(:,i) = (/1.5*cos(phi),1.5*sin(phi),0.,0.1/)
+ enddo
+ call accumulate_spiral(nr,xyzh,iphase,0.,0.,edges,n,sumc,sums)
+ call finish_spiral(n,sumc,sums,amp,phase,rms)
+ nfail(:) = 0
+ call checkval(maxval(amp(:,1)) < 1.e-12,.true.,nfail(1),'evenly spaced ring: every A_m vanishes')
+
+ seed = 20261101_8
+ amean = 0.
+ do k=1,ntrial
+    do i=1,nr
+       seed = mod(16807_8*seed,2147483647_8)
+       phi  = 2.*pi*real(seed)/2147483647.
+       xyzh(1,i) = 1.5*cos(phi)
+       xyzh(2,i) = 1.5*sin(phi)
+    enddo
+    call accumulate_spiral(nr,xyzh,iphase,0.,0.,edges,n,sumc,sums)
+    call finish_spiral(n,sumc,sums,amp,phase,rms)
+    amean = amean + sum(amp(:,1))
+ enddo
+ amean = amean/(nm*ntrial)
+ ! 1600 Rayleigh samples: the mean is known to 1.3%, so 5% is ~4 sigma
+ call checkval(amean,sqrt(pi/(4.*nr)),0.05,nfail(2),'random ring: <A_m> = sqrt(pi/4N)')
+ call update_test_scores(ntests,nfail,npass)
+
+end subroutine test_spiral_noise
+
+! put n particles on a ring of radius r with azimuthal density proportional
+! to 1 + 2 a cos(m (phi - phi0)), at the midpoint quantiles of its CDF
+subroutine place_pattern(n,r,m,a,phi0,xyzh)
+ use physcon, only:pi
+ integer, intent(in)  :: n,m
+ real,    intent(in)  :: r,a,phi0
+ real,    intent(out) :: xyzh(:,:)
+ integer :: j,it
+ real    :: target,phi,g
+
+ do j=1,n
+    target = 2.*pi*(j-0.5)/n
+    phi = target
+    do it=1,100
+       g = phi + (2.*a/m)*(sin(m*(phi-phi0)) - sin(-m*phi0)) - target
+       phi = phi - g/(1. + 2.*a*cos(m*(phi-phi0)))
+       if (abs(g) < 1.e-15) exit
+    enddo
+    xyzh(1,j) = r*cos(phi)
+    xyzh(2,j) = r*sin(phi)
+    xyzh(3,j) = 0.01*(-1)**j
+    xyzh(4,j) = 0.1
+ enddo
+
+end subroutine place_pattern
 
 ! put particles at cylindrical radius r(i) on the x axis, so R = r exactly and
 ! the edge cases are not decided by rounding in the test itself

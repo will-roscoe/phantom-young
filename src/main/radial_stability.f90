@@ -42,12 +42,29 @@ module radial_stability
 !   >> QBETA  <one row per bin>
 !   >> QBETA end
 !
+! With nm_spiral > 0 a second block follows on the same rings and centre: the
+! azimuthal Fourier modes m = 1..nm_spiral of the gas in each ring,
+!
+!   A_m   = | sum_i exp(i m phi_i) | / N      (gas particles share one mass)
+!   phi_m = arg( sum_i exp(i m phi_i) ) / m,  in [0, 2 pi/m)
+!   rms   = sqrt(2 sum_m A_m^2)               = rms of delta Sigma / Sigma over phi
+!
+! so a ring with Sigma ~ 1 + 2 A cos(m (phi - phi_0)) logs A_m = A, phi_m = phi_0:
+! phi_m is the azimuth of one density maximum, anticlockwise from +x. Random
+! azimuths give A_m ~ sqrt(pi/(4N)). An empty ring logs -1 for A_m, phi_m and rms.
+!
+!   >> SPIRAL begin  t = <time>  nbins = <n>  nm = <nm>  (code units, phi in radians)
+!   >> SPIRAL  R_mid  N  A_1  phi_1 ... A_nm  phi_nm  rms
+!   >> SPIRAL  <one row per bin>
+!   >> SPIRAL end
+!
 ! :References: Toomre (1964); Gammie (2001)
 !
 ! :Owner: will-roscoe
 !
 ! :Runtime parameters:
 !   - nbins_qbeta : *number of radial bins for the Q/beta log profile (0=off)*
+!   - nm_spiral   : *azimuthal modes m=1..nm_spiral logged on the Q/beta bins (0=off)*
 !   - rmax_qbeta  : *outer radius of the Q/beta profile (code units)*
 !   - rmin_qbeta  : *inner radius of the Q/beta profile (code units)*
 !
@@ -58,8 +75,11 @@ module radial_stability
  integer, public :: nbins_qbeta = 0
  real,    public :: rmin_qbeta  = -1.
  real,    public :: rmax_qbeta  = -1.
+ integer, public :: nm_spiral   = 0
+ integer, parameter :: nm_spiral_max = 4
 
  public :: write_qbeta_profile,accumulate_qbeta,finish_qbeta,cooling_time
+ public :: accumulate_spiral,finish_spiral
  public :: write_options_qbeta,read_options_qbeta
 
  private
@@ -162,6 +182,132 @@ pure subroutine finish_qbeta(edges,pmass,mstar,kb_on_mh_code,n,nin,sumT,summu,su
  enddo
 
 end subroutine finish_qbeta
+
+!-----------------------------------------------------------------------
+!+
+!  bin gas particles by cylindrical radius about (xc,yc) and sum
+!  cos(m phi) and sin(m phi), m = 1..size(sumc,1), per bin; powers of
+!  (x + i y)/R give them without an atan2 per particle
+!+
+!-----------------------------------------------------------------------
+subroutine accumulate_spiral(np,xyzh,iphase,xc,yc,edges,n,sumc,sums)
+ use part, only:iamtype,igas,isdead_or_accreted
+ integer,         intent(in)  :: np
+ real,            intent(in)  :: xyzh(:,:),xc,yc,edges(:)
+ integer(kind=1), intent(in)  :: iphase(:)
+ integer,         intent(out) :: n(:)
+ real,            intent(out) :: sumc(:,:),sums(:,:)
+ integer :: i,b,nb,m,nm
+ real    :: dx,dy,r,c1,s1,cm,sm,tmp,rlog0,dlogr
+
+ nb = size(edges) - 1
+ nm = size(sumc,1)
+ n = 0; sumc = 0.; sums = 0.
+ rlog0 = log(edges(1))
+ dlogr = (log(edges(nb+1)) - rlog0)/nb
+ !$omp parallel do default(none) &
+ !$omp shared(np,xyzh,iphase,xc,yc,edges,nb,nm,rlog0,dlogr) &
+ !$omp private(i,b,m,dx,dy,r,c1,s1,cm,sm,tmp) &
+ !$omp reduction(+:n,sumc,sums)
+ do i=1,np
+    if (isdead_or_accreted(xyzh(4,i))) cycle
+    if (size(iphase) >= np) then
+       if (iamtype(iphase(i)) /= igas) cycle
+    endif
+    dx = xyzh(1,i) - xc
+    dy = xyzh(2,i) - yc
+    r  = sqrt(dx**2 + dy**2)
+    if (r < edges(1) .or. r >= edges(nb+1)) cycle
+    b = min(nb,1 + int((log(r) - rlog0)/dlogr))
+    if (r < edges(b)) b = b - 1
+    if (r >= edges(b+1)) b = b + 1
+    n(b) = n(b) + 1
+    c1 = dx/r
+    s1 = dy/r
+    cm = c1
+    sm = s1
+    do m=1,nm
+       sumc(m,b) = sumc(m,b) + cm
+       sums(m,b) = sums(m,b) + sm
+       tmp = cm*c1 - sm*s1
+       sm  = sm*c1 + cm*s1
+       cm  = tmp
+    enddo
+ enddo
+ !$omp end parallel do
+
+end subroutine accumulate_spiral
+
+!-----------------------------------------------------------------------
+!+
+!  turn the per-bin sums into A_m, phi_m in [0, 2 pi/m) and the rms
+!  contrast sqrt(2 sum A_m^2); all -1 in an empty bin
+!+
+!-----------------------------------------------------------------------
+pure subroutine finish_spiral(n,sumc,sums,amp,phase,rms)
+ use physcon, only:pi
+ integer, intent(in)  :: n(:)
+ real,    intent(in)  :: sumc(:,:),sums(:,:)
+ real,    intent(out) :: amp(:,:),phase(:,:),rms(:)
+ integer :: b,m
+
+ do b=1,size(n)
+    if (n(b) > 0) then
+       do m=1,size(sumc,1)
+          amp(m,b)   = sqrt(sumc(m,b)**2 + sums(m,b)**2)/n(b)
+          phase(m,b) = modulo(atan2(sums(m,b),sumc(m,b)),2.*pi)/m
+       enddo
+       rms(b) = sqrt(2.*sum(amp(:,b)**2))
+    else
+       amp(:,b) = -1.; phase(:,b) = -1.; rms(b) = -1.
+    endif
+ enddo
+
+end subroutine finish_spiral
+
+!-----------------------------------------------------------------------
+!+
+!  compute the azimuthal mode profile on the Q/beta bins and write it to
+!  the log, after the Q/beta block
+!+
+!-----------------------------------------------------------------------
+subroutine write_spiral_profile(time,edges,xc,yc,iphase)
+ use io,       only:iprint,id,master
+ use mpiutils, only:reduceall_mpi
+ use part,     only:npart,xyzh
+ real,            intent(in) :: time,edges(:),xc,yc
+ integer(kind=1), intent(in) :: iphase(:)
+ integer, allocatable :: n(:)
+ real,    allocatable :: sumc(:,:),sums(:,:),amp(:,:),phase(:,:),rms(:)
+ integer :: b,m,nb,nm
+ character(len=64) :: fmt
+
+ nb = size(edges) - 1
+ nm = min(nm_spiral,nm_spiral_max)
+ allocate(n(nb),sumc(nm,nb),sums(nm,nb),amp(nm,nb),phase(nm,nb),rms(nb))
+ call accumulate_spiral(npart,xyzh,iphase,xc,yc,edges,n,sumc,sums)
+ do b=1,nb
+    n(b) = int(reduceall_mpi('+',n(b)))
+    do m=1,nm
+       sumc(m,b) = reduceall_mpi('+',sumc(m,b))
+       sums(m,b) = reduceall_mpi('+',sums(m,b))
+    enddo
+ enddo
+ call finish_spiral(n,sumc,sums,amp,phase,rms)
+
+ if (id==master) then
+    write(iprint,"(1x,a,es14.6,a,i4,a,i2,a)") '>> SPIRAL begin  t = ',time,'  nbins = ',nb, &
+          '  nm = ',nm,'  (code units, phi in radians)'
+    write(iprint,"(1x,a,9a)") '>> SPIRAL       R_mid          N', &
+          ('        A_'//achar(48+m)//'      phi_'//achar(48+m),m=1,nm),'        rms'
+    write(fmt,"(a,i0,a)") '(1x,a,es12.4,1x,i10,',2*nm+1,'(1x,es10.3))'
+    do b=1,nb
+       write(iprint,fmt) '>> SPIRAL ',0.5*(edges(b)+edges(b+1)),n(b),(amp(m,b),phase(m,b),m=1,nm),rms(b)
+    enddo
+    write(iprint,"(1x,a)") '>> SPIRAL end'
+ endif
+
+end subroutine write_spiral_profile
 
 !-----------------------------------------------------------------------
 !+
@@ -276,6 +422,7 @@ subroutine write_qbeta_profile(time)
     enddo
     write(iprint,"(1x,a)") '>> QBETA end'
  endif
+ if (nm_spiral > 0) call write_spiral_profile(time,edges,xc,yc,phase_or_gas())
 
 contains
 
@@ -299,6 +446,7 @@ subroutine write_options_qbeta(iunit)
  if (nbins_qbeta > 0) then
     call write_inopt(rmin_qbeta,'rmin_qbeta','inner radius of the Q/beta profile (code units)',iunit)
     call write_inopt(rmax_qbeta,'rmax_qbeta','outer radius of the Q/beta profile (code units)',iunit)
+    call write_inopt(nm_spiral,'nm_spiral','azimuthal modes m=1..nm_spiral logged on the Q/beta bins (0=off)',iunit)
  endif
 
 end subroutine write_options_qbeta
@@ -312,6 +460,7 @@ subroutine read_options_qbeta(db,nerr)
  call read_inopt(nbins_qbeta,'nbins_qbeta',db,errcount=nerr,min=0,default=0)
  call read_inopt(rmin_qbeta,'rmin_qbeta',db,errcount=nerr,default=-1.)
  call read_inopt(rmax_qbeta,'rmax_qbeta',db,errcount=nerr,default=-1.)
+ call read_inopt(nm_spiral,'nm_spiral',db,errcount=nerr,min=0,max=nm_spiral_max,default=0)
 
 end subroutine read_options_qbeta
 
