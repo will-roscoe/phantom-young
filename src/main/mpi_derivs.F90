@@ -52,6 +52,7 @@ module mpiderivs
  public :: deallocate_cell_comms_arrays
 
  public :: init_cell_exchange
+ public :: init_send_requests
  public :: send_cell
  public :: recv_cells
  public :: check_send_finished
@@ -256,6 +257,24 @@ end subroutine send_cellforce
 
 !-----------------------------------------------------------------------
 !+
+!  Set a thread's send requests to MPI_REQUEST_NULL before any send,
+!  so check_send_finished may test them: MPI_REQUEST_NULL is 0 only
+!  in some MPI libraries (e.g. not in Intel MPI or MPICH)
+!+
+!-----------------------------------------------------------------------
+subroutine init_send_requests(irequestsend)
+ integer, intent(out) :: irequestsend(nprocs)
+
+#ifdef MPI
+ irequestsend = MPI_REQUEST_NULL
+#else
+ irequestsend = 0
+#endif
+
+end subroutine init_send_requests
+
+!-----------------------------------------------------------------------
+!+
 !  Subroutine to check that non-blocking send has completed
 !+
 !-----------------------------------------------------------------------
@@ -295,10 +314,13 @@ subroutine recv_while_wait_dens(stack,xrecvbuf,irequestrecv,irequestsend,thread_
 
 !--signal to other OMP threads that this thread has finished sending
  thread_complete(omp_thread_num()+1) = .true.
+ !$omp flush
 
  !--continue receiving cells until all OMP threads have finished sending
+ !  (flush each pass: thread_complete is set by the other threads)
  do while (.not. all(thread_complete))
     call recv_cells(stack,xrecvbuf,irequestrecv,counters)
+    !$omp flush
  enddo
 
  !--signal to other MPI tasks that this task has finished sending
@@ -316,6 +338,7 @@ subroutine recv_while_wait_dens(stack,xrecvbuf,irequestrecv,irequestsend,thread_
     !$omp master
     call check_complete(counters,ncomplete_mpi)
     !$omp end master
+    !$omp flush
  enddo
 
  call barrier_mpi
@@ -345,10 +368,13 @@ subroutine recv_while_wait_force(stack,xrecvbuf,irequestrecv,irequestsend,thread
 
  !--signal to other OMP threads that this thread has finished sending
  thread_complete(omp_thread_num()+1) = .true.
+ !$omp flush
 
  !--continue receiving cells until all OMP threads have finished sending
+ !  (flush each pass: thread_complete is set by the other threads)
  do while (.not. all(thread_complete))
     call recv_cells(stack,xrecvbuf,irequestrecv,counters)
+    !$omp flush
  enddo
 
  !--signal to other MPI tasks that this task has finished sending
@@ -366,6 +392,7 @@ subroutine recv_while_wait_force(stack,xrecvbuf,irequestrecv,irequestsend,thread
     !$omp master
     call check_complete(counters,ncomplete_mpi)
     !$omp end master
+    !$omp flush
  enddo
 
  call barrier_mpi

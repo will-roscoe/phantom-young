@@ -179,7 +179,11 @@ module forces
        idviz          = 28 + 5*(maxdustsmall-1), &
        idensgasi      = 29 + 5*(maxdustsmall-1), &
        icsi           = 30 + 5*(maxdustsmall-1), &
-       idradi         = 31 + 5*(maxdustsmall-1)
+       idradi         = 31 + 5*(maxdustsmall-1), &
+       igpotcooli     = 32 + 5*(maxdustsmall-1), &
+       igradpcxi      = 33 + 5*(maxdustsmall-1), &
+       igradpcyi      = 34 + 5*(maxdustsmall-1), &
+       igradpczi      = 35 + 5*(maxdustsmall-1)
 
  private
 
@@ -228,7 +232,7 @@ subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
 #endif
  use dust,         only:drag_implicit
  use nicil,        only:nimhd_get_jcbcb
- use mpiderivs,    only:send_cell,recv_cells,check_send_finished,init_cell_exchange,&
+ use mpiderivs,    only:send_cell,recv_cells,check_send_finished,init_cell_exchange,init_send_requests,&
                         finish_cell_exchange,recv_while_wait,reset_cell_counters,cell_counters
  use mpimemory,    only:reserve_stack,reset_stacks,get_cell,write_cell
  use mpimemory,    only:stack_remote  => force_stack_1
@@ -497,8 +501,8 @@ subroutine force(icall,npart,xyzh,vxyzu,fxyzu,divcurlv,divcurlB,Bevol,dBevol,&
  call get_timings(t1,tcpu1)
  !$omp end single
 
- !--initialise send requests to 0
- irequestsend = 0
+ !--initialise send requests to MPI_REQUEST_NULL
+ call init_send_requests(irequestsend)
 
  !$omp do schedule(runtime)
  over_cells: do icell=1,int(ncells)
@@ -926,8 +930,8 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  use part,        only:rhoh,dvdx,aprmassoftype,shortsinktree
  use nicil,       only:nimhd_get_jcbcb,nimhd_get_dBdt
  use eos,         only:ieos,eos_is_non_ideal,icooling
- use eos_stamatellos, only:gradP_cool,getopac_opdep
- use eos_stamatellos, only:Gpot_cool,duFLD,doFLD,get_k_fld,fld_mode
+ use eos_stamatellos, only:getopac_opdep
+ use eos_stamatellos, only:duFLD,doFLD,get_k_fld,fld_mode
 #ifdef GRAVITY
  use kernel,      only:kernel_softening
  use ptmass,      only:use_regnbody
@@ -1216,13 +1220,11 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
  fgravyi = 0.
  fgravzi = 0.
  if (icooling == 9) then
-    gradP_cool(i) = 0.
     gradpx = 0.
     gradpy = 0.
     gradpz = 0.
     gradP_cooli=0.
     gradP_coolj=0.
-    Gpot_cool(i) = 0.
     if (doFLD .and. fld_mode == 1) then   ! do FLD = 2 sets duFLD in derivs (fld_implicit)
        duFLD(i) = 0.
        kfldi = 0.
@@ -1756,7 +1758,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           fsum(ipot) = fsum(ipot) + pmassj*phii ! no need to symmetrise (see PM07)
 
           if (icooling == 9) then
-             Gpot_cool(i) = Gpot_cool(i) + pmassj*phii
+             fsum(igpotcooli) = fsum(igpotcooli) + pmassj*phii
              gradpx = gradpx + runix*(gradP_cooli + gradP_coolj)
              gradpy = gradpy + runiy*(gradP_cooli + gradP_coolj)
              gradpz = gradpz + runiz*(gradP_cooli + gradP_coolj)
@@ -1882,7 +1884,7 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           fsum(ifyi) = fsum(ifyi) - fgrav*runiy
           fsum(ifzi) = fsum(ifzi) - fgrav*runiz
           fsum(ipot) = fsum(ipot) + pmassj*phii ! no need to symmetrise (see PM07)
-          if (icooling == 9) Gpot_cool(i) = Gpot_cool(i) + pmassj*phii
+          if (icooling == 9) fsum(igpotcooli) = fsum(igpotcooli) + pmassj*phii
           
           !
           ! gas-dust: compute drag terms
@@ -2058,14 +2060,18 @@ subroutine compute_forces(i,iamgasi,iamdusti,xpartveci,hi,hi1,hi21,hi41,gradhi,g
           fsum(ifzi)      = fsum(ifzi) - dz*fgravj
           fsum(ipot)      = fsum(ipot) + pmassj*phii
           !-- add contribution of 'distant neighbour' (outside r_kernel) gas particle to potential
-          if (icooling == 9) Gpot_cool(i) = Gpot_cool(i) + pmassj*phii
+          if (icooling == 9) fsum(igpotcooli) = fsum(igpotcooli) + pmassj*phii
        endif
 #endif
     endif is_sph_neighbour
 
  enddo loop_over_neighbours2
 
- if (icooling == 9) gradP_cool(i) = sqrt(gradpx*gradpx + gradpy*gradpy + gradpz*gradpz)
+ if (icooling == 9) then
+    fsum(igradpcxi) = gradpx
+    fsum(igradpcyi) = gradpy
+    fsum(igradpczi) = gradpz
+ endif
 
 end subroutine compute_forces
 
@@ -2710,7 +2716,7 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
  use part,           only:Omega_k
  use io,             only:warning
  use physcon,        only:c,kboltz
- use eos_stamatellos, only:duSPH,Gpot_cool
+ use eos_stamatellos, only:duSPH,Gpot_cool,gradP_cool
  integer,            intent(in)    :: icall
  type(cellforce),    intent(inout) :: cell
  real,               intent(inout) :: fxyzu(:,:)
@@ -2914,6 +2920,12 @@ subroutine finish_cell_and_store_results(icall,cell,fxyzu,xyzh,vxyzu,poten,dt,dv
        vwavei = 0.
        pri = 0.
        rhogasi = 0.  ! Initialize rhogasi for non-gas particles
+    endif
+
+    !--radapprox cooling inputs: summed in fsum so remote (MPI) neighbours contribute
+    if (icooling == 9) then
+       Gpot_cool(i)  = fsum(igpotcooli)
+       gradP_cool(i) = sqrt(fsum(igradpcxi)**2 + fsum(igradpcyi)**2 + fsum(igradpczi)**2)
     endif
 
     if (gravity) then
