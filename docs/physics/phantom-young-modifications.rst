@@ -452,8 +452,8 @@ Purpose
 ^^^^^^^
 
 Writes a radially binned profile of Toomre Q and the cooling parameter
-:math:`\beta = t_{\rm cool}\Omega` to the log at every dump, so a running disc can
-be read for why it is or is not fragmenting without opening a dump.
+:math:`\beta_{\rm cool} = t_{\rm cool}\Omega` to the log at every dump, so a running
+disc can be read for why it is or is not fragmenting without opening a dump.
 
 Parameters
 ^^^^^^^^^^
@@ -472,6 +472,11 @@ Parameters
      - ``-1``
      - inner and outer radius of the profile (code units); written only when
        ``nbins_qbeta > 0``, and both must be set for a profile to be written
+   * - ``nm_spiral``
+     - ``0``
+     - azimuthal modes :math:`m = 1..` ``nm_spiral`` (at most 4) logged on the
+       same rings after the Q/beta block; ``0`` turns it off. Written only when
+       ``nbins_qbeta > 0``
 
 Equations
 ^^^^^^^^^
@@ -490,10 +495,23 @@ where :math:`M_{\rm enc}` is the gas mass in earlier annuli plus that at
 :math:`R \le R_{\rm mid}` in this one, plus :math:`M_\star`;
 :math:`P/\rho = (k_B/m_H)\langle T\rangle/\langle\mu\rangle` and
 :math:`\gamma = 1 + (P/\rho)/\langle u\rangle`. With ``icooling = 9``,
-:math:`\beta = \langle t_{\rm therm}\sqrt{M_\star/R^3}\rangle`. These are the
-standard single-snapshot definitions of the Toomre parameter and of the ratio
-of cooling time to orbital time, so a post-processing script that applies them
-to the same dump agrees to the printed precision. Particles outside the profile range are ignored, including in
+
+.. math::
+
+   \beta_{\rm cool} = \langle t_{\rm cool}\rangle\,\Omega, \qquad
+   t_{\rm cool} = \frac{u\,\kappa}{4\sigma_{\rm SB} T^4},
+
+the time the particle's radiative loss alone (no irradiation or hydro heating)
+would take to remove its internal energy, i.e. the cooling time of the Gammie
+(2001) criterion. :math:`\kappa` is the effective opacity the radiative cooling
+uses (``tau_store``, written to dumps as ``taumean``); particles where it or
+:math:`T` is not yet positive are left out of the mean. This is not the
+thermalisation time :math:`t_{\rm therm} = |u_{\rm eq} - u| / |\dot u|` the
+cooling relaxes :math:`u` with, which is much shorter near equilibrium; logs
+before this change printed :math:`\langle t_{\rm therm}\sqrt{M_\star/R^3}\rangle`
+in a column headed ``beta``. These are standard single-snapshot definitions, so a
+post-processing script that applies them to the same dump agrees to the printed
+precision. Particles outside the profile range are ignored, including in
 :math:`M_{\rm enc}`.
 
 Output
@@ -502,20 +520,53 @@ Output
 One block per dump, every line tagged so a parser can match it exactly::
 
    >> QBETA begin  t =   2.000000E+00  nbins =   10  mstar =   3.0000E-01  (code units)
-   >> QBETA        R_mid        Sigma          c_s        Omega            Q         beta          N
+   >> QBETA        R_mid        Sigma          c_s        Omega            Q    beta_cool          N
    >> QBETA    6.1818E+00   1.2619E-05   1.7886E-02   3.5664E-02   1.6090E+01   2.5126E-01        448
    ...
    >> QBETA end
 
-An empty annulus reports Q = -1 and c_s = 0; beta is -1 wherever it is
-unavailable.
+An empty annulus reports Q = -1 and c_s = 0; ``beta_cool`` is -1 wherever it is
+unavailable (empty annulus, no central sink, or not ``icooling = 9``).
+
+Azimuthal modes (spiral structure)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+With ``nm_spiral > 0`` a second block follows on the same rings and centre. For the
+:math:`N` gas particles in a ring, at azimuth :math:`\phi_i` about the centre,
+
+.. math::
+
+   A_m = \frac{1}{N}\Big|\sum_i e^{i m \phi_i}\Big|, \quad
+   \phi_m = \frac{1}{m}\arg\sum_i e^{i m \phi_i} \in [0, 2\pi/m), \quad
+   {\rm rms} = \sqrt{2\sum_m A_m^2}.
+
+Gas particles share one mass, so these are the mass-weighted amplitudes. A ring
+with :math:`\Sigma \propto 1 + 2A\cos m(\phi - \phi_0)` gives
+:math:`A_m = A` and :math:`\phi_m = \phi_0`, the azimuth of one density maximum,
+anticlockwise from :math:`+x`; ``rms`` is the rms of
+:math:`\delta\Sigma/\Sigma` over azimuth (Parseval) from the logged modes. A
+spiral arm shows as :math:`\phi_m` changing smoothly from ring to ring; a clump
+as a peak in a few rings with no such run. Random azimuths give
+:math:`\langle A_m\rangle = \sqrt{\pi/4N}` and
+:math:`\langle A_m^2\rangle = 1/N`, so rings with few particles are noisy. The
+cosines and sines come from powers of :math:`(x + iy)/R`, so there is no
+``atan2`` per particle; the cost is one extra pass over the particles at each
+dump and nothing when off. ::
+
+   >> SPIRAL begin  t =   2.000000E+01  nbins =   30  nm =  4  (code units, phi in radians)
+   >> SPIRAL       R_mid          N        A_1      phi_1        A_2      phi_2        A_3      phi_3        A_4      phi_4        rms
+   >> SPIRAL   1.6930E+01      32770  2.902E-11  4.399E+00  5.059E-03  5.089E-01  8.995E-11  2.955E-01  2.371E-03  1.040E+00  7.901E-03
+   ...
+   >> SPIRAL end
+
+An empty ring reports -1 for :math:`A_m`, :math:`\phi_m` and ``rms``.
 
 Files
 ^^^^^
 
 - ``src/main/radial_stability.f90``: accumulation, profile, ``.in`` options.
 - ``src/main/evolve_utils.F90``: called at each dump, beside the stop condition.
-- ``src/tests/test_qbeta.f90``: ``phantomtest qbeta``.
+- ``src/tests/test_qbeta.f90``: ``phantomtest qbeta`` (also ``spiral``).
 
 References
 ----------

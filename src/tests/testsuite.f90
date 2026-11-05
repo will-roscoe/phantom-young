@@ -213,7 +213,7 @@ subroutine testsuite(string,first,last,ntests,npass,nfail)
     dorealvisc = .true.
  case('stopcond','stop')
     dostopcond = .true.
- case('qbeta','toomre')
+ case('qbeta','toomre','spiral')
     doqbeta = .true.
  case('gravity','grav','plummer','hernquist','fmm','taylorseries','directsum','plotplummer')
     dogravity = .true.
