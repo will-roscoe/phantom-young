@@ -39,9 +39,9 @@ module ptmass
 !
 ! :Dependencies: HIIRegion, boundary, densityforce, dim, eos,
 !   eos_barotropic, eos_piecewise, extern_geopot, extern_gr,
-!   externalforces, infile_utils, io, io_summary, kernel, metric_tools,
-!   mpidomain, mpiutils, neighkdtree, options, orbits, part, physcon,
-!   ptmass_heating, random, subgroup, timestep, units, vectorutils
+!   externalforces, fileutils, infile_utils, io, io_summary, kernel,
+!   metric_tools, mpidomain, mpiutils, neighkdtree, options, orbits, part,
+!   physcon, ptmass_heating, random, subgroup, timestep, units, vectorutils
 !
  use part,    only:nsinkproperties,gravity,is_accretable,&
                    ihsoft,ihacc,ispinx,ispiny,ispinz,imacc,iJ2,iReff
@@ -49,7 +49,7 @@ module ptmass
  use options, only:write_files
  implicit none
 
- public :: init_ptmass, finish_ptmass
+ public :: init_ptmass, finish_ptmass, split_logfile_name
  public :: pt_write_sinkev, pt_close_sinkev
  public :: get_accel_sink_gas, get_accel_sink_sink
  public :: merge_sinks,ptmass_merge_release
@@ -2356,28 +2356,27 @@ end subroutine set_integration_precision
 subroutine init_ptmass(nptmass,logfile)
  integer,          intent(in) :: nptmass
  character(len=*), intent(in) :: logfile
- integer                      :: i,idot
+ integer                      :: i
  character(len=150)           :: filename
+ character(len=len(logfile))  :: lognum
 
  if (.not. write_files) return
  if (id /= master) return ! only do this on master thread
  !
  !--Extract prefix & suffix
  !
- idot = index(logfile,'.')
- if (idot==0) idot = len_trim(logfile) + 1
- pt_prefix = logfile(1:idot-3)
+ call split_logfile_name(logfile,pt_prefix,lognum)
 
  !
  !--Define file name components and finalise suffix & open files
  !
  if (icreate_sinks > 0) then
     write_one_ptfile = .true.
-    write(pt_suffix,'(2a)') logfile(len(trim(pt_prefix))+1:idot-1),".sink"
+    write(pt_suffix,'(2a)') trim(lognum),".sink"
     if (nptmass > 0) call pt_open_sinkev(0)
  else
     write_one_ptfile = .false.
-    write(pt_suffix,'(2a)') logfile(len(trim(pt_prefix))+1:idot-1),".ev"
+    write(pt_suffix,'(2a)') trim(lognum),".ev"
     do i = 1,nptmass
        call pt_open_sinkev(i)
     enddo
@@ -2415,6 +2414,26 @@ subroutine init_ptmass(nptmass,logfile)
  endif
 
 end subroutine init_ptmass
+
+!-----------------------------------------------------------------------
+!+
+!  Split a log file name into the prefix of the sink files and the
+!  link number before its .log: 'run01.log' -> 'run', '01',
+!  'm30c0.501.log' -> 'm30c0.5', '01'
+!+
+!-----------------------------------------------------------------------
+pure subroutine split_logfile_name(logfile,prefix,lognum)
+ use fileutils, only:prefix_before
+ character(len=*), intent(in)  :: logfile
+ character(len=*), intent(out) :: prefix,lognum
+ integer :: idot
+
+ ! the last .log, not the first '.': a run name may hold dots (m30c0.5)
+ idot = len_trim(prefix_before(logfile,'.log')) + 1
+ prefix = logfile(1:idot-3)
+ lognum = logfile(len_trim(prefix)+1:idot-1)
+
+end subroutine split_logfile_name
 !-----------------------------------------------------------------------
 !+
 !  finalise ptmass stuff, free memory, close files

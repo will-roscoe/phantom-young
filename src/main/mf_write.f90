@@ -14,7 +14,7 @@ module mf_write
 !
 ! :Runtime parameters: None
 !
-! :Dependencies: infile_utils, io, part, physcon
+! :Dependencies: fileutils, infile_utils, io, part, physcon
 !
 
  implicit none
@@ -96,11 +96,12 @@ subroutine mflow_init(iflow,evfile,infile)
 
 !  use analysis, only:read_discparams
  use io,       only:fatal
+ use fileutils, only:prefix_before
  use part,     only:massoftype
 
  integer,           intent(in)   :: iflow
  character(len=*), intent(in)   :: evfile,infile
- integer                         :: idot,i,iline
+ integer                         :: idot,i
  real, dimension(nradi)          :: rad
  real                            :: dr
  real                            :: R_in,R_out,p_index,q_index,M_star,H_R
@@ -111,8 +112,7 @@ subroutine mflow_init(iflow,evfile,infile)
  imflow=iflow
  idot = index(evfile,'.ev') - 1
  mflowname = evfile(1:idot)//'.mf'  !create .mf
- iline = index(infile,'.')
- discprefix = infile(1:iline-1)
+ discprefix = prefix_before(infile,'.in')
 
  call read_discparams(trim(discprefix)//'.discparams',R_in,R_out,H_R,p_index,q_index,M_star,iparams,ierr)
  if (ierr /= 0) call fatal('analysis','could not open/read discparams.list')
@@ -176,10 +176,11 @@ subroutine vmflow_init(ivflow,evfile,infile)
 
  ! use analysis, only:read_discparams
  use io,       only:fatal
+ use fileutils, only:prefix_before
 
  integer,           intent(in)   :: ivflow
  character(len=*), intent(in)   :: evfile,infile
- integer                         :: idot,i,iline
+ integer                         :: idot,i
  real, dimension(nradi)          :: rad
  real                            :: dr
  real                            :: R_in,R_out,p_index,q_index,M_star,H_R,rmax,rmin
@@ -190,8 +191,7 @@ subroutine vmflow_init(ivflow,evfile,infile)
  ivmflow=ivflow
  idot = index(evfile,'.ev') - 1
  mflowname = evfile(1:idot)//'_v.mflowv'  !create .vmf
- iline = index(infile,'.')
- discprefix = infile(1:iline-1)
+ discprefix = prefix_before(infile,'.in')
 
  call read_discparams(trim(discprefix)//'.discparams',R_in,R_out,H_R,p_index,q_index,M_star,iparams,ierr)
 
