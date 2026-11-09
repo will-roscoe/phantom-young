@@ -43,7 +43,7 @@ subroutine test_ptmass(ntests,npass,string)
  integer :: itmp,ierr,itest,istart,imax
  logical :: do_test_binary,do_test_accretion,do_test_createsink,do_test_softening
  logical :: do_test_chinese_coin,do_test_merger,do_test_potential,do_test_HII,do_test_SDAR
- logical :: do_test_binary_gr,do_test_orbit
+ logical :: do_test_binary_gr,do_test_orbit,do_test_logname
  logical :: testall
 
  if (id==master) write(*,"(/,a,/)") '--> TESTING PTMASS MODULE'
@@ -59,6 +59,7 @@ subroutine test_ptmass(ntests,npass,string)
  do_test_SDAR = .false.
  do_test_binary_gr = .false.
  do_test_orbit = .false.
+ do_test_logname = .false.
  testall = .false.
  istart = 1
  select case(trim(string))
@@ -89,6 +90,8 @@ subroutine test_ptmass(ntests,npass,string)
     do_test_SDAR = .true.
  case('ptmassorbit','ptmassflyby')
     do_test_orbit = .true.
+ case('ptmasslogname')
+    do_test_logname = .true.
  case default
     testall = .true.
  end select
@@ -165,6 +168,10 @@ subroutine test_ptmass(ntests,npass,string)
  if (do_test_SDAR .or. testall .and. .not.gr) call test_SDAR(ntests,npass)
 
  if (do_test_HII .and. .not.gr) call test_HIIregion(ntests,npass)
+ !
+ !  Test the sink file names taken from the log file name
+ !
+ if (do_test_logname .or. testall) call test_logfile_names(ntests,npass)
 
  !reset stuff and clean up temporary files
  itmp    = 201
@@ -180,6 +187,31 @@ subroutine test_ptmass(ntests,npass,string)
  if (id==master) write(*,"(/,a)") '<-- PTMASS TEST COMPLETE'
 
 end subroutine test_ptmass
+
+!-----------------------------------------------------------------------
+!+
+!  Test that each link of a run gets its own sink file name, including
+!  runs whose names hold a dot (m30c0.5)
+!+
+!-----------------------------------------------------------------------
+subroutine test_logfile_names(ntests,npass)
+ use ptmass,         only:split_logfile_name
+ integer, intent(inout) :: ntests,npass
+ integer                :: nfailed(6)
+ character(len=50)      :: prefix,lognum
+
+ call split_logfile_name('run01.log',prefix,lognum)
+ call checkval(prefix,'run',nfailed(1),'sink file prefix of run01.log')
+ call checkval(lognum,'01',nfailed(2),'link number of run01.log')
+ call split_logfile_name('m30c0.501.log',prefix,lognum)
+ call checkval(prefix,'m30c0.5',nfailed(3),'sink file prefix of m30c0.501.log')
+ call checkval(lognum,'01',nfailed(4),'link number of m30c0.501.log')
+ call split_logfile_name('m30c0.502.log',prefix,lognum)
+ call checkval(prefix,'m30c0.5',nfailed(5),'sink file prefix of m30c0.502.log')
+ call checkval(lognum,'02',nfailed(6),'link number of m30c0.502.log')
+ call update_test_scores(ntests,nfailed,npass)
+
+end subroutine test_logfile_names
 
 !-----------------------------------------------------------------------
 !+

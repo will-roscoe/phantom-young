@@ -21,7 +21,7 @@ module fileutils
  implicit none
  public :: getnextfilename,numfromfile,basename,get_ncolumns,skip_header,number_of_rows
  public :: read_column_labels,get_column_labels,split,find_column
- public :: strip_extension,is_digit,files_are_sequential,load_data_file
+ public :: strip_extension,prefix_before,is_digit,files_are_sequential,load_data_file
  public :: ucase,lcase,make_tags_unique,get_nlines,string_delete,string_replace,nospaces
  integer, parameter :: max_line_length = 10000 ! for finding number of columns
 
@@ -257,6 +257,24 @@ subroutine strip_extension(string,ext)
  endif
 
 end subroutine strip_extension
+
+!---------------------------------------------------------------------------
+!+
+!  the part of a file name before its last ext (else its last '.'), so a
+!  name holding other dots keeps them: ('m30c0.501.log','.log') -> 'm30c0.501'
+!+
+!---------------------------------------------------------------------------
+pure function prefix_before(string,ext) result(prefix)
+ character(len=*), intent(in) :: string,ext
+ character(len=len(string))   :: prefix
+ integer :: iloc
+
+ iloc = index(string,ext,back=.true.)
+ if (iloc == 0) iloc = index(string,'.',back=.true.)
+ if (iloc == 0) iloc = len_trim(string) + 1
+ prefix = string(1:iloc-1)
+
+end function prefix_before
 
 !---------------------------------------------------------------------------
 ! utility to work out number of columns of real numbers
