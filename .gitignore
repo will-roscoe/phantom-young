@@ -9,6 +9,8 @@ bin/getmathflags
 build/.depends
 build/react*
 build/phantom-version.h
+build/gitsha.inc
+build/gitsha.inc.tmp
 *~
 */*~
 */*/*~
