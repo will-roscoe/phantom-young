@@ -17,8 +17,10 @@ module gitinfo
 ! :Dependencies: io
 !
  implicit none
- public :: get_and_print_gitinfo
- character(len=7), public :: gitsha = ''
+ ! compiled_gitsha: the commit this binary was built from, written by scripts/phantom_gitsha_gen.sh
+ include 'gitsha.inc'
+ public :: get_and_print_gitinfo,compiled_gitsha
+ character(len=7), public :: gitsha = compiled_gitsha(1:7)
 
  private
 
@@ -57,7 +59,15 @@ subroutine get_and_print_gitinfo(iunit)
     do i = 1,9
        read(igit,'(a)',iostat=io_local) gitinfo
        write(iunit,'(1x,a)') trim(gitinfo)
-       if (index(gitinfo,'ID:') > 0) gitsha = gitinfo(20:26)
+       if (index(gitinfo,'ID:') > 0) then
+          ! the compiled-in commit is authoritative: a phantom_version copied from another build can be stale
+          if (compiled_gitsha == 'unknown') then
+             gitsha = gitinfo(20:26)
+          elseif (gitinfo(20:26) /= compiled_gitsha(1:7)) then
+             write(iunit,'(1x,a)') 'WARNING: '//trim(filename)//' is from commit '//gitinfo(20:26)// &
+                                   ' but this binary was compiled from '//trim(compiled_gitsha)
+          endif
+       endif
     enddo
     i     = 0
     lfile = 0
@@ -100,7 +110,7 @@ subroutine get_and_print_gitinfo(iunit)
        endif
     enddo
  else
-    write(iunit,'(a)') "phantom_version not found; no git information to display"
+    write(iunit,'(a)') " phantom_version not found; compiled from commit "//trim(compiled_gitsha)
  endif
  write(iunit,'(a)') ' '
 

@@ -32,12 +32,12 @@ contains
 !-----------------------------------------------------------------
 subroutine write_codeinfo(iunit)
  use dim,     only:phantom_version_string,compiled_with_mcfost
- use gitinfo, only:get_and_print_gitinfo
+ use gitinfo, only:get_and_print_gitinfo,compiled_gitsha
  integer, intent(in) :: iunit
 !
-!--write out code name, version and time
+!--write out code name, version (with the commit compiled in) and time
 !
- write(iunit,10) trim(phantom_version_string)
+ write(iunit,10) trim(phantom_version_string)//' (git '//trim(compiled_gitsha)//')'
 
 10 format(/, &
    "   _ \  |                 |                       ___|   _ \  |   |",/, &
