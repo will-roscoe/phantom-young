@@ -428,17 +428,6 @@ OBJDIR=obj
 
 %.o : %.f
 	$(FC) -c $(FFLAGS) $< -o $@
-
-# the commit compiled into every binary: gitinfo.f90 includes gitsha.inc, which the script rewrites only when
-# the commit (or its dirty state) changes, so gitinfo.o is rebuilt exactly then
-gitsha.inc: FORCE
-	@sh ../scripts/phantom_gitsha_gen.sh $@
-
-gitinfo.o : gitinfo.f90 gitsha.inc
-	$(FC) -c $(FFLAGS) -I. $< -o $@
-
-.PHONY: FORCE
-FORCE:
 #
 # turbulent driving
 #
@@ -568,6 +557,17 @@ endif
 	@echo ""
 	@echo "The Phantom is here (in $(BINDIR)/phantom)"
 	@echo ""
+
+# the commit compiled into every binary (kept below the phantom target, the default goal): gitinfo.f90 includes gitsha.inc, which the script rewrites only when
+# the commit (or its dirty state) changes, so gitinfo.o is rebuilt exactly then
+gitsha.inc: FORCE
+	@sh ../scripts/phantom_gitsha_gen.sh $@
+
+gitinfo.o : gitinfo.f90 gitsha.inc
+	$(FC) -c $(FFLAGS) -I. $< -o $@
+
+.PHONY: FORCE
+FORCE:
 
 #----------------------------------------------------
 # generic target for compiling ALL phantom utilities
